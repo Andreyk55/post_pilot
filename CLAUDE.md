@@ -13,7 +13,7 @@ Post Pilot allows users to schedule and manage posts across social media platfor
 - Example: Schedule a post for tomorrow at 10 AM
 
 ### Future Features
-- (To be defined)
+- [ ] Delete confirmation dialog - Ask user "Are you sure?" before deleting a post
 
 ## Tech Stack
 
