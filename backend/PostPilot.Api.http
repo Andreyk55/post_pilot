@@ -1,0 +1,6 @@
+@PostPilot.Api_HostAddress = http://localhost:5122
+
+GET {{PostPilot.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
