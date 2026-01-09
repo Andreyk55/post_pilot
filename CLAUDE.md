@@ -58,11 +58,10 @@ post_pilot/
 
 ## Pending Tasks
 
-- [ ] Add .gitignore for backend (obj/, bin/ folders)
-- [ ] Commit scaffolded projects
-- [ ] Set up database (PostgreSQL + EF Core)
-- [ ] Create post scheduling API endpoints
-- [ ] Set up React app structure
+- [x] Add .gitignore for backend (obj/, bin/ folders)
+- [x] Set up database (PostgreSQL + EF Core)
+- [x] Create post scheduling API endpoints
+- [x] Connect frontend to backend API
 
 ## Notes
 
