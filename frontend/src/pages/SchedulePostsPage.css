@@ -1,0 +1,27 @@
+.schedule-posts-page {
+  padding: 2rem;
+}
+
+.schedule-posts-page h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.page-subtitle {
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 2rem;
+}
+
+.schedule-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  max-width: 1280px;
+}
+
+@media (max-width: 1024px) {
+  .schedule-content {
+    grid-template-columns: 1fr;
+  }
+}

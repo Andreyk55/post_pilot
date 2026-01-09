@@ -5,109 +5,14 @@
 }
 
 .app {
+  display: flex;
   min-height: 100vh;
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
   color: #ffffff;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-.header {
-  padding: 2rem;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.logo-container {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-}
-
-.logo-icon {
-  width: 56px;
-  height: 56px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
-}
-
-.logo-icon svg {
-  width: 32px;
-  height: 32px;
-  color: #ffffff;
-}
-
-.logo-text h1 {
-  font-size: 2rem;
-  font-weight: 700;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  letter-spacing: -0.5px;
-}
-
-.tagline {
-  font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.6);
-  margin-top: 0.125rem;
-  font-weight: 400;
-}
-
 .main-content {
-  padding: 2rem;
-  display: flex;
-  justify-content: center;
-}
-
-.content-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2rem;
-  max-width: 1280px;
-  width: 100%;
-}
-
-@media (max-width: 1024px) {
-  .content-grid {
-    grid-template-columns: 1fr;
-    max-width: 600px;
-  }
-}
-
-@media (max-width: 640px) {
-  .header {
-    padding: 1.5rem 1rem;
-  }
-
-  .logo-container {
-    gap: 1rem;
-  }
-
-  .logo-icon {
-    width: 48px;
-    height: 48px;
-  }
-
-  .logo-icon svg {
-    width: 28px;
-    height: 28px;
-  }
-
-  .logo-text h1 {
-    font-size: 1.5rem;
-  }
-
-  .tagline {
-    font-size: 0.75rem;
-  }
-
-  .main-content {
-    padding: 1rem;
-  }
+  flex: 1;
+  overflow-y: auto;
 }
