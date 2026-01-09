@@ -1,9 +1,13 @@
 import { useState } from 'react'
-import type { ScheduledPost } from '../types/post'
 import './SchedulePost.css'
 
 interface SchedulePostProps {
-  onSchedule: (post: ScheduledPost) => void
+  onSchedule: (data: {
+    content: string
+    scheduledDate: string
+    scheduledTime: string
+    platforms: string[]
+  }) => void
 }
 
 const platforms = [
@@ -11,7 +15,6 @@ const platforms = [
   { id: 'instagram', name: 'Instagram', icon: '📷' },
   { id: 'facebook', name: 'Facebook', icon: 'f' },
   { id: 'linkedin', name: 'LinkedIn', icon: 'in' },
-  { id: 'tiktok', name: 'TikTok', icon: '♪' },
 ]
 
 export function SchedulePost({ onSchedule }: SchedulePostProps) {
@@ -35,15 +38,12 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
       return
     }
 
-    const post: ScheduledPost = {
-      id: Date.now().toString(),
+    onSchedule({
       content,
       scheduledDate,
       scheduledTime,
       platforms: selectedPlatforms,
-    }
-
-    onSchedule(post)
+    })
 
     // Reset form
     setContent('')
@@ -98,7 +98,7 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
               <button
                 key={platform.id}
                 type="button"
-                className={`platform-btn ${selectedPlatforms.includes(platform.id) ? 'selected' : ''}`}
+                className={'platform-btn ' + (selectedPlatforms.includes(platform.id) ? 'selected' : '')}
                 onClick={() => togglePlatform(platform.id)}
                 title={platform.name}
               >

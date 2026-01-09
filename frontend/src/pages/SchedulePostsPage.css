@@ -26,3 +26,17 @@
     grid-template-columns: 1fr;
   }
 }
+.error-message {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid #ef4444;
+  color: #ef4444;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.loading {
+  color: rgba(255, 255, 255, 0.6);
+  padding: 2rem;
+  text-align: center;
+}
