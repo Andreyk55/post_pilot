@@ -18,10 +18,10 @@ Post Pilot allows users to schedule and manage posts across social media platfor
 ## Tech Stack
 
 - **Backend:** .NET 10 (C#) Web API
-- **Frontend:** React
-- **Database:** 
-- **Job Scheduling:** 
-- **Cache/Queue:** 
+- **Frontend:** React + TypeScript + Vite
+- **Database:** (To be decided - PostgreSQL suggested)
+- **Job Scheduling:** (To be decided - Hangfire suggested)
+- **Cache/Queue:** (To be decided - Redis suggested)
 
 ## Supported Platforms
 
@@ -30,9 +30,41 @@ Post Pilot allows users to schedule and manage posts across social media platfor
 ## Architecture Decisions
 
 - **Monorepo structure:**
-  - `/backend` - .NET 10 Web API
-  - `/frontend` - React app
+  - `/backend` - .NET 10 Web API (PostPilot.Api)
+  - `/frontend` - React + TypeScript app (Vite)
+
+## Project Structure
+
+```
+post_pilot/
+├── backend/                 # .NET 10 Web API
+│   ├── PostPilot.Api.csproj
+│   ├── Program.cs
+│   ├── Properties/
+│   └── appsettings.json
+├── frontend/                # React + TypeScript + Vite
+│   ├── src/
+│   │   ├── App.tsx
+│   │   └── main.tsx
+│   ├── package.json
+│   └── vite.config.ts
+└── CLAUDE.md
+```
+
+## How to Run
+
+- **Backend:** `cd backend && dotnet run`
+- **Frontend:** `cd frontend && npm run dev`
+
+## Pending Tasks
+
+- [ ] Add .gitignore for backend (obj/, bin/ folders)
+- [ ] Commit scaffolded projects
+- [ ] Set up database (PostgreSQL + EF Core)
+- [ ] Create post scheduling API endpoints
+- [ ] Set up React app structure
 
 ## Notes
 
 - Project started: January 2026
+- Using TypeScript (.tsx files) for type safety in React
