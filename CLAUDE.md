@@ -33,23 +33,7 @@ Post Pilot allows users to schedule and manage posts across social media platfor
   - `/backend` - .NET 10 Web API (PostPilot.Api)
   - `/frontend` - React + TypeScript app (Vite)
 
-## Project Structure
 
-```
-post_pilot/
-├── backend/                 # .NET 10 Web API
-│   ├── PostPilot.Api.csproj
-│   ├── Program.cs
-│   ├── Properties/
-│   └── appsettings.json
-├── frontend/                # React + TypeScript + Vite
-│   ├── src/
-│   │   ├── App.tsx
-│   │   └── main.tsx
-│   ├── package.json
-│   └── vite.config.ts
-└── CLAUDE.md
-```
 
 ## How to Run
 
