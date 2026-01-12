@@ -6,7 +6,22 @@
       "Bash(jq:*)",
       "Bash(docker-compose up:*)",
       "Bash(dir:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(dotnet add package:*)",
+      "Bash(tasklist:*)",
+      "Bash(taskkill:*)",
+      "Bash(timeout /t 10 dotnet run)",
+      "Bash(dotnet run)",
+      "Bash(timeout:*)",
+      "Bash(ping:*)",
+      "Bash(dotnet tool install:*)",
+      "Bash(dotnet tool search:*)",
+      "Bash(docker-compose down:*)",
+      "Bash(powershell -Command \"Get-Process | Where-Object {$_ProcessName -match ''node|dotnet|PostPilot''} | Select-Object Id, ProcessName, Path\")",
+      "Bash(powershell -Command \"Get-Process | Where-Object {$_ProcessName -like ''*node*'' -or $_ProcessName -like ''*PostPilot*''}\")",
+      "Bash(npm run dev:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker restart:*)"
     ]
   }
 }

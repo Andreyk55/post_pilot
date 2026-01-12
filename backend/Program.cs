@@ -1,45 +1,17 @@
-using System.Text.Json.Serialization;
-using Microsoft.EntityFrameworkCore;
-using PostPilot.Api.Data;
+using PostPilot.Api;
+
+// This is the entry point for local development (dotnet run)
+// For AWS Lambda deployment, LambdaEntryPoint.cs is used instead
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-builder.Services.AddControllers()
-    .AddJsonOptions(options =>
-    {
-        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
-    });
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-
-// Configure PostgreSQL with EF Core
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(connectionString));
-
-// Configure CORS for frontend
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowFrontend", policy =>
-    {
-        policy.SetIsOriginAllowed(origin => origin.StartsWith("http://localhost:"))
-              .AllowAnyHeader()
-              .AllowAnyMethod();
-    });
-});
+// Use the shared Startup class for consistency with Lambda
+var startup = new Startup(builder.Configuration);
+startup.ConfigureServices(builder.Services);
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-
-app.UseHttpsRedirection();
-app.UseCors("AllowFrontend");
-app.MapControllers();
+// Configure the middleware pipeline
+startup.Configure(app, app.Environment);
 
 app.Run();

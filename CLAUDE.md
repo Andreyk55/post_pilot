@@ -17,11 +17,12 @@ Post Pilot allows users to schedule and manage posts across social media platfor
 
 ## Tech Stack
 
-- **Backend:** .NET 10 (C#) Web API
+- **Backend:** .NET 10 (C#) Web API (AWS Lambda-compatible)
 - **Frontend:** React + TypeScript + Vite
-- **Database:** (To be decided - PostgreSQL suggested)
-- **Job Scheduling:** (To be decided - Hangfire suggested)
-- **Cache/Queue:** (To be decided - Redis suggested)
+- **Database:** PostgreSQL (AWS RDS)
+- **Job Scheduling:** AWS EventBridge Scheduler
+- **Queue:** AWS SQS
+- **Media Storage:** AWS S3
 
 ## Supported Platforms
 
@@ -46,11 +47,21 @@ Post Pilot allows users to schedule and manage posts across social media platfor
 - [x] Set up database (PostgreSQL + EF Core)
 - [x] Create post scheduling API endpoints
 - [x] Connect frontend to backend API
+- [x] Configure backend for AWS Lambda deployment
+- [ ] Deploy API Lambda to AWS
+- [ ] Set up AWS RDS PostgreSQL
+- [ ] Create API Gateway HTTP API
+- [ ] Implement EventBridge Scheduler + Dispatcher Lambda
+- [ ] Implement SQS queue + Publisher Lambda
+- [ ] Set up S3 media bucket
+- [ ] Integrate Meta Graph API
 
 ## Notes
 
 - Project started: January 2026
 - Using TypeScript (.tsx files) for type safety in React
+- Backend is AWS Lambda-compatible (see [backend/README_LAMBDA.md](backend/README_LAMBDA.md))
+- Deployment guide: [backend/DEPLOYMENT.md](backend/DEPLOYMENT.md)
 
 
 
@@ -86,6 +97,12 @@ API Gateway (HTTP API) → API Lambda
 Single Lambda handles all UI routes (/posts, /analytics, /settings, etc.)
 
 Routing handled by ASP.NET Core controllers/minimal APIs inside the Lambda
+
+✅ **IMPLEMENTED**: Backend configured for Lambda deployment
+- Entry point: `LambdaEntryPoint.cs` (uses Amazon.Lambda.AspNetCoreServer)
+- Local dev: `Program.cs` (standard ASP.NET Core)
+- Shared config: `Startup.cs` (used by both entry points)
+- Supports environment-based connection strings (local DB or RDS)
 
 Auth (v1)
 
