@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="metaGradient1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0081FB;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0064E0;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="metaGradient2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00C6FF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0081FB;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <path fill="url(#metaGradient1)" d="M330.04 196.18c-41.89-4.52-68.59 6.86-91.18 38.88-22.59-32.02-49.29-43.4-91.18-38.88C97.63 201.66 64 237.03 64 304c0 81.61 60.14 148.45 125.18 181.43 15.02 7.62 32.62 7.62 47.64 0C301.86 452.45 362 385.61 362 304c0-66.97-33.63-102.34-85.68-107.82h53.72zm-152.86 21.82c24.99-2.7 42.82 4.08 60.82 31 18-26.92 35.83-33.7 60.82-31 30.49 3.29 52.18 27.39 52.18 86 0 68.6-51.69 125.83-107 155.38-8.53 4.56-18.47 4.56-27 0C161.69 429.83 110 372.6 110 304c0-58.61 21.69-82.71 52.18-86h15z"/>
+  <path fill="url(#metaGradient2)" d="M177.18 218c-30.49 3.29-52.18 27.39-52.18 86 0 68.6 51.69 125.83 107 155.38 4.27 2.28 9.24 3.62 13.5 3.62V249c-18-26.92-35.83-33.7-60.82-31h-7.5z"/>
+</svg>
