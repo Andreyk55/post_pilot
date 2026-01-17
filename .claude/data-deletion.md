@@ -1,0 +1,1 @@
+To request deletion of your data, please contact us at appquestor@gmail.com.
