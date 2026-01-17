@@ -51,10 +51,6 @@ export function Dashboard() {
             <span className="action-icon">📅</span>
             <span className="action-label">Schedule Post</span>
           </button>
-          <button className="action-card">
-            <span className="action-icon">🔗</span>
-            <span className="action-label">Connect Account</span>
-          </button>
         </div>
       </div>
     </div>
