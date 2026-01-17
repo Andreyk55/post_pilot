@@ -1,0 +1,211 @@
+Below is a clean summary of everything we did, followed by a clear architecture diagram that ties together Backend, System User, App, Page, and Meta APIs.
+
+✅ What we achieved (step-by-step summary)
+1️⃣ Created a Meta Business Portfolio
+
+This is the root container
+
+Owns:
+
+Facebook Page
+
+Meta App(s)
+
+System Users
+
+2️⃣ Created a Facebook Page
+
+Example: Posts Dev Page
+
+This is where content is actually published
+
+Pages are not apps and not users
+
+3️⃣ Created a Meta App
+
+Final app used: Social Management App
+
+App type / use case:
+
+Manage everything on your Page (Pages API)
+
+This use case is critical — without it:
+
+❌ No page permissions
+
+❌ No posting
+
+❌ Token permissions list is empty
+
+4️⃣ Created a System User
+
+Example: Posts Dev Backend
+
+Purpose:
+
+Non-human backend identity
+
+Used by servers, cron jobs, schedulers
+
+Role:
+
+Admin (recommended for backend)
+
+5️⃣ Assigned relationships correctly
+✔ System User → App
+
+The app must be installed for the system user
+
+Otherwise:
+❌ “No permissions available”
+
+✔ System User → Page
+
+Assigned Full control on the Page
+
+6️⃣ Generated tokens (this is where confusion usually happens)
+
+You now understand there are two different tokens:
+
+🔹 A. System User Token
+
+Identity: System User
+
+Scope: business-level
+
+Cannot post directly
+
+Used to:
+
+List pages
+
+Generate Page tokens
+
+Business management
+
+🔹 B. Page Access Token ✅ (this is the important one)
+
+Identity: Page
+
+Generated via:
+
+GET /me/accounts
+
+
+Scopes:
+
+pages_manage_posts
+
+pages_read_engagement
+
+✅ This token is used to:
+
+Post photos
+
+Post videos
+
+Create feed posts
+
+7️⃣ Posting content (working)
+✔ Upload photo (file)
+POST /{PAGE_ID}/photos
+
+✔ Upload photo from URL
+POST /{PAGE_ID}/photos
+  url=https://public-image-url.jpg
+
+
+Requirements:
+
+Public HTTPS URL
+
+Page access token
+
+No publish_actions (deprecated ❌)
+
+8️⃣ Error explained: publish_actions
+
+❌ Deprecated for years
+
+Facebook auto-mentions it in misleading errors
+
+Ignore it
+
+Your correct permission is:
+
+pages_manage_posts
+
+🧠 Mental model (very important)
+
+Apps don’t post. Users don’t post. System users don’t post.
+👉 Pages post. Tokens just authorize.
+
+🧩 Architecture Diagram (end-to-end)
+┌──────────────┐
+│   Human User │
+│ (You / Admin)│
+└──────┬───────┘
+       │ creates & configures
+       ▼
+┌──────────────────────────┐
+│  Meta Business Portfolio │
+│  (Posts Dev portfolio)   │
+└──────┬──────────┬────────┘
+       │           │
+       │ owns      │ owns
+       ▼           ▼
+┌──────────────┐   ┌──────────────────────┐
+│ Facebook Page│   │   Meta App            │
+│ Posts Dev    │   │ Social Management App │
+└──────┬───────┘   └─────────┬────────────┘
+       │                     │
+       │ assigned to          │ installed for
+       ▼                     ▼
+┌─────────────────────────────────────────┐
+│              System User                │
+│         Posts Dev Backend               │
+└──────────────┬──────────────────────────┘
+               │ generates
+               ▼
+        ┌───────────────┐
+        │ Page Token    │  ← THIS is used for posting
+        └──────┬────────┘
+               │
+               ▼
+┌─────────────────────────────────────────┐
+│ Backend Server (your app / Postman)     │
+│ Calls Graph API with Page Token         │
+└──────────────┬──────────────────────────┘
+               │
+               ▼
+     https://graph.facebook.com
+          /{PAGE_ID}/photos
+
+✅ Final “what to use when” table
+Action	Token to use
+List Pages	System User token
+Generate Page token	System User token
+Post photo/video	Page token ✅
+Schedule posts	Page token
+Backend automation	System User + Page token
+🚀 You are now in the correct state
+
+You can safely:
+
+Automate posting
+
+Schedule content
+
+Extend to Instagram next
+
+Build SaaS logic on top
+
+If you want next:
+
+Instagram posting flow (very different)
+
+Scheduled posts
+
+Multi-page support
+
+Token rotation strategy
