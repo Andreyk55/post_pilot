@@ -1,12 +1,14 @@
 import { useState } from 'react'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Sidebar } from './components/Sidebar'
 import { Dashboard } from './pages/Dashboard'
 import { SchedulePostsPage } from './pages/SchedulePostsPage'
 import { ConnectedAccountsPage } from './pages/ConnectedAccountsPage'
 import { PlaceholderPage } from './pages/PlaceholderPage'
+import { MetaOAuthCallback } from './pages/MetaOAuthCallback'
 import './App.css'
 
-function App() {
+function MainApp() {
   const [currentPage, setCurrentPage] = useState('dashboard')
 
   const renderPage = () => {
@@ -35,6 +37,17 @@ function App() {
         {renderPage()}
       </main>
     </div>
+  )
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/oauth/meta/callback" element={<MetaOAuthCallback />} />
+        <Route path="/*" element={<MainApp />} />
+      </Routes>
+    </BrowserRouter>
   )
 }
 

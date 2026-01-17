@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using PostPilot.Api.Data;
+using PostPilot.Api.Services;
 
 namespace PostPilot.Api;
 
@@ -39,6 +40,18 @@ public class Startup
 
         services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(connectionString));
+
+        // Configure Meta OAuth settings (secrets from environment variables only)
+        var metaSettings = new MetaOAuthSettings
+        {
+            AppId = Environment.GetEnvironmentVariable("META_APP_ID") ?? "",
+            AppSecret = Environment.GetEnvironmentVariable("META_APP_SECRET") ?? "",
+            RedirectUri = Configuration["Meta:RedirectUri"] ?? Environment.GetEnvironmentVariable("META_REDIRECT_URI") ?? "http://localhost:5173/oauth/meta/callback"
+        };
+        services.AddSingleton(metaSettings);
+
+        // Register Meta OAuth service
+        services.AddHttpClient<IMetaOAuthService, MetaOAuthService>();
 
         // Configure CORS for frontend
         services.AddCors(options =>
