@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { Dashboard } from './pages/Dashboard'
 import { SchedulePostsPage } from './pages/SchedulePostsPage'
+import { ConnectedAccountsPage } from './pages/ConnectedAccountsPage'
 import { PlaceholderPage } from './pages/PlaceholderPage'
 import './App.css'
 
@@ -16,6 +17,8 @@ function App() {
         return <SchedulePostsPage />
       case 'posts':
         return <PlaceholderPage title="My Posts" icon="📝" />
+      case 'accounts':
+        return <ConnectedAccountsPage />
       case 'analytics':
         return <PlaceholderPage title="Analytics" icon="📊" />
       case 'settings':

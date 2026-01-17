@@ -9,6 +9,7 @@ const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: '🏠' },
   { id: 'schedule', label: 'Schedule Posts', icon: '📅' },
   { id: 'posts', label: 'My Posts', icon: '📝' },
+  { id: 'accounts', label: 'Connected Accounts', icon: '🔗' },
   { id: 'analytics', label: 'Analytics', icon: '📊' },
   { id: 'settings', label: 'Settings', icon: '⚙️' },
 ]

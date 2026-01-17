@@ -21,7 +21,8 @@
       "Bash(powershell -Command \"Get-Process | Where-Object {$_ProcessName -like ''*node*'' -or $_ProcessName -like ''*PostPilot*''}\")",
       "Bash(npm run dev:*)",
       "Bash(docker logs:*)",
-      "Bash(docker restart:*)"
+      "Bash(docker restart:*)",
+      "Bash(docker exec:*)"
     ]
   }
 }
