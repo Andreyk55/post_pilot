@@ -4,6 +4,7 @@ import { Sidebar } from './components/Sidebar'
 import { Dashboard } from './pages/Dashboard'
 import { SchedulePostsPage } from './pages/SchedulePostsPage'
 import { ConnectedAccountsPage } from './pages/ConnectedAccountsPage'
+import { AssetsPage } from './pages/AssetsPage'
 import { PlaceholderPage } from './pages/PlaceholderPage'
 import { MetaOAuthCallback } from './pages/MetaOAuthCallback'
 import './App.css'
@@ -21,6 +22,8 @@ function MainApp() {
         return <PlaceholderPage title="My Posts" icon="📝" />
       case 'accounts':
         return <ConnectedAccountsPage />
+      case 'assets':
+        return <AssetsPage onNavigate={setCurrentPage} />
       case 'analytics':
         return <PlaceholderPage title="Analytics" icon="📊" />
       case 'settings':

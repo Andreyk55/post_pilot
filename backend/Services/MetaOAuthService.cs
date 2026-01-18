@@ -473,10 +473,7 @@ public class MetaOAuthService : IMetaOAuthService
         var allPages = await FetchUserPagesAsync(connection.AccessToken);
         var selectedPages = allPages.Where(p => selectedPageIds.Contains(p.Id)).ToList();
 
-        if (!selectedPages.Any())
-        {
-            throw new InvalidOperationException("At least one page must be selected");
-        }
+        // Allow zero pages - user can disconnect all pages while keeping Meta identity connected
 
         // Discover Instagram accounts
         var igResponse = await DiscoverInstagramAccountsAsync("", selectedPageIds);

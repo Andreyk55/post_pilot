@@ -20,7 +20,7 @@ const platforms = [
   {
     id: 'meta',
     name: 'Meta',
-    description: 'Connect your Meta account to manage Facebook Pages & Instagram',
+    description: 'Connect your Meta identity to enable publishing to Facebook & Instagram',
     icon: <img src={metaLogo} alt="Meta" className="platform-svg" />,
     color: '#0081FB',
     available: true,
