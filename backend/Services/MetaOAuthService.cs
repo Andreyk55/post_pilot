@@ -475,36 +475,44 @@ public class MetaOAuthService : IMetaOAuthService
 
         // Allow zero pages - user can disconnect all pages while keeping Meta identity connected
 
-        // Discover Instagram accounts
-        var igResponse = await DiscoverInstagramAccountsAsync("", selectedPageIds);
+        // Discover Instagram accounts (only for selected pages)
+        var igResponse = selectedPageIds.Any()
+            ? await DiscoverInstagramAccountsAsync("", selectedPageIds)
+            : new MetaDiscoverInstagramResponse(new List<InstagramAccountDto>());
         var selectedIgAccounts = igResponse.InstagramAccounts
             .Where(ig => selectedInstagramIds.Contains(ig.Id))
             .ToList();
 
-        // Clear existing and add new
-        connection.Pages.Clear();
-        connection.InstagramAccounts.Clear();
+        // Explicitly remove existing pages and Instagram accounts from the context
+        _context.ConnectedPages.RemoveRange(connection.Pages);
+        _context.ConnectedInstagramAccounts.RemoveRange(connection.InstagramAccounts);
+
         connection.UpdatedAt = DateTime.UtcNow;
 
+        // Add new pages
         foreach (var page in selectedPages)
         {
-            connection.Pages.Add(new ConnectedPage
+            var connectedPage = new ConnectedPage
             {
                 Id = Guid.NewGuid(),
+                MetaConnectionId = connection.Id,
                 PageId = page.Id,
                 Name = page.Name,
                 Category = page.Category,
                 PictureUrl = page.PictureUrl,
                 AccessToken = page.AccessToken!,
                 CreatedAt = DateTime.UtcNow
-            });
+            };
+            _context.ConnectedPages.Add(connectedPage);
         }
 
+        // Add new Instagram accounts
         foreach (var ig in selectedIgAccounts)
         {
-            connection.InstagramAccounts.Add(new ConnectedInstagramAccount
+            var connectedIg = new ConnectedInstagramAccount
             {
                 Id = Guid.NewGuid(),
+                MetaConnectionId = connection.Id,
                 IgBusinessId = ig.Id,
                 Username = ig.Username,
                 Name = ig.Name,
@@ -512,10 +520,15 @@ public class MetaOAuthService : IMetaOAuthService
                 PageId = ig.PageId,
                 PageName = ig.PageName,
                 CreatedAt = DateTime.UtcNow
-            });
+            };
+            _context.ConnectedInstagramAccounts.Add(connectedIg);
         }
 
         await _context.SaveChangesAsync();
+
+        // Reload the connection with the new pages/accounts for the response
+        await _context.Entry(connection).Collection(c => c.Pages).LoadAsync();
+        await _context.Entry(connection).Collection(c => c.InstagramAccounts).LoadAsync();
 
         return new MetaSaveConnectionResponse(MapToDto(connection));
     }
