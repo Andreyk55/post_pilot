@@ -50,7 +50,7 @@ export function MetaOAuthCallback() {
       // Close popup after a brief delay
       setTimeout(() => {
         window.close()
-      }, 1500)
+      }, 3500)
     } catch (err) {
       console.error('OAuth callback error:', err)
       setStatus('error')
