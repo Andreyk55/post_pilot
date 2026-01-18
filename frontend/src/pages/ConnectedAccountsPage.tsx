@@ -40,7 +40,8 @@ const platforms = [
       </svg>
     ),
     color: '#0A66C2',
-    available: true,
+    available: false,
+    comingSoon: true,
   },
   {
     id: 'twitter',
