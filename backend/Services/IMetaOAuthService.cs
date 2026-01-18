@@ -16,6 +16,11 @@ public interface IMetaOAuthService
     Task<MetaOAuthCallbackResponse> HandleCallbackAsync(string code, string state);
 
     /// <summary>
+    /// Complete OAuth flow and save connection immediately (identity-level only, no page selection)
+    /// </summary>
+    Task<MetaOAuthCompleteResponse> CompleteOAuthAsync(string code, string state);
+
+    /// <summary>
     /// Discover Instagram Business accounts linked to selected pages
     /// </summary>
     Task<MetaDiscoverInstagramResponse> DiscoverInstagramAccountsAsync(string tempToken, List<string> pageIds);

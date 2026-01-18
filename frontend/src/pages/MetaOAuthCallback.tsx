@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { metaApi } from '../api/meta'
 import './MetaOAuthCallback.css'
@@ -7,8 +7,12 @@ export function MetaOAuthCallback() {
   const [searchParams] = useSearchParams()
   const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing')
   const [errorMessage, setErrorMessage] = useState<string>('')
+  const hasProcessed = useRef(false)
 
   useEffect(() => {
+    // Prevent duplicate calls (React StrictMode in dev calls useEffect twice)
+    if (hasProcessed.current) return
+    hasProcessed.current = true
     handleCallback()
   }, [])
 
@@ -35,16 +39,13 @@ export function MetaOAuthCallback() {
     }
 
     try {
-      // Exchange code for token and get pages
-      const response = await metaApi.handleCallback(code, state)
+      // Complete OAuth and save connection immediately (identity-level only)
+      await metaApi.completeOAuth(code, state)
 
       setStatus('success')
 
-      // Notify the opener window with the data
-      notifyOpener('META_OAUTH_SUCCESS', {
-        tempToken: response.tempToken,
-        pages: response.pages,
-      })
+      // Notify the opener window that OAuth completed successfully
+      notifyOpener('META_OAUTH_SUCCESS', {})
 
       // Close popup after a brief delay
       setTimeout(() => {
@@ -53,7 +54,8 @@ export function MetaOAuthCallback() {
     } catch (err) {
       console.error('OAuth callback error:', err)
       setStatus('error')
-      setErrorMessage('Failed to complete authorization. Please try again.')
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error'
+      setErrorMessage(`Failed to complete authorization: ${errorMsg}`)
       notifyOpener('META_OAUTH_ERROR', { error: 'callback_failed' })
     }
   }

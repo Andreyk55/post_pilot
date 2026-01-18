@@ -17,6 +17,16 @@ public record MetaOAuthCallbackResponse(
     List<FacebookPageDto> Pages
 );
 
+// OAuth Complete (identity-level connection only, no page selection)
+public record MetaOAuthCompleteRequest(
+    string Code,
+    string State
+);
+
+public record MetaOAuthCompleteResponse(
+    MetaConnectionDto Connection
+);
+
 // Facebook Page
 public record FacebookPageDto(
     string Id,

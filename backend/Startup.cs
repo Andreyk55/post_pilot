@@ -16,11 +16,12 @@ public class Startup
 
     public void ConfigureServices(IServiceCollection services)
     {
-        // Add controllers with JSON enum string conversion
+        // Add controllers with JSON options
         services.AddControllers()
             .AddJsonOptions(options =>
             {
                 options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+                options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
             });
 
         services.AddEndpointsApiExplorer();

@@ -70,6 +70,16 @@ export interface MetaOAuthCallbackResponse {
   pages: FacebookPage[]
 }
 
+// OAuth Complete (identity-level connection only)
+export interface MetaOAuthCompleteRequest {
+  code: string
+  state: string
+}
+
+export interface MetaOAuthCompleteResponse {
+  connection: MetaConnection
+}
+
 export interface MetaDiscoverInstagramRequest {
   tempToken: string
   pageIds: string[]

@@ -129,6 +129,123 @@ public class MetaOAuthService : IMetaOAuthService
         );
     }
 
+    public async Task<MetaOAuthCompleteResponse> CompleteOAuthAsync(string code, string state)
+    {
+        _logger.LogInformation("CompleteOAuth called with state: {State}", state);
+
+        // Validate state
+        var oauthState = await _context.MetaOAuthStates
+            .FirstOrDefaultAsync(s => s.State == state && s.ExpiresAt > DateTime.UtcNow);
+
+        if (oauthState == null)
+        {
+            _logger.LogWarning("State validation failed. State not found or expired: {State}", state);
+            throw new InvalidOperationException("Invalid or expired OAuth state");
+        }
+
+        _logger.LogInformation("State validated successfully. Exchanging code for token...");
+
+        // Exchange code for access token
+        var tokenUrl = $"{GraphApiBaseUrl}/oauth/access_token?" +
+            $"client_id={_settings.AppId}" +
+            $"&client_secret={_settings.AppSecret}" +
+            $"&redirect_uri={Uri.EscapeDataString(_settings.RedirectUri)}" +
+            $"&code={code}";
+
+        _logger.LogInformation("Token exchange URL (without secrets): redirect_uri={RedirectUri}", _settings.RedirectUri);
+
+        var tokenResponse = await _httpClient.GetAsync(tokenUrl);
+
+        if (!tokenResponse.IsSuccessStatusCode)
+        {
+            var errorBody = await tokenResponse.Content.ReadAsStringAsync();
+            _logger.LogError("Token exchange failed. Status: {Status}, Body: {Body}", tokenResponse.StatusCode, errorBody);
+            throw new InvalidOperationException($"Failed to exchange code for token: {errorBody}");
+        }
+        var tokenJson = await tokenResponse.Content.ReadAsStringAsync();
+        var tokenData = JsonSerializer.Deserialize<MetaTokenResponse>(tokenJson);
+        if (tokenData?.AccessToken == null)
+        {
+            _logger.LogError("Token response did not contain access_token. Response: {Json}", tokenJson);
+            throw new InvalidOperationException("Failed to obtain access token");
+        }
+
+        _logger.LogInformation("Short-lived token obtained. Exchanging for long-lived token...");
+
+        // Exchange for long-lived token
+        var longLivedTokenUrl = $"{GraphApiBaseUrl}/oauth/access_token?" +
+            $"grant_type=fb_exchange_token" +
+            $"&client_id={_settings.AppId}" +
+            $"&client_secret={_settings.AppSecret}" +
+            $"&fb_exchange_token={tokenData.AccessToken}";
+
+        var longLivedResponse = await _httpClient.GetAsync(longLivedTokenUrl);
+        string? longLivedJson = null;
+        MetaTokenResponse? longLivedData = null;
+
+        if (longLivedResponse.IsSuccessStatusCode)
+        {
+            longLivedJson = await longLivedResponse.Content.ReadAsStringAsync();
+            longLivedData = JsonSerializer.Deserialize<MetaTokenResponse>(longLivedJson);
+            _logger.LogInformation("Long-lived token obtained successfully");
+        }
+        else
+        {
+            var errorBody = await longLivedResponse.Content.ReadAsStringAsync();
+            _logger.LogWarning("Long-lived token exchange failed (will use short-lived token). Status: {Status}, Body: {Body}", longLivedResponse.StatusCode, errorBody);
+        }
+
+        var accessToken = longLivedData?.AccessToken ?? tokenData.AccessToken;
+        var expiresIn = longLivedData?.ExpiresIn ?? tokenData.ExpiresIn ?? 3600;
+
+        var userId = GetCurrentUserId();
+        _logger.LogInformation("Saving connection for user {UserId}", userId);
+
+        // Use upsert pattern: update existing or create new
+        var existingConnection = await _context.MetaConnections
+            .Include(c => c.Pages)
+            .Include(c => c.InstagramAccounts)
+            .FirstOrDefaultAsync(c => c.UserId == userId);
+
+        MetaConnection connection;
+        if (existingConnection != null)
+        {
+            // Update existing connection
+            existingConnection.AccessToken = accessToken;
+            existingConnection.TokenExpiresAt = DateTime.UtcNow.AddSeconds(expiresIn);
+            existingConnection.UpdatedAt = DateTime.UtcNow;
+            // Clear pages and Instagram accounts (will be re-added in manage flow)
+            existingConnection.Pages.Clear();
+            existingConnection.InstagramAccounts.Clear();
+            connection = existingConnection;
+            _logger.LogInformation("Updating existing connection {ConnectionId}", connection.Id);
+        }
+        else
+        {
+            // Create new connection (identity-level only, no pages selected yet)
+            connection = new MetaConnection
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                AccessToken = accessToken,
+                TokenExpiresAt = DateTime.UtcNow.AddSeconds(expiresIn),
+                ConnectedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            _context.MetaConnections.Add(connection);
+            _logger.LogInformation("Creating new connection {ConnectionId}", connection.Id);
+        }
+
+        // Clean up OAuth state
+        _context.MetaOAuthStates.Remove(oauthState);
+
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("Meta connection saved successfully. Connection ID: {ConnectionId}", connection.Id);
+
+        return new MetaOAuthCompleteResponse(MapToDto(connection));
+    }
+
     private async Task DebugWhoLoggedInAsync(string accessToken)
     {
         var resp = await _httpClient.GetAsync(

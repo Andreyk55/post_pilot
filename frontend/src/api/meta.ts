@@ -1,6 +1,7 @@
 import type {
   MetaOAuthStartResponse,
   MetaOAuthCallbackResponse,
+  MetaOAuthCompleteResponse,
   MetaDiscoverInstagramRequest,
   MetaDiscoverInstagramResponse,
   MetaSaveConnectionRequest,
@@ -34,6 +35,23 @@ export const metaApi = {
       body: JSON.stringify({ code, state }),
     })
     if (!response.ok) throw new Error('Failed to complete Meta OAuth')
+    return response.json()
+  },
+
+  /**
+   * Complete OAuth and save connection immediately (identity-level only, no page selection)
+   */
+  async completeOAuth(code: string, state: string): Promise<MetaOAuthCompleteResponse> {
+    const response = await fetch(`${API_URL}/meta/oauth/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, state }),
+    })
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Meta OAuth complete failed:', response.status, errorText)
+      throw new Error(`Failed to complete Meta OAuth: ${response.status} ${errorText}`)
+    }
     return response.json()
   },
 

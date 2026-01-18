@@ -2,12 +2,7 @@ import { useState, useEffect } from 'react'
 import './ConnectedAccountsPage.css'
 import metaLogo from '../assets/meta-logo.svg'
 import { metaApi } from '../api/meta'
-import { MetaConnectionWizard, ConnectedTargetsList } from '../components/meta'
-import type {
-  MetaConnectionStatus,
-  MetaConnection,
-  ConnectedTarget,
-} from '../types/meta'
+import type { MetaConnection } from '../types/meta'
 
 interface ConnectedAccount {
   id: string
@@ -25,7 +20,7 @@ const platforms = [
   {
     id: 'meta',
     name: 'Meta',
-    description: 'Connect Facebook Pages & Instagram Business accounts',
+    description: 'Connect your Meta account to manage Facebook Pages & Instagram',
     icon: <img src={metaLogo} alt="Meta" className="platform-svg" />,
     color: '#0081FB',
     available: true,
@@ -75,15 +70,10 @@ export function ConnectedAccountsPage() {
   const [accounts, setAccounts] = useState<ConnectedAccount[]>(mockAccounts)
   const [connecting, setConnecting] = useState<string | null>(null)
 
-  // Meta-specific state
-  const [metaStatus, setMetaStatus] = useState<MetaConnectionStatus>('disconnected')
+  // Meta-specific state (identity-level only)
   const [metaConnection, setMetaConnection] = useState<MetaConnection | null>(null)
-  const [metaTargets, setMetaTargets] = useState<ConnectedTarget[]>([])
-  const [showMetaWizard, setShowMetaWizard] = useState(false)
-  const [isManageMode, setIsManageMode] = useState(false)
   const [metaLoading, setMetaLoading] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
-
 
   // Load Meta connection status on mount
   useEffect(() => {
@@ -96,12 +86,10 @@ export function ConnectedAccountsPage() {
       if (event.origin !== window.location.origin) return
 
       if (event.data?.type === 'META_OAUTH_SUCCESS') {
-        // OAuth completed successfully, show wizard
-        setMetaStatus('selecting_pages')
-        setShowMetaWizard(true)
+        // OAuth completed successfully, reload connection
         setConnecting(null)
+        await loadMetaConnection()
       } else if (event.data?.type === 'META_OAUTH_ERROR') {
-        setMetaStatus('disconnected')
         setConnecting(null)
         alert('Failed to connect to Meta. Please try again.')
       }
@@ -117,63 +105,31 @@ export function ConnectedAccountsPage() {
       const response = await metaApi.getConnection()
       if (response.isConnected && response.connection) {
         setMetaConnection(response.connection)
-        setMetaStatus('connected')
-        setMetaTargets(buildTargetsFromConnection(response.connection))
       } else {
-        setMetaStatus('disconnected')
         setMetaConnection(null)
-        setMetaTargets([])
       }
     } catch (err) {
       console.error('Failed to load Meta connection:', err)
-      setMetaStatus('disconnected')
+      setMetaConnection(null)
     } finally {
       setMetaLoading(false)
     }
   }
 
-  const buildTargetsFromConnection = (connection: MetaConnection): ConnectedTarget[] => {
-    const targets: ConnectedTarget[] = []
-
-    connection.pages.forEach(page => {
-      targets.push({
-        id: page.id,
-        type: 'facebook_page',
-        name: page.name,
-        identifier: page.pageId,
-        pictureUrl: page.pictureUrl,
-      })
-    })
-
-    connection.instagramAccounts.forEach(ig => {
-      targets.push({
-        id: ig.id,
-        type: 'instagram',
-        name: ig.name || ig.username,
-        identifier: `@${ig.username}`,
-        pictureUrl: ig.profilePictureUrl,
-      })
-    })
-
-    return targets
-  }
-
   const handleConnectMeta = async () => {
-    // If already connected, just show the current state
-    if (metaStatus === 'connected') {
+    // If already connected, do nothing
+    if (metaConnection) {
       return
     }
 
-    // First check if already connected
     setConnecting('meta')
     setMetaLoading(true)
 
+    // First check if already connected
     try {
       const response = await metaApi.getConnection()
       if (response.isConnected && response.connection) {
         setMetaConnection(response.connection)
-        setMetaStatus('connected')
-        setMetaTargets(buildTargetsFromConnection(response.connection))
         setConnecting(null)
         setMetaLoading(false)
         return
@@ -183,7 +139,6 @@ export function ConnectedAccountsPage() {
     }
 
     setMetaLoading(false)
-    setMetaStatus('authorizing')
 
     try {
       const { authUrl } = await metaApi.startOAuth()
@@ -210,24 +165,14 @@ export function ConnectedAccountsPage() {
       const pollTimer = setInterval(() => {
         if (popup.closed) {
           clearInterval(pollTimer)
-          // If we're still in authorizing state, the user closed the popup
-          if (metaStatus === 'authorizing') {
-            setMetaStatus('disconnected')
-            setConnecting(null)
-          }
+          setConnecting(null)
         }
       }, 500)
     } catch (err) {
       console.error('Failed to start Meta OAuth:', err)
-      setMetaStatus('disconnected')
       setConnecting(null)
       alert('Failed to start Meta connection. Please try again.')
     }
-  }
-
-  const handleManagePages = () => {
-    setIsManageMode(true)
-    setShowMetaWizard(true)
   }
 
   const handleDisconnectMeta = async () => {
@@ -239,30 +184,12 @@ export function ConnectedAccountsPage() {
     try {
       await metaApi.disconnect()
       setMetaConnection(null)
-      setMetaTargets([])
-      setMetaStatus('disconnected')
     } catch (err) {
       console.error('Failed to disconnect Meta:', err)
       alert('Failed to disconnect Meta. Please try again.')
     } finally {
       setDisconnecting(false)
     }
-  }
-
-  const handleWizardComplete = () => {
-    setShowMetaWizard(false)
-    setIsManageMode(false)
-    loadMetaConnection() // Reload the connection data
-  }
-
-  const handleWizardClose = () => {
-    setShowMetaWizard(false)
-    setIsManageMode(false)
-    // Reset to disconnected if we were in the middle of connecting
-    if (metaStatus !== 'connected') {
-      setMetaStatus('disconnected')
-    }
-    setConnecting(null)
   }
 
   const handleConnect = async (platformId: string) => {
@@ -312,7 +239,7 @@ export function ConnectedAccountsPage() {
   const renderMetaCard = () => {
     const platform = platforms.find(p => p.id === 'meta')!
     const isConnecting = connecting === 'meta'
-    const isConnected = metaStatus === 'connected'
+    const isConnected = !!metaConnection
 
     return (
       <div key="meta" className={`platform-card ${isConnected ? 'connected' : ''}`}>
@@ -334,12 +261,37 @@ export function ConnectedAccountsPage() {
             <span className="spinner"></span>
             <span>Loading connection...</span>
           </div>
-        ) : isConnected && metaTargets.length > 0 ? (
-          <ConnectedTargetsList
-            targets={metaTargets}
-            onManagePages={handleManagePages}
-            onDisconnect={handleDisconnectMeta}
-          />
+        ) : isConnected ? (
+          <div className="meta-connected-state">
+            <div className="connected-status">
+              <span className="connected-badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                Connected
+              </span>
+            </div>
+            <button
+              className="disconnect-btn"
+              onClick={handleDisconnectMeta}
+              disabled={disconnecting}
+            >
+              {disconnecting ? (
+                <>
+                  <span className="spinner"></span>
+                  Disconnecting...
+                </>
+              ) : (
+                <>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
+                    <line x1="12" y1="2" x2="12" y2="12" />
+                  </svg>
+                  Disconnect
+                </>
+              )}
+            </button>
+          </div>
         ) : (
           <button
             className="connect-btn"
@@ -350,11 +302,6 @@ export function ConnectedAccountsPage() {
               <>
                 <span className="spinner"></span>
                 Connecting...
-              </>
-            ) : disconnecting ? (
-              <>
-                <span className="spinner"></span>
-                Disconnecting...
               </>
             ) : (
               <>Connect to Meta</>
@@ -462,24 +409,6 @@ export function ConnectedAccountsPage() {
         {renderMetaCard()}
         {platforms.filter(p => p.id !== 'meta').map(renderOtherPlatformCard)}
       </div>
-
-      {(accounts.length > 0 || metaTargets.length > 0) && (
-        <div className="accounts-summary">
-          <h2>Your Connected Accounts</h2>
-          <p className="summary-count">
-            {accounts.length + metaTargets.length} target{accounts.length + metaTargets.length !== 1 ? 's' : ''} connected
-          </p>
-        </div>
-      )}
-
-      <MetaConnectionWizard
-        isOpen={showMetaWizard}
-        onClose={handleWizardClose}
-        onComplete={handleWizardComplete}
-        existingPageIds={metaConnection?.pages.map(p => p.pageId) || []}
-        existingInstagramIds={metaConnection?.instagramAccounts.map(ig => ig.igBusinessId) || []}
-        isManageMode={isManageMode}
-      />
     </div>
   )
 }

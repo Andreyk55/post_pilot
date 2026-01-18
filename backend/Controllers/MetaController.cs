@@ -62,6 +62,29 @@ public class MetaController : ControllerBase
     }
 
     /// <summary>
+    /// Complete OAuth and save connection immediately (identity-level only, no page selection)
+    /// </summary>
+    [HttpPost("oauth/complete")]
+    public async Task<ActionResult<MetaOAuthCompleteResponse>> CompleteOAuth([FromBody] MetaOAuthCompleteRequest request)
+    {
+        try
+        {
+            var result = await _metaOAuthService.CompleteOAuthAsync(request.Code, request.State);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "OAuth complete failed: {Message}", ex.Message);
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to complete Meta OAuth");
+            return StatusCode(500, new { error = "Failed to complete OAuth" });
+        }
+    }
+
+    /// <summary>
     /// Discover Instagram Business accounts linked to selected pages
     /// </summary>
     [HttpPost("instagram/discover")]
