@@ -60,7 +60,8 @@ public class MetaOAuthService : IMetaOAuthService
             $"&redirect_uri={Uri.EscapeDataString(_settings.RedirectUri)}" +
             $"&state={state}" +
             $"&scope={Uri.EscapeDataString(scopes)}" +
-            $"&response_type=code";
+            $"&response_type=code" +
+            $"&auth_type=rerequest";
 
         return new MetaOAuthStartResponse(authUrl, state);
     }
@@ -85,14 +86,15 @@ public class MetaOAuthService : IMetaOAuthService
 
         var tokenResponse = await _httpClient.GetAsync(tokenUrl);
         tokenResponse.EnsureSuccessStatusCode();
-
         var tokenJson = await tokenResponse.Content.ReadAsStringAsync();
         var tokenData = JsonSerializer.Deserialize<MetaTokenResponse>(tokenJson);
-
         if (tokenData?.AccessToken == null)
         {
             throw new InvalidOperationException("Failed to obtain access token");
         }
+
+        await DebugWhoLoggedInAsync(tokenData.AccessToken);
+        await DebugPermissionsAsync(tokenData.AccessToken);
 
         // Exchange for long-lived token
         var longLivedTokenUrl = $"{GraphApiBaseUrl}/oauth/access_token?" +
@@ -123,6 +125,24 @@ public class MetaOAuthService : IMetaOAuthService
             oauthState.Id.ToString(),
             pages
         );
+    }
+
+    private async Task DebugWhoLoggedInAsync(string accessToken)
+    {
+        var resp = await _httpClient.GetAsync(
+            $"https://graph.facebook.com/v21.0/me?fields=id,name&access_token={accessToken}");
+
+        var body = await resp.Content.ReadAsStringAsync();
+        _logger.LogInformation("Meta /me response: {Body}", body);
+    }
+
+    private async Task DebugPermissionsAsync(string accessToken)
+    {
+        var resp = await _httpClient.GetAsync(
+            $"https://graph.facebook.com/v21.0/me/permissions?access_token={accessToken}");
+
+        var body = await resp.Content.ReadAsStringAsync();
+        _logger.LogInformation("Meta /me/permissions response: {Body}", body);
     }
 
     public async Task<MetaDiscoverInstagramResponse> DiscoverInstagramAccountsAsync(string tempToken, List<string> pageIds)
