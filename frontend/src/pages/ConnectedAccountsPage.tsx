@@ -3,6 +3,7 @@ import './ConnectedAccountsPage.css'
 import metaLogo from '../assets/meta-logo.svg'
 import { metaApi } from '../api/meta'
 import type { MetaConnection } from '../types/meta'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 
 interface ConnectedAccount {
   id: string
@@ -74,6 +75,7 @@ export function ConnectedAccountsPage() {
   const [metaConnection, setMetaConnection] = useState<MetaConnection | null>(null)
   const [metaLoading, setMetaLoading] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
+  const [showDisconnectDialog, setShowDisconnectDialog] = useState(false)
 
   // Load Meta connection status on mount
   useEffect(() => {
@@ -175,15 +177,16 @@ export function ConnectedAccountsPage() {
     }
   }
 
-  const handleDisconnectMeta = async () => {
-    if (!confirm('Are you sure you want to disconnect Meta? This will remove all connected Facebook Pages and Instagram accounts.')) {
-      return
-    }
+  const handleDisconnectMeta = () => {
+    setShowDisconnectDialog(true)
+  }
 
+  const confirmDisconnectMeta = async () => {
     setDisconnecting(true)
     try {
       await metaApi.disconnect()
       setMetaConnection(null)
+      setShowDisconnectDialog(false)
     } catch (err) {
       console.error('Failed to disconnect Meta:', err)
       alert('Failed to disconnect Meta. Please try again.')
@@ -409,6 +412,18 @@ export function ConnectedAccountsPage() {
         {renderMetaCard()}
         {platforms.filter(p => p.id !== 'meta').map(renderOtherPlatformCard)}
       </div>
+
+      <ConfirmDialog
+        isOpen={showDisconnectDialog}
+        title="Disconnect Meta"
+        message="Are you sure you want to disconnect Meta? This will remove all connected Facebook Pages and Instagram accounts."
+        confirmText="Disconnect"
+        cancelText="Cancel"
+        confirmVariant="danger"
+        onConfirm={confirmDisconnectMeta}
+        onCancel={() => setShowDisconnectDialog(false)}
+        isLoading={disconnecting}
+      />
     </div>
   )
 }
