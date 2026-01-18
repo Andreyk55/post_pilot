@@ -4,6 +4,7 @@ import metaLogo from '../assets/meta-logo.svg'
 import { metaApi } from '../api/meta'
 import type { MetaConnection } from '../types/meta'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { Toast } from '../components/Toast'
 
 interface ConnectedAccount {
   id: string
@@ -76,6 +77,8 @@ export function ConnectedAccountsPage() {
   const [metaLoading, setMetaLoading] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
   const [showDisconnectDialog, setShowDisconnectDialog] = useState(false)
+  const [showToast, setShowToast] = useState(false)
+  const [toastMessage, setToastMessage] = useState('')
 
   // Load Meta connection status on mount
   useEffect(() => {
@@ -187,6 +190,8 @@ export function ConnectedAccountsPage() {
       await metaApi.disconnect()
       setMetaConnection(null)
       setShowDisconnectDialog(false)
+      setToastMessage('Meta disconnected successfully')
+      setShowToast(true)
     } catch (err) {
       console.error('Failed to disconnect Meta:', err)
       alert('Failed to disconnect Meta. Please try again.')
@@ -423,6 +428,13 @@ export function ConnectedAccountsPage() {
         onConfirm={confirmDisconnectMeta}
         onCancel={() => setShowDisconnectDialog(false)}
         isLoading={disconnecting}
+      />
+
+      <Toast
+        message={toastMessage}
+        type="success"
+        isVisible={showToast}
+        onClose={() => setShowToast(false)}
       />
     </div>
   )
