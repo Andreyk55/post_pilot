@@ -309,10 +309,6 @@ export function ConnectedAccountsPage() {
           </div>
           <div className="platform-info">
             <h3>{platform.name}</h3>
-            <span className={`connection-status ${isConnected ? 'connected' : 'not-connected'}`}>
-              <span className="status-dot"></span>
-              {isConnected ? 'Connected' : 'Not Connected'}
-            </span>
             <p>{platform.description}</p>
           </div>
         </div>
@@ -373,12 +369,6 @@ export function ConnectedAccountsPage() {
                 <span className="coming-soon-badge">Coming Soon</span>
               )}
             </h3>
-            {!platform.comingSoon && (
-              <span className={`connection-status ${connectedAccounts.length > 0 ? 'connected' : 'not-connected'}`}>
-                <span className="status-dot"></span>
-                {connectedAccounts.length > 0 ? 'Connected' : 'Not Connected'}
-              </span>
-            )}
             <p>{platform.description}</p>
           </div>
         </div>
