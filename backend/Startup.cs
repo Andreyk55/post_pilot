@@ -42,12 +42,24 @@ public class Startup
             options.UseNpgsql(connectionString));
 
         // Configure Meta OAuth settings (secrets from environment variables only)
+        var appId = Environment.GetEnvironmentVariable("META_APP_ID") 
+            ?? throw new InvalidOperationException("Required environment variable 'META_APP_ID' is missing.");
+
+        var appSecret = Environment.GetEnvironmentVariable("META_APP_SECRET") 
+            ?? throw new InvalidOperationException("Required environment variable 'META_APP_SECRET' is missing.");
+
+        // For the RedirectUri, we check the Config, then Env Var, and finally fallback to localhost
+        var redirectUri = Configuration["Meta:RedirectUri"] 
+            ?? Environment.GetEnvironmentVariable("META_REDIRECT_URI") 
+            ?? throw new InvalidOperationException("RedirectUri is missing.");
+
         var metaSettings = new MetaOAuthSettings
         {
-            AppId = Environment.GetEnvironmentVariable("META_APP_ID") ?? "",
-            AppSecret = Environment.GetEnvironmentVariable("META_APP_SECRET") ?? "",
-            RedirectUri = Configuration["Meta:RedirectUri"] ?? Environment.GetEnvironmentVariable("META_REDIRECT_URI") ?? "http://localhost:5173/oauth/meta/callback"
+            AppId = appId,
+            AppSecret = appSecret,
+            RedirectUri = redirectUri
         };
+        
         services.AddSingleton(metaSettings);
 
         // Register Meta OAuth service
