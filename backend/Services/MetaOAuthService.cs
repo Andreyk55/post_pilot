@@ -52,7 +52,9 @@ public class MetaOAuthService : IMetaOAuthService
         {
             "pages_show_list",
             "pages_read_engagement",
-            "pages_manage_posts"
+            "pages_manage_posts",
+            "business_management",
+            "public_profile"
         });
 
         var authUrl = $"{OAuthBaseUrl}?" +
@@ -442,6 +444,7 @@ public class MetaOAuthService : IMetaOAuthService
             response.EnsureSuccessStatusCode();
 
             var json = await response.Content.ReadAsStringAsync();
+            _logger.LogInformation("RAW /me/accounts JSON: {Json}", json);
             var data = JsonSerializer.Deserialize<MetaPagesResponse>(json);
 
             if (data?.Data != null)
