@@ -9,7 +9,7 @@ interface ToastProps {
   duration?: number
 }
 
-export function Toast({ message, type = 'success', isVisible, onClose, duration = 3000 }: ToastProps) {
+export function Toast({ message, type = 'success', isVisible, onClose, duration = 5000 }: ToastProps) {
   useEffect(() => {
     if (isVisible && duration > 0) {
       const timer = setTimeout(onClose, duration)
