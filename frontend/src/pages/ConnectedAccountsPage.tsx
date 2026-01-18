@@ -283,6 +283,22 @@ export function ConnectedAccountsPage() {
     setAccounts(accounts.filter(a => a.id !== accountId))
   }
 
+  const handleDisconnectPlatform = (platformId: string) => {
+    const platformMap: Record<string, ConnectedAccount['platform']> = {
+      meta: 'Meta',
+      linkedin: 'LinkedIn',
+      twitter: 'Twitter',
+      tiktok: 'TikTok',
+    }
+    const platformName = platformMap[platformId] || platformId
+
+    if (!confirm(`Are you sure you want to disconnect ${platformName}? This will remove all connected accounts for this platform.`)) {
+      return
+    }
+
+    setAccounts(accounts.filter(a => a.platform !== platformMap[platformId]))
+  }
+
   const getConnectedAccountsForPlatform = (platformId: string) => {
     const platformMap: Record<string, ConnectedAccount['platform']> = {
       meta: 'Meta',
@@ -400,22 +416,37 @@ export function ConnectedAccountsPage() {
           </div>
         )}
 
-        <button
-          className={`connect-btn ${platform.comingSoon ? 'disabled' : ''}`}
-          onClick={() => handleConnect(platform.id)}
-          disabled={!platform.available || isConnecting}
-        >
-          {isConnecting ? (
-            <>
-              <span className="spinner"></span>
-              Connecting...
-            </>
-          ) : connectedAccounts.length > 0 ? (
-            <>+ Add Another Account</>
-          ) : (
-            <>Connect to {platform.name}</>
+        <div className="platform-actions">
+          <button
+            className={`connect-btn ${platform.comingSoon ? 'disabled' : ''}`}
+            onClick={() => handleConnect(platform.id)}
+            disabled={!platform.available || isConnecting}
+          >
+            {isConnecting ? (
+              <>
+                <span className="spinner"></span>
+                Connecting...
+              </>
+            ) : connectedAccounts.length > 0 ? (
+              <>+ Add Another Account</>
+            ) : (
+              <>Connect to {platform.name}</>
+            )}
+          </button>
+          {connectedAccounts.length > 0 && (
+            <button
+              className="disconnect-platform-btn"
+              onClick={() => handleDisconnectPlatform(platform.id)}
+              disabled={!platform.available}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
+                <line x1="12" y1="2" x2="12" y2="12" />
+              </svg>
+              Disconnect {platform.name}
+            </button>
           )}
-        </button>
+        </div>
       </div>
     )
   }

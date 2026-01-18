@@ -229,6 +229,13 @@
   color: #ef4444;
 }
 
+.platform-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: auto;
+}
+
 .connect-btn {
   width: 100%;
   padding: 0.875rem 1.25rem;
@@ -245,7 +252,39 @@
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  margin-top: auto;
+}
+
+.disconnect-platform-btn {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 10px;
+  color: #ef4444;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.disconnect-platform-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.disconnect-platform-btn:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: #ef4444;
+}
+
+.disconnect-platform-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .connect-btn:hover:not(:disabled) {
