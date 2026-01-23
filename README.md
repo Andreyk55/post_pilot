@@ -111,6 +111,54 @@ docker-compose down -v
 - **Development:** Uses `appsettings.Development.json` → local PostgreSQL
 - **Production:** Set `ConnectionStrings__DefaultConnection` environment variable → AWS RDS
 
+## ngrok Setup (Local Development with Meta Webhooks)
+
+ngrok exposes your local backend to the internet, required for Meta/Facebook OAuth callbacks during development.
+
+### 1. Install ngrok
+
+Download from [ngrok.com](https://ngrok.com/download) or:
+
+```bash
+# Windows (choco)
+choco install ngrok
+
+# macOS
+brew install ngrok
+```
+
+### 2. Authenticate ngrok
+
+```bash
+ngrok config add-authtoken YOUR_AUTH_TOKEN
+```
+
+Get your auth token from [ngrok dashboard](https://dashboard.ngrok.com/get-started/your-authtoken).
+
+### 3. Start ngrok
+
+```bash
+ngrok http 5122
+```
+
+This will give you a public URL like `https://abc123.ngrok-free.app`.
+
+### 4. Configure Meta App
+
+In your [Meta Developer Console](https://developers.facebook.com/apps/):
+
+1. Go to your app → **Facebook Login** → **Settings**
+2. Add the ngrok URL to **Valid OAuth Redirect URIs**:
+   - `https://abc123.ngrok-free.app/api/auth/callback`
+3. Go to **Settings** → **Basic** and add to **App Domains**:
+   - `abc123.ngrok-free.app`
+
+### 5. Update Frontend API URL
+
+Update your frontend to use the ngrok URL for API calls during testing, or use the ngrok URL directly in the browser.
+
+**Note:** The ngrok URL changes each time you restart (unless you have a paid plan with reserved domains).
+
 ## Tech Stack
 
 - **Backend:** .NET 10, Entity Framework Core, PostgreSQL
