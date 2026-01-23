@@ -73,7 +73,8 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!content || !scheduledDate || !scheduledTime || selectedPlatforms.length === 0) {
+    // Require either content or media, plus date/time/platform
+    if ((!content && !mediaUrl) || !scheduledDate || !scheduledTime || selectedPlatforms.length === 0) {
       return
     }
 
@@ -101,7 +102,8 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
     setUploadError(null)
   }
 
-  const isFormValid = content && scheduledDate && scheduledTime &&
+  // Form is valid if there's content OR media, plus date/time/platform
+  const isFormValid = (content || mediaUrl) && scheduledDate && scheduledTime &&
     selectedPlatforms.length > 0 &&
     (!isFacebookSelected || selectedPageId)
 
