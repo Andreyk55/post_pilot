@@ -120,14 +120,22 @@
 .post-content {
   margin-bottom: 1rem;
   padding-right: 2rem;
+  cursor: pointer;
 }
 
 .post-content p {
   color: #ffffff;
   font-size: 0.9375rem;
   line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.post-content.expanded p {
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow: visible;
+  text-overflow: unset;
 }
 
 .post-meta {

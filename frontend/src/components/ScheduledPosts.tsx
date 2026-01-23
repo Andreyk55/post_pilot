@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from 'react'
+import { useRef, useEffect, useCallback, useState } from 'react'
 import type { Post } from '../api/posts'
 import './ScheduledPosts.css'
 
@@ -21,6 +21,11 @@ const platformIcons: Record<string, string> = {
 export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading, totalCount }: ScheduledPostsProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const loadMoreTriggerRef = useRef<HTMLDivElement>(null)
+  const [expandedPostId, setExpandedPostId] = useState<string | null>(null)
+
+  const toggleExpand = (postId: string) => {
+    setExpandedPostId(prev => prev === postId ? null : postId)
+  }
 
   const formatDateTime = (isoString: string) => {
     const date = new Date(isoString)
@@ -81,7 +86,10 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
             const { date, time } = formatDateTime(post.scheduledAt)
             return (
               <div key={post.id} className="post-card">
-                <div className="post-content">
+                <div
+                  className={`post-content ${expandedPostId === post.id ? 'expanded' : ''}`}
+                  onClick={() => toggleExpand(post.id)}
+                >
                   <p>{post.content}</p>
                 </div>
 
