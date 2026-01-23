@@ -32,6 +32,7 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
   const [loadingPages, setLoadingPages] = useState(false)
   const [mediaUrl, setMediaUrl] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [uploadKey, setUploadKey] = useState(0)
 
   // Load connected Facebook Pages on mount
   useEffect(() => {
@@ -100,6 +101,7 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
     setSelectedPageId('')
     setMediaUrl(null)
     setUploadError(null)
+    setUploadKey(k => k + 1)
   }
 
   // Form is valid if there's content OR media, plus date/time/platform
@@ -127,6 +129,7 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
         <div className="form-group">
           <label>Image (optional)</label>
           <ImageUpload
+            key={uploadKey}
             onUploadComplete={(s3Key) => {
               setMediaUrl(s3Key)
               setUploadError(null)
