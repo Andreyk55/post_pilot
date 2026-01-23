@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "2XzXlZOtugI=",
+  "dgSpecHash": "U0FKEudPJoY=",
   "success": true,
   "projectFilePath": "D:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj",
   "expectedPackageFiles": [
@@ -13,6 +13,7 @@
     "C:\\Users\\KTZ\\.nuget\\packages\\amazon.lambda.serialization.systemtextjson\\2.4.4\\amazon.lambda.serialization.systemtextjson.2.4.4.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\amazon.lambda.sqsevents\\2.2.0\\amazon.lambda.sqsevents.2.2.0.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\awssdk.core\\3.7.500.71\\awssdk.core.3.7.500.71.nupkg.sha512",
+    "C:\\Users\\KTZ\\.nuget\\packages\\awssdk.s3\\3.7.509.12\\awssdk.s3.3.7.509.12.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\awssdk.scheduler\\3.7.502.33\\awssdk.scheduler.3.7.502.33.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\awssdk.sqs\\3.7.502.32\\awssdk.sqs.3.7.502.32.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\humanizer.core\\2.14.1\\humanizer.core.2.14.1.nupkg.sha512",

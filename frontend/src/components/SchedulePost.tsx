@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { metaApi } from '../api/meta'
 import type { ConnectedPage } from '../types/meta'
+import { ImageUpload } from './ImageUpload'
 import './SchedulePost.css'
 
 interface SchedulePostProps {
@@ -10,6 +11,7 @@ interface SchedulePostProps {
     scheduledTime: string
     platforms: string[]
     targetPageId?: string
+    mediaUrl?: string
   }) => void
 }
 
@@ -28,6 +30,8 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
   const [connectedPages, setConnectedPages] = useState<ConnectedPage[]>([])
   const [selectedPageId, setSelectedPageId] = useState<string>('')
   const [loadingPages, setLoadingPages] = useState(false)
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
 
   // Load connected Facebook Pages on mount
   useEffect(() => {
@@ -84,6 +88,7 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
       scheduledTime,
       platforms: selectedPlatforms,
       targetPageId: isFacebookSelected ? selectedPageId : undefined,
+      mediaUrl: mediaUrl || undefined,
     })
 
     // Reset form
@@ -92,6 +97,8 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
     setScheduledTime('')
     setSelectedPlatforms([])
     setSelectedPageId('')
+    setMediaUrl(null)
+    setUploadError(null)
   }
 
   const isFormValid = content && scheduledDate && scheduledTime &&
@@ -113,6 +120,19 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
             rows={4}
           />
           <span className="char-count">{content.length} characters</span>
+        </div>
+
+        <div className="form-group">
+          <label>Image (optional)</label>
+          <ImageUpload
+            onUploadComplete={(s3Key) => {
+              setMediaUrl(s3Key)
+              setUploadError(null)
+            }}
+            onUploadError={(error) => setUploadError(error)}
+            onClear={() => setMediaUrl(null)}
+          />
+          {uploadError && <div className="upload-error">{uploadError}</div>}
         </div>
 
         <div className="form-row">

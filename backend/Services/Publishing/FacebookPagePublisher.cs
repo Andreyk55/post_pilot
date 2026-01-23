@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using PostPilot.Api.Data;
 using PostPilot.Api.Entities;
 using PostPilot.Api.Enums;
+using PostPilot.Api.Services.Media;
 using PostPilot.Api.Services.Scheduling;
 
 namespace PostPilot.Api.Services.Publishing;
@@ -15,10 +16,12 @@ public class FacebookPagePublisher : IPostPublisher
 {
     private readonly AppDbContext _dbContext;
     private readonly IPostScheduler _scheduler;
+    private readonly IMediaService _mediaService;
     private readonly HttpClient _httpClient;
     private readonly ILogger<FacebookPagePublisher> _logger;
 
     private const string GraphApiBaseUrl = "https://graph.facebook.com/v21.0";
+    private static readonly TimeSpan MetaDownloadUrlExpiration = TimeSpan.FromHours(1);
 
     // Meta error codes - transient (retry)
     private static readonly HashSet<int> TransientErrorCodes = new()
@@ -55,11 +58,13 @@ public class FacebookPagePublisher : IPostPublisher
     public FacebookPagePublisher(
         AppDbContext dbContext,
         IPostScheduler scheduler,
+        IMediaService mediaService,
         HttpClient httpClient,
         ILogger<FacebookPagePublisher> logger)
     {
         _dbContext = dbContext;
         _scheduler = scheduler;
+        _mediaService = mediaService;
         _httpClient = httpClient;
         _logger = logger;
     }
@@ -177,12 +182,27 @@ public class FacebookPagePublisher : IPostPublisher
 
         if (!string.IsNullOrEmpty(post.MediaUrl))
         {
+            // Determine the image URL to send to Meta
+            string imageUrl;
+            if (_mediaService.IsS3Key(post.MediaUrl))
+            {
+                // Generate pre-signed download URL for Meta to fetch
+                imageUrl = _mediaService.GenerateDownloadUrl(post.MediaUrl, MetaDownloadUrlExpiration);
+                _logger.LogInformation("Generated pre-signed URL for S3 key {S3Key} for post {PostId}",
+                    post.MediaUrl, post.Id);
+            }
+            else
+            {
+                // Use external URL directly (backward compatibility)
+                imageUrl = post.MediaUrl;
+            }
+
             // For photos, use photos endpoint
             url = $"{GraphApiBaseUrl}/{pageId}/photos";
             content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["message"] = post.Content,
-                ["url"] = post.MediaUrl,  // Meta will fetch from this URL
+                ["url"] = imageUrl,  // Meta will fetch from this URL
                 ["access_token"] = accessToken
             });
         }
@@ -198,11 +218,18 @@ public class FacebookPagePublisher : IPostPublisher
         }
 
         _logger.LogInformation("Calling Meta API: POST {Url} for post {PostId}", url, post.Id);
+        if (!string.IsNullOrEmpty(post.MediaUrl))
+        {
+            _logger.LogInformation("Image URL being sent to Meta: {ImageUrl}",
+                _mediaService.IsS3Key(post.MediaUrl)
+                    ? _mediaService.GenerateDownloadUrl(post.MediaUrl, MetaDownloadUrlExpiration)
+                    : post.MediaUrl);
+        }
 
         var response = await _httpClient.PostAsync(url, content, cancellationToken);
         var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
-        _logger.LogDebug("Meta API response for post {PostId}: {StatusCode} - {Body}",
+        _logger.LogInformation("Meta API response for post {PostId}: {StatusCode} - {Body}",
             post.Id, response.StatusCode, responseBody);
 
         if (response.IsSuccessStatusCode)

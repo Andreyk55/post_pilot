@@ -54,6 +54,21 @@ public class LocalSchedulerBackgroundService : BackgroundService
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var now = DateTime.UtcNow;
+            var stuckThreshold = now.AddMinutes(-5); // Posts stuck in Publishing for 5+ minutes
+
+            // Reset posts stuck in Publishing status (safety net for crashes)
+            var stuckPosts = await dbContext.Posts
+                .Where(p => p.Status == PostStatus.Publishing && p.UpdatedAt < stuckThreshold)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(p => p.Status, PostStatus.RetryPending)
+                    .SetProperty(p => p.NextRetryAt, now)
+                    .SetProperty(p => p.UpdatedAt, now),
+                    cancellationToken);
+
+            if (stuckPosts > 0)
+            {
+                _logger.LogWarning("Reset {Count} posts stuck in Publishing status", stuckPosts);
+            }
 
             // Find posts that are due for publication (Facebook only for now)
             duePosts = await dbContext.Posts

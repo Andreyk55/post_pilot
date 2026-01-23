@@ -1,8 +1,10 @@
 using System.Text.Json.Serialization;
+using Amazon.S3;
 using Amazon.Scheduler;
 using Microsoft.EntityFrameworkCore;
 using PostPilot.Api.Data;
 using PostPilot.Api.Services;
+using PostPilot.Api.Services.Media;
 using PostPilot.Api.Services.Publishing;
 using PostPilot.Api.Services.Scheduling;
 
@@ -71,6 +73,9 @@ public class Startup
 
         // Configure scheduler based on environment
         ConfigureScheduler(services);
+
+        // Configure media service based on environment
+        ConfigureMediaService(services);
 
         // Configure publishers
         // Use AddHttpClient to register FacebookPagePublisher with a typed HttpClient
@@ -159,6 +164,28 @@ public class Startup
             // Local development: Polling-based scheduler
             services.AddScoped<IPostScheduler, LocalPostScheduler>();
             services.AddHostedService<LocalSchedulerBackgroundService>();
+        }
+    }
+
+    private static void ConfigureMediaService(IServiceCollection services)
+    {
+        var bucketName = Environment.GetEnvironmentVariable("MEDIA_BUCKET_NAME");
+
+        if (!string.IsNullOrEmpty(bucketName))
+        {
+            // Production: AWS S3
+            services.AddSingleton<IAmazonS3, AmazonS3Client>();
+            services.AddSingleton<IMediaService>(sp =>
+                new S3MediaService(
+                    sp.GetRequiredService<IAmazonS3>(),
+                    bucketName,
+                    sp.GetRequiredService<ILogger<S3MediaService>>()));
+        }
+        else
+        {
+            // Local development: File system storage
+            services.AddSingleton<IMediaService>(sp =>
+                new LocalMediaService(sp.GetRequiredService<ILogger<LocalMediaService>>()));
         }
     }
 }

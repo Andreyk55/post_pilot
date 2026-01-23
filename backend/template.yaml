@@ -54,6 +54,33 @@ Conditions:
 
 Resources:
   # ============================================
+  # S3 Media Bucket
+  # ============================================
+
+  MediaBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub postpilot-media-${Environment}
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "*"
+            AllowedMethods:
+              - PUT
+              - GET
+            AllowedOrigins:
+              - "*"  # Restrict to your domain in production
+            MaxAge: 3600
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ============================================
   # SQS Queues
   # ============================================
 
@@ -131,9 +158,16 @@ Resources:
       CodeUri: .
       Description: Publishes posts to social media platforms
       Timeout: 60  # Publishing can take longer
+      Environment:
+        Variables:
+          MEDIA_BUCKET_NAME: !Ref MediaBucket
       Policies:
         - Version: '2012-10-17'
           Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+              Resource: !Sub ${MediaBucket.Arn}/*
             - Effect: Allow
               Action:
                 - logs:CreateLogGroup
@@ -176,9 +210,15 @@ Resources:
           PUBLISHER_LAMBDA_ARN: !GetAtt PublisherFunction.Arn
           SCHEDULER_ROLE_ARN: !GetAtt EventBridgeSchedulerRole.Arn
           EVENTBRIDGE_SCHEDULE_GROUP: !Sub postpilot-schedules-${Environment}
+          MEDIA_BUCKET_NAME: !Ref MediaBucket
       Policies:
         - Version: '2012-10-17'
           Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:GetObject
+              Resource: !Sub ${MediaBucket.Arn}/*
             - Effect: Allow
               Action:
                 - scheduler:CreateSchedule
@@ -285,3 +325,11 @@ Outputs:
   EventBridgeSchedulerRoleArn:
     Description: IAM Role ARN for EventBridge Scheduler
     Value: !GetAtt EventBridgeSchedulerRole.Arn
+
+  MediaBucketName:
+    Description: S3 bucket for media uploads
+    Value: !Ref MediaBucket
+
+  MediaBucketArn:
+    Description: S3 bucket ARN for media uploads
+    Value: !GetAtt MediaBucket.Arn
