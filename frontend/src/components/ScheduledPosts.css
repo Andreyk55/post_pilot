@@ -120,6 +120,9 @@
 .post-content {
   margin-bottom: 1rem;
   padding-right: 2rem;
+}
+
+.post-content:has(.expand-indicator) {
   cursor: pointer;
 }
 

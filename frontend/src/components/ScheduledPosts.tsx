@@ -22,10 +22,28 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const loadMoreTriggerRef = useRef<HTMLDivElement>(null)
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null)
+  const [overflowingPosts, setOverflowingPosts] = useState<Set<string>>(new Set())
+  const contentRefs = useRef<Map<string, HTMLParagraphElement>>(new Map())
 
   const toggleExpand = (postId: string) => {
     setExpandedPostId(prev => prev === postId ? null : postId)
   }
+
+  useEffect(() => {
+    const checkOverflow = () => {
+      const newOverflowing = new Set<string>()
+      contentRefs.current.forEach((el, postId) => {
+        if (el && el.scrollWidth > el.clientWidth) {
+          newOverflowing.add(postId)
+        }
+      })
+      setOverflowingPosts(newOverflowing)
+    }
+
+    checkOverflow()
+    window.addEventListener('resize', checkOverflow)
+    return () => window.removeEventListener('resize', checkOverflow)
+  }, [posts])
 
   const formatDateTime = (isoString: string) => {
     const date = new Date(isoString)
@@ -88,12 +106,14 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
               <div key={post.id} className="post-card">
                 <div
                   className={`post-content ${expandedPostId === post.id ? 'expanded' : ''}`}
-                  onClick={() => toggleExpand(post.id)}
+                  onClick={() => overflowingPosts.has(post.id) && toggleExpand(post.id)}
                 >
-                  <p>{post.content}</p>
-                  <span className="expand-indicator">
-                    {expandedPostId === post.id ? '▲ Show less' : '▼ Show more'}
-                  </span>
+                  <p ref={el => { if (el) contentRefs.current.set(post.id, el) }}>{post.content}</p>
+                  {(overflowingPosts.has(post.id) || expandedPostId === post.id) && (
+                    <span className="expand-indicator">
+                      {expandedPostId === post.id ? '▲ Show less' : '▼ Show more'}
+                    </span>
+                  )}
                 </div>
 
                 <div className="post-meta">
