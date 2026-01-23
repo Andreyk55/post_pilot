@@ -530,5 +530,7 @@
   <PropertyGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
     <PkgMicrosoft_Extensions_ApiDescription_Server Condition=" '$(PkgMicrosoft_Extensions_ApiDescription_Server)' == '' ">C:\Users\KTZ\.nuget\packages\microsoft.extensions.apidescription.server\10.0.0</PkgMicrosoft_Extensions_ApiDescription_Server>
     <PkgMicrosoft_CodeAnalysis_Analyzers Condition=" '$(PkgMicrosoft_CodeAnalysis_Analyzers)' == '' ">C:\Users\KTZ\.nuget\packages\microsoft.codeanalysis.analyzers\3.11.0</PkgMicrosoft_CodeAnalysis_Analyzers>
+    <PkgAWSSDK_Core Condition=" '$(PkgAWSSDK_Core)' == '' ">C:\Users\KTZ\.nuget\packages\awssdk.core\3.7.500.71</PkgAWSSDK_Core>
+    <PkgAWSSDK_Scheduler Condition=" '$(PkgAWSSDK_Scheduler)' == '' ">C:\Users\KTZ\.nuget\packages\awssdk.scheduler\3.7.502.33</PkgAWSSDK_Scheduler>
   </PropertyGroup>
 </Project>

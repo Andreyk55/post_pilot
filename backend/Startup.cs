@@ -1,7 +1,10 @@
 using System.Text.Json.Serialization;
+using Amazon.Scheduler;
 using Microsoft.EntityFrameworkCore;
 using PostPilot.Api.Data;
 using PostPilot.Api.Services;
+using PostPilot.Api.Services.Publishing;
+using PostPilot.Api.Services.Scheduling;
 
 namespace PostPilot.Api;
 
@@ -66,6 +69,16 @@ public class Startup
         // Register Meta OAuth service
         services.AddHttpClient<IMetaOAuthService, MetaOAuthService>();
 
+        // Configure scheduler based on environment
+        ConfigureScheduler(services);
+
+        // Configure publishers
+        // Use AddHttpClient to register FacebookPagePublisher with a typed HttpClient
+        // and also register it as IPostPublisher
+        services.AddHttpClient<FacebookPagePublisher>();
+        services.AddScoped<IPostPublisher>(sp => sp.GetRequiredService<FacebookPagePublisher>());
+        services.AddScoped<IPostPublisherResolver, PostPublisherResolver>();
+
         // Configure CORS for frontend
         services.AddCors(options =>
         {
@@ -105,5 +118,47 @@ public class Startup
     private static bool IsRunningInLambda()
     {
         return !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("LAMBDA_TASK_ROOT"));
+    }
+
+    private static void ConfigureScheduler(IServiceCollection services)
+    {
+        var schedulerType = Environment.GetEnvironmentVariable("SCHEDULER_TYPE") ?? "Local";
+
+        if (schedulerType.Equals("EventBridge", StringComparison.OrdinalIgnoreCase))
+        {
+            // Production: AWS EventBridge Scheduler
+            var publisherLambdaArn = Environment.GetEnvironmentVariable("PUBLISHER_LAMBDA_ARN");
+            var schedulerRoleArn = Environment.GetEnvironmentVariable("SCHEDULER_ROLE_ARN");
+
+            if (string.IsNullOrEmpty(publisherLambdaArn))
+            {
+                throw new InvalidOperationException(
+                    "PUBLISHER_LAMBDA_ARN environment variable is required when SCHEDULER_TYPE=EventBridge");
+            }
+
+            if (string.IsNullOrEmpty(schedulerRoleArn))
+            {
+                throw new InvalidOperationException(
+                    "SCHEDULER_ROLE_ARN environment variable is required when SCHEDULER_TYPE=EventBridge");
+            }
+
+            var settings = new EventBridgeSchedulerSettings
+            {
+                ScheduleGroupName = Environment.GetEnvironmentVariable("EVENTBRIDGE_SCHEDULE_GROUP")
+                                    ?? "postpilot-schedules",
+                PublisherLambdaArn = publisherLambdaArn,
+                SchedulerRoleArn = schedulerRoleArn
+            };
+
+            services.AddSingleton(settings);
+            services.AddSingleton<IAmazonScheduler, AmazonSchedulerClient>();
+            services.AddScoped<IPostScheduler, EventBridgePostScheduler>();
+        }
+        else
+        {
+            // Local development: Polling-based scheduler
+            services.AddScoped<IPostScheduler, LocalPostScheduler>();
+            services.AddHostedService<LocalSchedulerBackgroundService>();
+        }
     }
 }

@@ -39,6 +39,7 @@ export function SchedulePostsPage() {
     scheduledDate: string
     scheduledTime: string
     platforms: string[]
+    targetPageId?: string
   }) => {
     try {
       const scheduledAt = new Date(`${formData.scheduledDate}T${formData.scheduledTime}`).toISOString()
@@ -53,6 +54,8 @@ export function SchedulePostsPage() {
           content: formData.content,
           platform,
           scheduledAt,
+          // Include targetPageId for Facebook posts
+          targetPageId: platform === 'Facebook' ? formData.targetPageId : undefined,
         }
         const post = await postsApi.create(request)
         newPosts.push(post)

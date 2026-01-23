@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { metaApi } from '../api/meta'
+import type { ConnectedPage } from '../types/meta'
 import './SchedulePost.css'
 
 interface SchedulePostProps {
@@ -7,6 +9,7 @@ interface SchedulePostProps {
     scheduledDate: string
     scheduledTime: string
     platforms: string[]
+    targetPageId?: string
   }) => void
 }
 
@@ -22,6 +25,34 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
   const [scheduledDate, setScheduledDate] = useState('')
   const [scheduledTime, setScheduledTime] = useState('')
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([])
+  const [connectedPages, setConnectedPages] = useState<ConnectedPage[]>([])
+  const [selectedPageId, setSelectedPageId] = useState<string>('')
+  const [loadingPages, setLoadingPages] = useState(false)
+
+  // Load connected Facebook Pages on mount
+  useEffect(() => {
+    loadConnectedPages()
+  }, [])
+
+  const loadConnectedPages = async () => {
+    try {
+      setLoadingPages(true)
+      const response = await metaApi.getConnection()
+      if (response.isConnected && response.connection) {
+        setConnectedPages(response.connection.pages)
+        // Auto-select first page if only one exists
+        if (response.connection.pages.length === 1) {
+          setSelectedPageId(response.connection.pages[0].id)
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load connected pages:', err)
+    } finally {
+      setLoadingPages(false)
+    }
+  }
+
+  const isFacebookSelected = selectedPlatforms.includes('facebook')
 
   const togglePlatform = (platformId: string) => {
     setSelectedPlatforms(prev =>
@@ -29,6 +60,10 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
         ? prev.filter(p => p !== platformId)
         : [...prev, platformId]
     )
+    // Clear page selection if Facebook is deselected
+    if (platformId === 'facebook' && selectedPlatforms.includes('facebook')) {
+      setSelectedPageId('')
+    }
   }
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -38,11 +73,17 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
       return
     }
 
+    // Require page selection for Facebook
+    if (isFacebookSelected && !selectedPageId) {
+      return
+    }
+
     onSchedule({
       content,
       scheduledDate,
       scheduledTime,
       platforms: selectedPlatforms,
+      targetPageId: isFacebookSelected ? selectedPageId : undefined,
     })
 
     // Reset form
@@ -50,7 +91,12 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
     setScheduledDate('')
     setScheduledTime('')
     setSelectedPlatforms([])
+    setSelectedPageId('')
   }
+
+  const isFormValid = content && scheduledDate && scheduledTime &&
+    selectedPlatforms.length > 0 &&
+    (!isFacebookSelected || selectedPageId)
 
   return (
     <div className="schedule-post">
@@ -109,10 +155,39 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
           </div>
         </div>
 
+        {/* Facebook Page Selector - shown when Facebook is selected */}
+        {isFacebookSelected && (
+          <div className="form-group">
+            <label htmlFor="facebookPage">Facebook Page</label>
+            {loadingPages ? (
+              <div className="loading-pages">Loading pages...</div>
+            ) : connectedPages.length === 0 ? (
+              <div className="no-pages-warning">
+                No Facebook Pages connected. Please connect a page in{' '}
+                <a href="#connected-accounts">Connected Accounts</a>.
+              </div>
+            ) : (
+              <select
+                id="facebookPage"
+                value={selectedPageId}
+                onChange={(e) => setSelectedPageId(e.target.value)}
+                className="page-select"
+              >
+                <option value="">Select a page...</option>
+                {connectedPages.map(page => (
+                  <option key={page.id} value={page.id}>
+                    {page.name} {page.category && `(${page.category})`}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        )}
+
         <button
           type="submit"
           className="submit-btn"
-          disabled={!content || !scheduledDate || !scheduledTime || selectedPlatforms.length === 0}
+          disabled={!isFormValid}
         >
           Schedule Post
         </button>

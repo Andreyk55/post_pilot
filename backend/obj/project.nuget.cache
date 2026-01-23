@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "U86UvHufG+k=",
+  "dgSpecHash": "qjv3vPOLVK4=",
   "success": true,
   "projectFilePath": "D:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj",
   "expectedPackageFiles": [
@@ -10,6 +10,8 @@
     "C:\\Users\\KTZ\\.nuget\\packages\\amazon.lambda.core\\2.8.0\\amazon.lambda.core.2.8.0.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\amazon.lambda.logging.aspnetcore\\4.1.1\\amazon.lambda.logging.aspnetcore.4.1.1.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\amazon.lambda.serialization.systemtextjson\\2.4.4\\amazon.lambda.serialization.systemtextjson.2.4.4.nupkg.sha512",
+    "C:\\Users\\KTZ\\.nuget\\packages\\awssdk.core\\3.7.500.71\\awssdk.core.3.7.500.71.nupkg.sha512",
+    "C:\\Users\\KTZ\\.nuget\\packages\\awssdk.scheduler\\3.7.502.33\\awssdk.scheduler.3.7.502.33.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\humanizer.core\\2.14.1\\humanizer.core.2.14.1.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\microsoft.aspnetcore.openapi\\10.0.1\\microsoft.aspnetcore.openapi.10.0.1.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\microsoft.build\\17.7.2\\microsoft.build.17.7.2.nupkg.sha512",

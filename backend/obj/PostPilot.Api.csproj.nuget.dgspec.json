@@ -44,6 +44,10 @@
         "net10.0": {
           "targetAlias": "net10.0",
           "dependencies": {
+            "AWSSDK.Scheduler": {
+              "target": "Package",
+              "version": "[3.7.*, )"
+            },
             "Amazon.Lambda.AspNetCoreServer": {
               "target": "Package",
               "version": "[9.2.1, )"

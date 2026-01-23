@@ -23,6 +23,16 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Content).IsRequired();
             entity.Property(e => e.Platform).HasConversion<string>();
             entity.Property(e => e.Status).HasConversion<string>();
+
+            // Index for finding due posts efficiently
+            entity.HasIndex(e => new { e.Status, e.ScheduledAt });
+            entity.HasIndex(e => new { e.Status, e.NextRetryAt });
+
+            // Foreign key to ConnectedPage (optional - SET NULL on delete)
+            entity.HasOne(e => e.TargetPage)
+                .WithMany()
+                .HasForeignKey(e => e.TargetPageId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<MetaConnection>(entity =>

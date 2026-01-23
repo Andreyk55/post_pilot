@@ -2,7 +2,7 @@ const API_URL = 'http://localhost:5122/api'
 
 export type Platform = 'Twitter' | 'Instagram' | 'Facebook' | 'LinkedIn'
 
-export type PostStatus = 'Pending' | 'Published' | 'Failed'
+export type PostStatus = 'Pending' | 'Publishing' | 'Published' | 'Failed' | 'RetryPending'
 
 export interface Post {
   id: string
@@ -13,6 +13,11 @@ export interface Post {
   status: PostStatus
   createdAt: string
   updatedAt: string
+  targetPageId: string | null
+  publishedAt: string | null
+  externalPostId: string | null
+  errorMessage: string | null
+  retryCount: number
 }
 
 export interface CreatePostRequest {
@@ -20,6 +25,7 @@ export interface CreatePostRequest {
   mediaUrl?: string | null
   platform: Platform
   scheduledAt: string
+  targetPageId?: string | null
 }
 
 export const postsApi = {
