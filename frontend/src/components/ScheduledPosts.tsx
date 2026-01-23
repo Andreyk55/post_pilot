@@ -1,9 +1,14 @@
+import { useRef, useEffect, useCallback } from 'react'
 import type { Post } from '../api/posts'
 import './ScheduledPosts.css'
 
 interface ScheduledPostsProps {
   posts: Post[]
   onDelete: (id: string) => void
+  onLoadMore: () => void
+  hasMore: boolean
+  isLoading: boolean
+  totalCount: number
 }
 
 const platformIcons: Record<string, string> = {
@@ -13,7 +18,10 @@ const platformIcons: Record<string, string> = {
   LinkedIn: 'in',
 }
 
-export function ScheduledPosts({ posts, onDelete }: ScheduledPostsProps) {
+export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading, totalCount }: ScheduledPostsProps) {
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const loadMoreTriggerRef = useRef<HTMLDivElement>(null)
+
   const formatDateTime = (isoString: string) => {
     const date = new Date(isoString)
     return {
@@ -30,7 +38,27 @@ export function ScheduledPosts({ posts, onDelete }: ScheduledPostsProps) {
     }
   }
 
-  if (posts.length === 0) {
+  const handleScroll = useCallback(() => {
+    if (!scrollContainerRef.current || isLoading || !hasMore) return
+
+    const container = scrollContainerRef.current
+    const scrollBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+
+    // Load more when within 100px of the bottom
+    if (scrollBottom < 100) {
+      onLoadMore()
+    }
+  }, [isLoading, hasMore, onLoadMore])
+
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    container.addEventListener('scroll', handleScroll)
+    return () => container.removeEventListener('scroll', handleScroll)
+  }, [handleScroll])
+
+  if ((!posts || posts.length === 0) && !isLoading) {
     return (
       <div className="scheduled-posts empty">
         <h2>Scheduled Posts</h2>
@@ -45,51 +73,68 @@ export function ScheduledPosts({ posts, onDelete }: ScheduledPostsProps) {
 
   return (
     <div className="scheduled-posts">
-      <h2>Scheduled Posts ({posts.length})</h2>
+      <h2>Scheduled Posts ({totalCount})</h2>
 
-      <div className="posts-list">
-        {posts.map(post => {
-          const { date, time } = formatDateTime(post.scheduledAt)
-          return (
-            <div key={post.id} className="post-card">
-              <div className="post-content">
-                <p>{post.content}</p>
-              </div>
-
-              <div className="post-meta">
-                <div className="post-schedule">
-                  <span className="schedule-icon">🗓️</span>
-                  <span>{date}</span>
-                  <span className="schedule-divider">•</span>
-                  <span className="schedule-icon">🕐</span>
-                  <span>{time}</span>
+      <div className="posts-scroll-container" ref={scrollContainerRef}>
+        <div className="posts-list">
+          {posts.map(post => {
+            const { date, time } = formatDateTime(post.scheduledAt)
+            return (
+              <div key={post.id} className="post-card">
+                <div className="post-content">
+                  <p>{post.content}</p>
                 </div>
 
-                <div className="post-platforms">
-                  <span className="platform-badge" title={post.platform}>
-                    {platformIcons[post.platform] || post.platform}
-                  </span>
-                  {post.targetPageName && (
-                    <span className="page-badge" title={`Posting to: ${post.targetPageName}`}>
-                      {post.targetPageName}
+                <div className="post-meta">
+                  <div className="post-schedule">
+                    <span className="schedule-icon">🗓️</span>
+                    <span>{date}</span>
+                    <span className="schedule-divider">•</span>
+                    <span className="schedule-icon">🕐</span>
+                    <span>{time}</span>
+                  </div>
+
+                  <div className="post-platforms">
+                    <span className="platform-badge" title={post.platform}>
+                      {platformIcons[post.platform] || post.platform}
                     </span>
-                  )}
-                  <span className="status-badge" data-status={post.status.toLowerCase()}>
-                    {post.status}
-                  </span>
+                    {post.targetPageName && (
+                      <span className="page-badge" title={`Posting to: ${post.targetPageName}`}>
+                        {post.targetPageName}
+                      </span>
+                    )}
+                    <span className="status-badge" data-status={post.status.toLowerCase()}>
+                      {post.status}
+                    </span>
+                  </div>
                 </div>
-              </div>
 
-              <button
-                className="delete-btn"
-                onClick={() => onDelete(post.id)}
-                title="Delete post"
-              >
-                ✕
-              </button>
-            </div>
-          )
-        })}
+                <button
+                  className="delete-btn"
+                  onClick={() => onDelete(post.id)}
+                  title="Delete post"
+                >
+                  ✕
+                </button>
+              </div>
+            )
+          })}
+        </div>
+
+        {isLoading && (
+          <div className="loading-more">
+            <span className="loading-spinner"></span>
+            Loading more posts...
+          </div>
+        )}
+
+        {!hasMore && posts.length > 0 && (
+          <div className="end-of-list">
+            No more posts to load
+          </div>
+        )}
+
+        <div ref={loadMoreTriggerRef} className="load-more-trigger" />
       </div>
     </div>
   )

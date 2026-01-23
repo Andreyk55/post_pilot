@@ -26,15 +26,32 @@ public class PostsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<PostDto>>> GetPosts()
+    public async Task<ActionResult<PaginatedResponse<PostDto>>> GetPosts(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10)
     {
+        // Ensure valid pagination parameters
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 50);
+
+        var totalCount = await _context.Posts.CountAsync();
+        var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+
         var posts = await _context.Posts
             .Include(p => p.TargetPage)
             .OrderByDescending(p => p.ScheduledAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(p => PostDto.FromEntity(p))
             .ToListAsync();
 
-        return posts;
+        return new PaginatedResponse<PostDto>(
+            posts,
+            page,
+            pageSize,
+            totalCount,
+            totalPages
+        );
     }
 
     [HttpGet("{id}")]
@@ -166,6 +183,18 @@ public record UpdatePostRequest(
     DateTime ScheduledAt,
     Guid? TargetPageId = null
 );
+
+public record PaginatedResponse<T>(
+    List<T> Items,
+    int Page,
+    int PageSize,
+    int TotalCount,
+    int TotalPages
+)
+{
+    public bool HasNextPage => Page < TotalPages;
+    public bool HasPreviousPage => Page > 1;
+}
 
 public record PostDto(
     Guid Id,

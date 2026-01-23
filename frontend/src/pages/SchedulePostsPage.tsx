@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { postsApi, type Post, type CreatePostRequest, type Platform } from '../api/posts'
 import { SchedulePost } from '../components/SchedulePost'
 import { ScheduledPosts } from '../components/ScheduledPosts'
@@ -11,10 +11,16 @@ const platformMap: Record<string, Platform> = {
   linkedin: 'LinkedIn',
 }
 
+const PAGE_SIZE = 10
+
 export function SchedulePostsPage() {
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [hasMore, setHasMore] = useState(true)
+  const [totalCount, setTotalCount] = useState(0)
 
   useEffect(() => {
     loadPosts()
@@ -23,8 +29,11 @@ export function SchedulePostsPage() {
   const loadPosts = async () => {
     try {
       setLoading(true)
-      const data = await postsApi.getAll()
-      setPosts(data)
+      const data = await postsApi.getPaginated(1, PAGE_SIZE)
+      setPosts(data.items ?? [])
+      setCurrentPage(1)
+      setHasMore(data.hasNextPage)
+      setTotalCount(data.totalCount)
       setError(null)
     } catch (err) {
       setError('Failed to load posts')
@@ -33,6 +42,24 @@ export function SchedulePostsPage() {
       setLoading(false)
     }
   }
+
+  const loadMorePosts = useCallback(async () => {
+    if (loadingMore || !hasMore) return
+
+    try {
+      setLoadingMore(true)
+      const nextPage = currentPage + 1
+      const data = await postsApi.getPaginated(nextPage, PAGE_SIZE)
+      setPosts(prev => [...prev, ...(data.items ?? [])])
+      setCurrentPage(nextPage)
+      setHasMore(data.hasNextPage)
+      setTotalCount(data.totalCount)
+    } catch (err) {
+      console.error('Failed to load more posts:', err)
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [currentPage, loadingMore, hasMore])
 
   const handleSchedule = async (formData: {
     content: string
@@ -65,6 +92,7 @@ export function SchedulePostsPage() {
       }
 
       setPosts(prev => [...newPosts, ...prev])
+      setTotalCount(prev => prev + newPosts.length)
       setError(null)
     } catch (err) {
       setError('Failed to schedule post')
@@ -76,6 +104,7 @@ export function SchedulePostsPage() {
     try {
       await postsApi.delete(id)
       setPosts(prev => prev.filter(post => post.id !== id))
+      setTotalCount(prev => prev - 1)
       setError(null)
     } catch (err) {
       setError('Failed to delete post')
@@ -95,7 +124,14 @@ export function SchedulePostsPage() {
         {loading ? (
           <div className="loading">Loading posts...</div>
         ) : (
-          <ScheduledPosts posts={posts} onDelete={handleDelete} />
+          <ScheduledPosts
+            posts={posts}
+            onDelete={handleDelete}
+            onLoadMore={loadMorePosts}
+            hasMore={hasMore}
+            isLoading={loadingMore}
+            totalCount={totalCount}
+          />
         )}
       </div>
     </div>

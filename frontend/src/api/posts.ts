@@ -29,9 +29,26 @@ export interface CreatePostRequest {
   targetPageId?: string | null
 }
 
+export interface PaginatedResponse<T> {
+  items: T[]
+  page: number
+  pageSize: number
+  totalCount: number
+  totalPages: number
+  hasNextPage: boolean
+  hasPreviousPage: boolean
+}
+
 export const postsApi = {
   async getAll(): Promise<Post[]> {
-    const response = await fetch(`${API_URL}/posts`)
+    const response = await fetch(`${API_URL}/posts?pageSize=1000`)
+    if (!response.ok) throw new Error('Failed to fetch posts')
+    const data: PaginatedResponse<Post> = await response.json()
+    return data.items
+  },
+
+  async getPaginated(page: number = 1, pageSize: number = 10): Promise<PaginatedResponse<Post>> {
+    const response = await fetch(`${API_URL}/posts?page=${page}&pageSize=${pageSize}`)
     if (!response.ok) throw new Error('Failed to fetch posts')
     return response.json()
   },
