@@ -26,26 +26,34 @@ public class PostsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<Post>>> GetPosts()
+    public async Task<ActionResult<IEnumerable<PostDto>>> GetPosts()
     {
-        return await _context.Posts.OrderByDescending(p => p.ScheduledAt).ToListAsync();
+        var posts = await _context.Posts
+            .Include(p => p.TargetPage)
+            .OrderByDescending(p => p.ScheduledAt)
+            .Select(p => PostDto.FromEntity(p))
+            .ToListAsync();
+
+        return posts;
     }
 
     [HttpGet("{id}")]
-    public async Task<ActionResult<Post>> GetPost(Guid id)
+    public async Task<ActionResult<PostDto>> GetPost(Guid id)
     {
-        var post = await _context.Posts.FindAsync(id);
+        var post = await _context.Posts
+            .Include(p => p.TargetPage)
+            .FirstOrDefaultAsync(p => p.Id == id);
 
         if (post == null)
         {
             return NotFound();
         }
 
-        return post;
+        return PostDto.FromEntity(post);
     }
 
     [HttpPost]
-    public async Task<ActionResult<Post>> CreatePost(CreatePostRequest request)
+    public async Task<ActionResult<PostDto>> CreatePost(CreatePostRequest request)
     {
         var post = new Post
         {
@@ -76,7 +84,10 @@ public class PostsController : ControllerBase
                 post.Id, scheduleResult.ErrorMessage);
         }
 
-        return CreatedAtAction(nameof(GetPost), new { id = post.Id }, post);
+        // Reload with TargetPage for the response
+        await _context.Entry(post).Reference(p => p.TargetPage).LoadAsync();
+
+        return CreatedAtAction(nameof(GetPost), new { id = post.Id }, PostDto.FromEntity(post));
     }
 
     [HttpPut("{id}")]
@@ -155,3 +166,38 @@ public record UpdatePostRequest(
     DateTime ScheduledAt,
     Guid? TargetPageId = null
 );
+
+public record PostDto(
+    Guid Id,
+    string Content,
+    string? MediaUrl,
+    Platform Platform,
+    DateTime ScheduledAt,
+    PostStatus Status,
+    DateTime CreatedAt,
+    DateTime UpdatedAt,
+    Guid? TargetPageId,
+    string? TargetPageName,
+    DateTime? PublishedAt,
+    string? ExternalPostId,
+    string? ErrorMessage,
+    int RetryCount
+)
+{
+    public static PostDto FromEntity(Post post) => new(
+        post.Id,
+        post.Content,
+        post.MediaUrl,
+        post.Platform,
+        post.ScheduledAt,
+        post.Status,
+        post.CreatedAt,
+        post.UpdatedAt,
+        post.TargetPageId,
+        post.TargetPage?.Name,
+        post.PublishedAt,
+        post.ExternalPostId,
+        post.ErrorMessage,
+        post.RetryCount
+    );
+}

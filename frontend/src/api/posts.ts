@@ -14,6 +14,7 @@ export interface Post {
   createdAt: string
   updatedAt: string
   targetPageId: string | null
+  targetPageName: string | null
   publishedAt: string | null
   externalPostId: string | null
   errorMessage: string | null

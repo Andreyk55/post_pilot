@@ -69,6 +69,11 @@ export function ScheduledPosts({ posts, onDelete }: ScheduledPostsProps) {
                   <span className="platform-badge" title={post.platform}>
                     {platformIcons[post.platform] || post.platform}
                   </span>
+                  {post.targetPageName && (
+                    <span className="page-badge" title={`Posting to: ${post.targetPageName}`}>
+                      {post.targetPageName}
+                    </span>
+                  )}
                   <span className="status-badge" data-status={post.status.toLowerCase()}>
                     {post.status}
                   </span>
