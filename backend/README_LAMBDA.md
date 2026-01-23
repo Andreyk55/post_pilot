@@ -1,38 +1,103 @@
-# AWS Lambda Architecture for Post Pilot API
+# AWS Lambda Architecture for Post Pilot
 
-This backend has been configured to run as a **single AWS Lambda function** that handles all API routes for the UI, while maintaining full support for **local development and testing**.
+This backend uses a **multi-Lambda architecture** for post scheduling and publishing:
+
+1. **API Lambda** - Handles all web API routes
+2. **Dispatcher Lambda** - Polls for due posts, sends to SQS (triggered by EventBridge every minute)
+3. **Publisher Lambda** - Publishes posts to social media (triggered by SQS)
 
 ## Architecture Overview
 
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         POST SCHEDULING PIPELINE                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│   EventBridge Rule (every 1 min)                                        │
+│            │                                                             │
+│            ▼                                                             │
+│   ┌─────────────────────┐                                               │
+│   │  Dispatcher Lambda  │  Queries DB for due posts                     │
+│   │                     │  Atomically claims them (Pending → Publishing)│
+│   └─────────┬───────────┘  Sends to SQS                                 │
+│             │                                                            │
+│             ▼                                                            │
+│   ┌─────────────────────┐                                               │
+│   │  SQS Queue (FIFO)   │  Decouples dispatcher from publisher          │
+│   └─────────┬───────────┘  Handles retries automatically                │
+│             │                                                            │
+│             ▼                                                            │
+│   ┌─────────────────────┐                                               │
+│   │  Publisher Lambda   │  Publishes to Meta/Facebook                   │
+│   │                     │  Updates DB (Published/Failed/RetryPending)   │
+│   └─────────┬───────────┘                                               │
+│             │                                                            │
+│             ▼ (after 3 failures)                                        │
+│   ┌─────────────────────┐                                               │
+│   │  Dead Letter Queue  │  Failed messages for manual inspection        │
+│   └─────────────────────┘                                               │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                              API LAYER                                   │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│   API Gateway (HTTP API)                                                │
+│            │                                                             │
+│            ▼                                                             │
+│   ┌─────────────────────┐                                               │
+│   │    API Lambda       │  Handles all /api/* routes                    │
+│   │  (ASP.NET Core)     │  Creates posts, manages schedules             │
+│   └─────────────────────┘                                               │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
 ### How It Works
 
-1. **Single Lambda for All Routes**: One Lambda function serves all API endpoints (`/api/posts`, `/api/posts/{id}`, etc.)
-2. **Internal Routing**: AWS API Gateway forwards requests to the Lambda, which uses ASP.NET Core's internal routing to direct requests to the appropriate controller
-3. **Dual Entry Points**:
+1. **API Lambda**: Serves all API endpoints (`/api/posts`, `/api/pages`, etc.) via ASP.NET Core
+2. **Dispatcher Lambda**: Runs every minute, finds posts due for publishing, sends them to SQS
+3. **Publisher Lambda**: Receives messages from SQS, publishes to Facebook via Meta Graph API
+4. **Dual Entry Points**:
    - `Program.cs` - Used for local development (`dotnet run`)
-   - `LambdaEntryPoint.cs` - Used when deployed to AWS Lambda
-4. **Shared Configuration**: Both entry points use the same `Startup.cs` class for consistent behavior
+   - `LambdaEntryPoint.cs` - Used for API Lambda in AWS
+   - `Lambdas/DispatcherFunction.cs` - Dispatcher Lambda handler
+   - `Lambdas/PublisherFunction.cs` - Publisher Lambda handler
+5. **Shared Configuration**: `Startup.cs` for API, `Lambdas/LambdaStartup.cs` for Dispatcher/Publisher
 
 ### Project Structure
 
 ```
 backend/
 ├── Controllers/
-│   └── PostsController.cs          # All API route handlers
+│   └── PostsController.cs              # API route handlers
 ├── Data/
-│   └── AppDbContext.cs             # EF Core database context
+│   └── AppDbContext.cs                 # EF Core database context
 ├── Entities/
-│   └── Post.cs                     # Database entities
+│   └── Post.cs                         # Database entities
 ├── Enums/
 │   ├── Platform.cs
 │   └── PostStatus.cs
-├── LambdaEntryPoint.cs             # AWS Lambda entry point
-├── Program.cs                      # Local development entry point
-├── Startup.cs                      # Shared service/middleware configuration
-├── aws-lambda-tools-defaults.json  # Lambda deployment configuration
-├── appsettings.json
-├── appsettings.Development.json    # Local development settings
-└── appsettings.Production.json     # Production/Lambda settings
+├── Lambdas/                            # Lambda function handlers
+│   ├── Models/
+│   │   └── PublishPostMessage.cs       # SQS message DTO
+│   ├── DispatcherFunction.cs           # Dispatcher Lambda (EventBridge → SQS)
+│   ├── PublisherFunction.cs            # Publisher Lambda (SQS → Meta API)
+│   └── LambdaStartup.cs                # Shared DI for Lambdas
+├── Services/
+│   ├── Publishing/
+│   │   ├── FacebookPagePublisher.cs    # Meta Graph API publisher
+│   │   └── IPostPublisher.cs           # Publisher interface
+│   └── Scheduling/
+│       ├── EventBridgePostScheduler.cs # Production scheduler
+│       └── LocalSchedulerBackgroundService.cs  # Local dev polling
+├── LambdaEntryPoint.cs                 # API Lambda entry point
+├── Program.cs                          # Local development entry point
+├── Startup.cs                          # API service configuration
+├── template.yaml                       # AWS SAM deployment template
+├── samconfig.toml                      # SAM deployment config
+└── appsettings.*.json                  # Environment configs
 ```
 
 ## Local Development
@@ -63,13 +128,22 @@ Database connection string is read from `appsettings.Development.json`:
 }
 ```
 
-## AWS Lambda Deployment
+## AWS Lambda Deployment (SAM)
+
+The entire infrastructure is defined in [template.yaml](template.yaml) and deployed using AWS SAM.
 
 ### Prerequisites
 
-1. Install AWS Lambda Tools:
+1. Install AWS SAM CLI:
    ```bash
-   dotnet tool install -g Amazon.Lambda.Tools
+   # macOS
+   brew install aws-sam-cli
+
+   # Windows
+   choco install aws-sam-cli
+
+   # pip
+   pip install aws-sam-cli
    ```
 
 2. Configure AWS credentials:
@@ -77,27 +151,60 @@ Database connection string is read from `appsettings.Development.json`:
    aws configure
    ```
 
-### Deployment Configuration
+### What Gets Deployed
 
-Lambda settings are defined in [aws-lambda-tools-defaults.json](aws-lambda-tools-defaults.json):
+| Resource | Type | Purpose |
+|----------|------|---------|
+| `postpilot-api-{env}` | Lambda | API endpoints |
+| `postpilot-dispatcher-{env}` | Lambda | Polls DB for due posts |
+| `postpilot-publisher-{env}` | Lambda | Publishes to Meta |
+| `postpilot-publish-queue-{env}.fifo` | SQS | Post publish queue |
+| `postpilot-publish-dlq-{env}` | SQS | Dead letter queue |
+| `postpilot-dispatcher-schedule-{env}` | EventBridge Rule | Triggers dispatcher every 1 min |
+| `postpilot-schedules-{env}` | EventBridge Schedule Group | For per-post schedules |
+| `postpilot-scheduler-role-{env}` | IAM Role | EventBridge → Lambda invocation |
 
-- **Handler**: `PostPilot.Api::PostPilot.Api.LambdaEntryPoint::FunctionHandlerAsync`
-- **Runtime**: `dotnet10` (.NET 10)
-- **Memory**: 512 MB
-- **Timeout**: 30 seconds
-- **Architecture**: ARM64 (cost-optimized)
-
-### Deploy to Lambda
+### Build
 
 ```bash
 cd backend
-dotnet lambda deploy-function PostPilotApi
+sam build
 ```
 
-You'll be prompted to:
-1. Select AWS region
-2. Choose/create IAM role (needs AWSLambdaBasicExecutionRole + RDS access)
-3. Confirm deployment
+### Deploy (First Time)
+
+```bash
+sam deploy --guided
+```
+
+You'll be prompted for:
+- **Stack name**: `postpilot-dev` (or staging/prod)
+- **DbConnectionString**: PostgreSQL connection string for RDS
+- **MetaAppId**: Facebook App ID
+- **MetaAppSecret**: Facebook App Secret
+- **VpcSubnetIds**: Comma-separated subnet IDs (if RDS is in VPC)
+- **VpcSecurityGroupIds**: Comma-separated security group IDs
+
+### Deploy (Subsequent)
+
+```bash
+# Deploy to dev
+sam deploy --config-env dev
+
+# Deploy to staging
+sam deploy --config-env staging
+
+# Deploy to prod
+sam deploy --config-env prod
+```
+
+### Lambda Handlers
+
+| Lambda | Handler |
+|--------|---------|
+| API | `PostPilot.Api::PostPilot.Api.LambdaEntryPoint::FunctionHandlerAsync` |
+| Dispatcher | `PostPilot.Api::PostPilot.Api.Lambdas.DispatcherFunction::FunctionHandler` |
+| Publisher | `PostPilot.Api::PostPilot.Api.Lambdas.PublisherFunction::FunctionHandler` |
 
 ### Environment Configuration
 
@@ -220,9 +327,45 @@ Simplified local development entry point that delegates to `Startup.cs` for cons
 
    Option B: Create a separate "migrator" Lambda that runs migrations
 
-## Testing the Lambda Locally
+## Testing Locally
 
-Use AWS Lambda Test Tool:
+### API (Local Development Server)
+
+```bash
+cd backend
+dotnet run
+```
+
+The API runs on `http://localhost:5122` with:
+- Swagger UI at `/swagger`
+- Local background scheduler polling every 30 seconds
+
+### SAM Local Testing
+
+```bash
+# Test Dispatcher Lambda
+sam local invoke DispatcherFunction --env-vars env.json
+
+# Test Publisher Lambda with sample SQS event
+sam local invoke PublisherFunction --event events/sqs-event.json --env-vars env.json
+
+# Start local API Gateway
+sam local start-api --env-vars env.json
+```
+
+Sample `env.json`:
+```json
+{
+  "DispatcherFunction": {
+    "DB_CONNECTION_STRING": "Host=localhost;Port=5432;Database=postpilot;Username=postgres;Password=postgres",
+    "SQS_QUEUE_URL": "http://localhost:4566/000000000000/postpilot-publish-queue-dev.fifo",
+    "META_APP_ID": "your-app-id",
+    "META_APP_SECRET": "your-app-secret"
+  }
+}
+```
+
+### AWS Lambda Test Tool
 
 ```bash
 # Install test tool
@@ -231,8 +374,6 @@ dotnet tool install -g Amazon.Lambda.TestTool-10.0
 # Run from backend directory
 dotnet lambda-test-tool-10.0
 ```
-
-This launches a local server that simulates API Gateway + Lambda.
 
 ## Monitoring and Logs
 
@@ -314,6 +455,26 @@ Lambda in VPC needs NAT Gateway for outbound internet access (e.g., external API
 
 Run migrations from a location with network access to RDS (local with public RDS, or from EC2/bastion in same VPC).
 
+## Post Scheduling Flow
+
+### Production (AWS)
+
+1. User creates/schedules post via API → saved to DB with `Status=Pending`
+2. EventBridge triggers Dispatcher Lambda every minute
+3. Dispatcher queries for due posts (`ScheduledAt <= now` OR `NextRetryAt <= now`)
+4. Dispatcher atomically claims posts (`Status → Publishing`) and sends to SQS
+5. Publisher Lambda receives SQS message, calls Meta Graph API
+6. On success: `Status → Published`, stores `ExternalPostId`
+7. On transient error: `Status → RetryPending`, sets `NextRetryAt` (exponential backoff)
+8. On permanent error: `Status → Failed`, stores error message
+9. After 3 SQS retries, message moves to DLQ for manual inspection
+
+### Local Development
+
+1. User creates/schedules post via API → saved to DB with `Status=Pending`
+2. `LocalSchedulerBackgroundService` polls every 30 seconds
+3. Same publishing logic via `FacebookPagePublisher`
+
 ## Next Steps
 
 1. **Add Authentication**: Integrate JWT or AWS Cognito
@@ -321,6 +482,7 @@ Run migrations from a location with network access to RDS (local with public RDS
 3. **Custom Domain**: Use Route 53 + CloudFront
 4. **CI/CD**: Automate deployment with GitHub Actions or AWS CodePipeline
 5. **Monitoring**: Set up CloudWatch dashboards and alarms
+6. **Secrets Manager**: Move DB credentials and Meta secrets to AWS Secrets Manager
 
 ## Resources
 
