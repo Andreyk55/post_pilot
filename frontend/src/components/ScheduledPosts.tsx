@@ -91,6 +91,9 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
                   onClick={() => toggleExpand(post.id)}
                 >
                   <p>{post.content}</p>
+                  <span className="expand-indicator">
+                    {expandedPostId === post.id ? '▲ Show less' : '▼ Show more'}
+                  </span>
                 </div>
 
                 <div className="post-meta">

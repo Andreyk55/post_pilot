@@ -138,6 +138,18 @@
   text-overflow: unset;
 }
 
+.expand-indicator {
+  display: block;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 0.25rem;
+  transition: color 0.2s;
+}
+
+.post-content:hover .expand-indicator {
+  color: rgba(255, 255, 255, 0.7);
+}
+
 .post-meta {
   display: flex;
   justify-content: space-between;
