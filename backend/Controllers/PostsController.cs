@@ -28,16 +28,25 @@ public class PostsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<PaginatedResponse<PostDto>>> GetPosts(
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10)
+        [FromQuery] int pageSize = 10,
+        [FromQuery] PostStatus? status = null)
     {
         // Ensure valid pagination parameters
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 50);
 
-        var totalCount = await _context.Posts.CountAsync();
+        var query = _context.Posts.AsQueryable();
+
+        // Apply status filter if provided
+        if (status.HasValue)
+        {
+            query = query.Where(p => p.Status == status.Value);
+        }
+
+        var totalCount = await query.CountAsync();
         var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
 
-        var posts = await _context.Posts
+        var posts = await query
             .Include(p => p.TargetPage)
             .OrderByDescending(p => p.ScheduledAt)
             .Skip((page - 1) * pageSize)

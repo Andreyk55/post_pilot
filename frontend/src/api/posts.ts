@@ -47,8 +47,15 @@ export const postsApi = {
     return data.items
   },
 
-  async getPaginated(page: number = 1, pageSize: number = 10): Promise<PaginatedResponse<Post>> {
-    const response = await fetch(`${API_URL}/posts?page=${page}&pageSize=${pageSize}`)
+  async getPaginated(page: number = 1, pageSize: number = 10, status?: PostStatus): Promise<PaginatedResponse<Post>> {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      pageSize: pageSize.toString(),
+    })
+    if (status) {
+      params.append('status', status)
+    }
+    const response = await fetch(`${API_URL}/posts?${params}`)
     if (!response.ok) throw new Error('Failed to fetch posts')
     return response.json()
   },

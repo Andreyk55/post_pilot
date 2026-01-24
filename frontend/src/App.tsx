@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Sidebar } from './components/Sidebar'
 import { Dashboard } from './pages/Dashboard'
 import { SchedulePostsPage } from './pages/SchedulePostsPage'
+import { MyPostsPage } from './pages/MyPostsPage'
 import { ConnectedAccountsPage } from './pages/ConnectedAccountsPage'
 import { AssetsPage } from './pages/AssetsPage'
 import { PlaceholderPage } from './pages/PlaceholderPage'
@@ -19,7 +20,7 @@ function MainApp() {
       case 'schedule':
         return <SchedulePostsPage />
       case 'posts':
-        return <PlaceholderPage title="My Posts" icon="📝" />
+        return <MyPostsPage />
       case 'accounts':
         return <ConnectedAccountsPage />
       case 'assets':
