@@ -6,13 +6,14 @@ interface ImageUploadProps {
   onUploadComplete: (s3Key: string) => void
   onUploadError: (error: string) => void
   onClear: () => void
+  onUploadingChange?: (isUploading: boolean) => void
 }
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif']
 const MAX_SIZE_MB = 10
 const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024
 
-export function ImageUpload({ onUploadComplete, onUploadError, onClear }: ImageUploadProps) {
+export function ImageUpload({ onUploadComplete, onUploadError, onClear, onUploadingChange }: ImageUploadProps) {
   const [uploading, setUploading] = useState(false)
   const [preview, setPreview] = useState<string | null>(null)
   const [progress, setProgress] = useState(0)
@@ -47,6 +48,7 @@ export function ImageUpload({ onUploadComplete, onUploadError, onClear }: ImageU
 
     try {
       setUploading(true)
+      onUploadingChange?.(true)
       setProgress(10)
 
       // Get pre-signed upload URL
@@ -68,6 +70,7 @@ export function ImageUpload({ onUploadComplete, onUploadError, onClear }: ImageU
       setFileName(null)
     } finally {
       setUploading(false)
+      onUploadingChange?.(false)
     }
   }
 

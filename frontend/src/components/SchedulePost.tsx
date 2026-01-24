@@ -33,6 +33,7 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
   const [mediaUrl, setMediaUrl] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploadKey, setUploadKey] = useState(0)
+  const [isUploading, setIsUploading] = useState(false)
 
   // Load connected Facebook Pages on mount
   useEffect(() => {
@@ -104,10 +105,11 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
     setUploadKey(k => k + 1)
   }
 
-  // Form is valid if there's content OR media, plus date/time/platform
+  // Form is valid if there's content OR media, plus date/time/platform, and not uploading
   const isFormValid = (content || mediaUrl) && scheduledDate && scheduledTime &&
     selectedPlatforms.length > 0 &&
-    (!isFacebookSelected || selectedPageId)
+    (!isFacebookSelected || selectedPageId) &&
+    !isUploading
 
   return (
     <div className="schedule-post">
@@ -136,6 +138,7 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
             }}
             onUploadError={(error) => setUploadError(error)}
             onClear={() => setMediaUrl(null)}
+            onUploadingChange={setIsUploading}
           />
           {uploadError && <div className="upload-error">{uploadError}</div>}
         </div>
