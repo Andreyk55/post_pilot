@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
 import type { Post } from '../api/posts'
+import { getMediaUrl } from '../api/media'
 import './ScheduledPosts.css'
 
 interface ScheduledPostsProps {
@@ -115,6 +116,19 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
                     </span>
                   )}
                 </div>
+
+                {post.mediaUrl && (
+                  <div className="post-media-preview">
+                    <img
+                      src={getMediaUrl(post.mediaUrl) || ''}
+                      alt="Post attachment"
+                      className="media-thumbnail"
+                    />
+                    <span className="media-indicator" title="This post includes an image">
+                      🖼️ Image attached
+                    </span>
+                  </div>
+                )}
 
                 <div className="post-meta">
                   <div className="post-schedule">

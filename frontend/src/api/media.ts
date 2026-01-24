@@ -1,5 +1,19 @@
 const API_URL = 'http://localhost:5122/api'
 
+/**
+ * Generates a URL for viewing/downloading an image from its S3 key.
+ * In local development, this points to the local media server.
+ * In production, this would generate a pre-signed S3 URL.
+ */
+export function getMediaUrl(s3Key: string | null | undefined): string | null {
+  if (!s3Key) return null
+
+  // Extract filename from s3Key (e.g., "media/guid.jpg" -> "guid.jpg")
+  const filename = s3Key.startsWith('media/') ? s3Key.slice(6) : s3Key
+
+  return `${API_URL}/media/files/${filename}`
+}
+
 export interface GenerateUploadUrlRequest {
   fileName: string
   contentType: string
@@ -31,6 +45,8 @@ export const mediaApi = {
       method: 'PUT',
       headers: {
         'Content-Type': file.type,
+        // Skip ngrok's browser warning page for tunneled requests
+        'ngrok-skip-browser-warning': 'true',
       },
       body: file,
     })
