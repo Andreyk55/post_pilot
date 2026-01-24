@@ -281,14 +281,14 @@ export function MyPostsPage() {
                       )}
                     </div>
 
-                    {post.mediaUrl && (
-                      <div className="post-media">
+                    <div className={`post-media ${post.mediaUrl ? '' : 'placeholder'}`}>
+                      {post.mediaUrl && (
                         <img
                           src={getMediaUrl(post.mediaUrl) || ''}
                           alt="Post attachment"
                         />
-                      </div>
-                    )}
+                      )}
+                    </div>
 
                     <div className="post-actions">
                       <button

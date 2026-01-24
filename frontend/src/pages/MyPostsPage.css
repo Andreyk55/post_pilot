@@ -386,6 +386,12 @@
   object-fit: cover;
 }
 
+.post-media.placeholder {
+  background: transparent;
+  border: none;
+  visibility: hidden;
+}
+
 /* Post Actions */
 .post-actions {
   flex-shrink: 0;
