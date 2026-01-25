@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PostPilot.Api.Data;
+using PostPilot.Api.DTOs;
 using PostPilot.Api.Entities;
 using PostPilot.Api.Enums;
+using PostPilot.Api.Services.Publishing;
 using PostPilot.Api.Services.Scheduling;
 
 namespace PostPilot.Api.Controllers;
@@ -13,15 +15,18 @@ public class PostsController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly IPostScheduler _scheduler;
+    private readonly IFacebookInsightsService _facebookInsights;
     private readonly ILogger<PostsController> _logger;
 
     public PostsController(
         AppDbContext context,
         IPostScheduler scheduler,
+        IFacebookInsightsService facebookInsights,
         ILogger<PostsController> logger)
     {
         _context = context;
         _scheduler = scheduler;
+        _facebookInsights = facebookInsights;
         _logger = logger;
     }
 
@@ -76,6 +81,112 @@ public class PostsController : ControllerBase
         }
 
         return PostDto.FromEntity(post);
+    }
+
+    [HttpGet("{id}/details")]
+    public async Task<ActionResult<PostDetailsDto>> GetPostDetails(Guid id, CancellationToken cancellationToken)
+    {
+        var post = await _context.Posts
+            .Include(p => p.TargetPage)
+            .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
+
+        if (post == null)
+        {
+            return NotFound();
+        }
+
+        // Fetch engagement metrics for published Facebook posts
+        PostEngagementDto? engagement = null;
+        string? externalPostUrl = null;
+
+        if (post.Platform == Platform.Facebook &&
+            post.Status == PostStatus.Published &&
+            !string.IsNullOrEmpty(post.ExternalPostId))
+        {
+            // Build external URL to the Facebook post
+            externalPostUrl = $"https://www.facebook.com/{post.ExternalPostId}";
+
+            // Try to get page access token - first from TargetPage, then look up by Facebook PageId
+            string? pageAccessToken = post.TargetPage?.AccessToken;
+
+            if (string.IsNullOrEmpty(pageAccessToken))
+            {
+                // TargetPage might be null if user reconnected Meta (new ConnectedPage IDs)
+                // Try to find the page by Facebook PageId from ExternalPostId (format: pageId_postId)
+                var externalIdParts = post.ExternalPostId.Split('_');
+                if (externalIdParts.Length >= 2)
+                {
+                    // Standard format: pageId_postId
+                    var facebookPageId = externalIdParts[0];
+                    _logger.LogInformation(
+                        "Looking up page by Facebook PageId {FacebookPageId}",
+                        facebookPageId);
+
+                    var currentPage = await _context.Set<ConnectedPage>()
+                        .FirstOrDefaultAsync(p => p.PageId == facebookPageId, cancellationToken);
+
+                    pageAccessToken = currentPage?.AccessToken;
+
+                    if (currentPage != null)
+                    {
+                        _logger.LogInformation("Found page {PageName} for engagement fetch", currentPage.Name);
+                    }
+                }
+
+                // If still no token (photo posts may not have pageId_postId format),
+                // fall back to the user's first connected page
+                if (string.IsNullOrEmpty(pageAccessToken))
+                {
+                    _logger.LogInformation(
+                        "ExternalPostId format not standard, falling back to first connected page");
+
+                    var firstPage = await _context.Set<ConnectedPage>()
+                        .FirstOrDefaultAsync(cancellationToken);
+
+                    pageAccessToken = firstPage?.AccessToken;
+
+                    if (firstPage != null)
+                    {
+                        _logger.LogInformation("Using page {PageName} for engagement fetch", firstPage.Name);
+                    }
+                }
+            }
+
+            if (!string.IsNullOrEmpty(pageAccessToken))
+            {
+                _logger.LogInformation("Fetching engagement for post {PostId}", post.Id);
+
+                engagement = await _facebookInsights.GetPostEngagementAsync(
+                    post.ExternalPostId,
+                    pageAccessToken,
+                    cancellationToken);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Cannot fetch engagement for post {PostId}: no page access token available",
+                    post.Id);
+            }
+        }
+
+        return new PostDetailsDto(
+            Id: post.Id,
+            Content: post.Content,
+            MediaUrl: post.MediaUrl,
+            Platform: post.Platform.ToString(),
+            ScheduledAt: post.ScheduledAt,
+            Status: post.Status.ToString(),
+            CreatedAt: post.CreatedAt,
+            UpdatedAt: post.UpdatedAt,
+            TargetPageId: post.TargetPageId,
+            TargetPageName: post.TargetPage?.Name,
+            PublishedAt: post.PublishedAt,
+            ExternalPostId: post.ExternalPostId,
+            ErrorMessage: post.ErrorMessage,
+            RetryCount: post.RetryCount,
+            Engagement: engagement,
+            ExternalPostUrl: externalPostUrl
+        );
     }
 
     [HttpPost]

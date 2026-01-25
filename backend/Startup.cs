@@ -84,6 +84,9 @@ public class Startup
         services.AddScoped<IPostPublisher>(sp => sp.GetRequiredService<FacebookPagePublisher>());
         services.AddScoped<IPostPublisherResolver, PostPublisherResolver>();
 
+        // Configure Facebook insights service for fetching post engagement
+        services.AddHttpClient<IFacebookInsightsService, FacebookInsightsService>();
+
         // Configure CORS for frontend
         services.AddCors(options =>
         {

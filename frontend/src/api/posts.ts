@@ -39,6 +39,31 @@ export interface PaginatedResponse<T> {
   hasPreviousPage: boolean
 }
 
+export interface PostEngagement {
+  likesCount: number | null
+  commentsCount: number | null
+  sharesCount: number | null
+}
+
+export interface PostDetails {
+  id: string
+  content: string
+  mediaUrl: string | null
+  platform: Platform
+  scheduledAt: string
+  status: PostStatus
+  createdAt: string
+  updatedAt: string
+  targetPageId: string | null
+  targetPageName: string | null
+  publishedAt: string | null
+  externalPostId: string | null
+  errorMessage: string | null
+  retryCount: number
+  engagement: PostEngagement | null
+  externalPostUrl: string | null
+}
+
 export const postsApi = {
   async getAll(): Promise<Post[]> {
     const response = await fetch(`${API_URL}/posts?pageSize=1000`)
@@ -75,5 +100,11 @@ export const postsApi = {
       method: 'DELETE',
     })
     if (!response.ok) throw new Error('Failed to delete post')
+  },
+
+  async getDetails(id: string): Promise<PostDetails> {
+    const response = await fetch(`${API_URL}/posts/${id}/details`)
+    if (!response.ok) throw new Error('Failed to fetch post details')
+    return response.json()
   },
 }
