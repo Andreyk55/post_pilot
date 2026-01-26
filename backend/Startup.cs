@@ -7,6 +7,7 @@ using PostPilot.Api.Services;
 using PostPilot.Api.Services.Media;
 using PostPilot.Api.Services.Publishing;
 using PostPilot.Api.Services.Scheduling;
+using PostPilot.Api.Settings;
 
 namespace PostPilot.Api;
 
@@ -84,8 +85,12 @@ public class Startup
         services.AddScoped<IPostPublisher>(sp => sp.GetRequiredService<FacebookPagePublisher>());
         services.AddScoped<IPostPublisherResolver, PostPublisherResolver>();
 
+        // Configure feature settings
+        var featureSettings = Configuration.GetSection("Features").Get<FeatureSettings>() ?? new FeatureSettings();
+        services.AddSingleton(featureSettings);
+
         // Configure Facebook insights service for fetching post engagement
-        services.AddHttpClient<IFacebookInsightsService, FacebookInsightsService>();
+        ConfigureInsightsService(services, featureSettings);
 
         // Configure CORS for frontend
         services.AddCors(options =>
@@ -189,6 +194,20 @@ public class Startup
             // Local development: File system storage
             services.AddSingleton<IMediaService>(sp =>
                 new LocalMediaService(sp.GetRequiredService<ILogger<LocalMediaService>>()));
+        }
+    }
+
+    private static void ConfigureInsightsService(IServiceCollection services, FeatureSettings featureSettings)
+    {
+        if (featureSettings.EnableEngagementFetch)
+        {
+            // Engagement fetch enabled: use real Facebook insights service
+            services.AddHttpClient<IFacebookInsightsService, FacebookInsightsService>();
+        }
+        else
+        {
+            // Engagement fetch disabled: use no-op implementation
+            services.AddScoped<IFacebookInsightsService, DisabledFacebookInsightsService>();
         }
     }
 }
