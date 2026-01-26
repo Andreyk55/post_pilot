@@ -23,9 +23,63 @@ interface ScheduledPostsProps {
   totalCount: number
 }
 
+// SVG Icons
+const CalendarIcon = () => (
+  <svg className="schedule-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <rect x="3" y="4" width="18" height="18" rx="2" />
+    <line x1="16" y1="2" x2="16" y2="6" />
+    <line x1="8" y1="2" x2="8" y2="6" />
+    <line x1="3" y1="10" x2="21" y2="10" />
+  </svg>
+)
+
+const ChevronDownIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <polyline points="6 9 12 15 18 9" />
+  </svg>
+)
+
+const ChevronUpIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <polyline points="18 15 12 9 6 15" />
+  </svg>
+)
+
+const CloseIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <line x1="18" y1="6" x2="6" y2="18" />
+    <line x1="6" y1="6" x2="18" y2="18" />
+  </svg>
+)
+
+const ImageIcon = () => (
+  <svg className="media-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <circle cx="8.5" cy="8.5" r="1.5" />
+    <polyline points="21 15 16 10 5 21" />
+  </svg>
+)
+
+const VideoIcon = () => (
+  <svg className="media-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <rect x="2" y="4" width="20" height="16" rx="2" />
+    <polygon points="10 9 15 12 10 15" fill="currentColor" stroke="none" />
+  </svg>
+)
+
+const EmptyCalendarIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <rect x="3" y="4" width="18" height="18" rx="2" />
+    <line x1="16" y1="2" x2="16" y2="6" />
+    <line x1="8" y1="2" x2="8" y2="6" />
+    <line x1="3" y1="10" x2="21" y2="10" />
+    <line x1="9" y1="14" x2="15" y2="14" />
+  </svg>
+)
+
 const platformIcons: Record<string, string> = {
   Twitter: '𝕏',
-  Instagram: '📷',
+  Instagram: 'IG',
   Facebook: 'f',
   LinkedIn: 'in',
 }
@@ -100,12 +154,17 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
 
   if ((!posts || posts.length === 0) && !isLoading) {
     return (
-      <div className="scheduled-posts empty">
-        <h2>Scheduled Posts</h2>
+      <div className="scheduled-posts">
+        <div className="scheduled-posts-header">
+          <h2>Scheduled</h2>
+          <span className="posts-count-badge">0</span>
+        </div>
         <div className="empty-state">
-          <span className="empty-icon">📅</span>
-          <p>No posts scheduled yet</p>
-          <p className="empty-hint">Create your first scheduled post above</p>
+          <div className="empty-icon-container">
+            <EmptyCalendarIcon />
+          </div>
+          <p className="empty-state-title">No posts scheduled</p>
+          <p className="empty-state-hint">Create your first post to get started</p>
         </div>
       </div>
     )
@@ -113,12 +172,16 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
 
   return (
     <div className="scheduled-posts">
-      <h2>Scheduled Posts ({totalCount})</h2>
+      <div className="scheduled-posts-header">
+        <h2>Scheduled</h2>
+        <span className="posts-count-badge">{totalCount}</span>
+      </div>
 
       <div className="posts-scroll-container" ref={scrollContainerRef}>
         <div className="posts-list">
           {posts.map(post => {
             const { date, time } = formatDateTime(post.scheduledAt)
+            const mediaType = getEffectiveMediaType(post)
             return (
               <div key={post.id} className="post-card">
                 <div
@@ -128,62 +191,66 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
                   <p ref={el => { if (el) contentRefs.current.set(post.id, el) }}>{post.content}</p>
                   {(overflowingPosts.has(post.id) || expandedPostId === post.id) && (
                     <span className="expand-indicator">
-                      {expandedPostId === post.id ? '▲ Show less' : '▼ Show more'}
+                      {expandedPostId === post.id ? (
+                        <><ChevronUpIcon /> Less</>
+                      ) : (
+                        <><ChevronDownIcon /> More</>
+                      )}
                     </span>
                   )}
                 </div>
 
-                {post.mediaUrl && getEffectiveMediaType(post) === 'Image' && (
+                {post.mediaUrl && mediaType === 'Image' && (
                   <div className="post-media-preview">
                     <img
                       src={getMediaUrl(post.mediaUrl) || ''}
-                      alt="Post attachment"
+                      alt=""
                       className="media-thumbnail"
                     />
-                    <span className="media-indicator" title="This post includes an image">
-                      <svg className="media-icon" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
-                      </svg>
-                      Image attached
+                    <span className="media-indicator">
+                      <ImageIcon />
+                      Image
                     </span>
                   </div>
                 )}
 
-                {post.mediaUrl && getEffectiveMediaType(post) === 'Video' && (
+                {post.mediaUrl && mediaType === 'Video' && (
                   <div className="post-media-preview">
                     <div className="video-placeholder">
-                      <svg className="video-play-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                      <svg className="video-play-icon" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M8 5v14l11-7z"/>
                       </svg>
                     </div>
-                    <span className="media-indicator" title="This post includes a video">
-                      <svg className="media-icon" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/>
-                      </svg>
-                      Video attached · {post.mediaUrl.split('.').pop()?.toUpperCase() || 'MP4'}
+                    <span className="media-indicator">
+                      <VideoIcon />
+                      Video
                     </span>
                   </div>
                 )}
 
                 <div className="post-meta">
                   <div className="post-schedule">
-                    <span className="schedule-icon">🗓️</span>
-                    <span>{date}</span>
-                    <span className="schedule-divider">•</span>
-                    <span className="schedule-icon">🕐</span>
-                    <span>{time}</span>
+                    <CalendarIcon />
+                    <span className="schedule-date">{date}</span>
+                    <span className="schedule-divider" />
+                    <span className="schedule-time">{time}</span>
                   </div>
 
-                  <div className="post-platforms">
-                    <span className="platform-badge" title={post.platform}>
-                      {platformIcons[post.platform] || post.platform}
+                  <div className="post-badges">
+                    <span
+                      className="platform-badge"
+                      data-platform={post.platform.toLowerCase()}
+                      title={post.platform}
+                    >
+                      {platformIcons[post.platform] || post.platform.charAt(0)}
                     </span>
                     {post.targetPageName && (
-                      <span className="page-badge" title={`Posting to: ${post.targetPageName}`}>
+                      <span className="page-badge" title={post.targetPageName}>
                         {post.targetPageName}
                       </span>
                     )}
                     <span className="status-badge" data-status={post.status.toLowerCase()}>
+                      <span className="status-dot" />
                       {post.status}
                     </span>
                   </div>
@@ -194,7 +261,7 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
                   onClick={() => onDelete(post.id)}
                   title="Delete post"
                 >
-                  ✕
+                  <CloseIcon />
                 </button>
               </div>
             )
@@ -204,13 +271,13 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
         {isLoading && (
           <div className="loading-more">
             <span className="loading-spinner"></span>
-            Loading more posts...
+            Loading...
           </div>
         )}
 
         {!hasMore && posts.length > 0 && (
           <div className="end-of-list">
-            No more posts to load
+            End of list
           </div>
         )}
 
