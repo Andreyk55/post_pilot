@@ -1,7 +1,18 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
 import type { Post } from '../api/posts'
-import { getMediaUrl } from '../api/media'
+import { getMediaUrl, getMediaTypeFromFile } from '../api/media'
 import './ScheduledPosts.css'
+
+// Helper to get effective media type (use mediaType if set, otherwise detect from URL)
+function getEffectiveMediaType(post: Post): 'None' | 'Image' | 'Video' {
+  if (post.mediaType && post.mediaType !== 'None') {
+    return post.mediaType
+  }
+  if (post.mediaUrl) {
+    return getMediaTypeFromFile(post.mediaUrl)
+  }
+  return 'None'
+}
 
 interface ScheduledPostsProps {
   posts: Post[]
@@ -34,16 +45,21 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
     const checkOverflow = () => {
       const newOverflowing = new Set<string>()
       contentRefs.current.forEach((el, postId) => {
-        if (el && el.scrollWidth > el.clientWidth) {
+        // Check for vertical overflow (multi-line clamped text)
+        if (el && el.scrollHeight > el.clientHeight) {
           newOverflowing.add(postId)
         }
       })
       setOverflowingPosts(newOverflowing)
     }
 
-    checkOverflow()
+    // Small delay to ensure layout is complete
+    const timer = setTimeout(checkOverflow, 50)
     window.addEventListener('resize', checkOverflow)
-    return () => window.removeEventListener('resize', checkOverflow)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('resize', checkOverflow)
+    }
   }, [posts])
 
   const formatDateTime = (isoString: string) => {
@@ -117,7 +133,7 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
                   )}
                 </div>
 
-                {post.mediaUrl && (
+                {post.mediaUrl && getEffectiveMediaType(post) === 'Image' && (
                   <div className="post-media-preview">
                     <img
                       src={getMediaUrl(post.mediaUrl) || ''}
@@ -125,7 +141,26 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
                       className="media-thumbnail"
                     />
                     <span className="media-indicator" title="This post includes an image">
-                      🖼️ Image attached
+                      <svg className="media-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                      </svg>
+                      Image attached
+                    </span>
+                  </div>
+                )}
+
+                {post.mediaUrl && getEffectiveMediaType(post) === 'Video' && (
+                  <div className="post-media-preview">
+                    <div className="video-placeholder">
+                      <svg className="video-play-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M8 5v14l11-7z"/>
+                      </svg>
+                    </div>
+                    <span className="media-indicator" title="This post includes a video">
+                      <svg className="media-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/>
+                      </svg>
+                      Video attached · {post.mediaUrl.split('.').pop()?.toUpperCase() || 'MP4'}
                     </span>
                   </div>
                 )}

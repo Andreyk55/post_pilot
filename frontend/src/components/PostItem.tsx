@@ -1,7 +1,18 @@
 import { useState, useRef, useEffect } from 'react'
 import { postsApi, type Post, type PostDetails, type PostStatus } from '../api/posts'
-import { getMediaUrl } from '../api/media'
+import { getMediaUrl, getMediaTypeFromFile } from '../api/media'
 import './PostItem.css'
+
+// Helper to get effective media type (use mediaType if set, otherwise detect from URL)
+function getEffectiveMediaType(post: Post): 'None' | 'Image' | 'Video' {
+  if (post.mediaType && post.mediaType !== 'None') {
+    return post.mediaType
+  }
+  if (post.mediaUrl) {
+    return getMediaTypeFromFile(post.mediaUrl)
+  }
+  return 'None'
+}
 
 interface PostItemProps {
   post: Post
@@ -166,11 +177,18 @@ export function PostItem({ post, onDelete, cachedDetails, onDetailsFetched }: Po
         </div>
 
         <div className={`post-media ${post.mediaUrl ? '' : 'placeholder'}`}>
-          {post.mediaUrl && (
+          {post.mediaUrl && getEffectiveMediaType(post) === 'Image' && (
             <img
               src={getMediaUrl(post.mediaUrl) || ''}
               alt="Post attachment"
             />
+          )}
+          {post.mediaUrl && getEffectiveMediaType(post) === 'Video' && (
+            <div className="video-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M8 5v14l11-7z"/>
+              </svg>
+            </div>
           )}
         </div>
 
