@@ -1,3 +1,5 @@
+using PostPilot.Api.Enums;
+
 namespace PostPilot.Api.Services.Media;
 
 /// <summary>
@@ -32,14 +34,50 @@ public interface IMediaService
     bool IsValidImageType(string contentType);
 
     /// <summary>
-    /// Gets the list of allowed content types.
+    /// Validates if the content type is an allowed video type.
+    /// </summary>
+    bool IsValidVideoType(string contentType);
+
+    /// <summary>
+    /// Validates if the content type is an allowed media type (image or video).
+    /// </summary>
+    bool IsValidMediaType(string contentType);
+
+    /// <summary>
+    /// Gets the MediaType enum value for a given content type.
+    /// Returns None if the content type is not a valid media type.
+    /// </summary>
+    MediaType GetMediaType(string contentType);
+
+    /// <summary>
+    /// Gets the list of allowed image content types.
+    /// </summary>
+    IReadOnlyCollection<string> AllowedImageTypes { get; }
+
+    /// <summary>
+    /// Gets the list of allowed video content types.
+    /// </summary>
+    IReadOnlyCollection<string> AllowedVideoTypes { get; }
+
+    /// <summary>
+    /// Gets the list of all allowed content types (images and videos).
     /// </summary>
     IReadOnlyCollection<string> AllowedContentTypes { get; }
 
     /// <summary>
-    /// Gets the maximum allowed file size in bytes.
+    /// Gets the maximum allowed image file size in bytes.
     /// </summary>
-    long MaxFileSizeBytes { get; }
+    long MaxImageFileSizeBytes { get; }
+
+    /// <summary>
+    /// Gets the maximum allowed video file size in bytes.
+    /// </summary>
+    long MaxVideoFileSizeBytes { get; }
+
+    /// <summary>
+    /// Gets the maximum allowed file size for a given content type.
+    /// </summary>
+    long GetMaxFileSizeBytes(string contentType);
 }
 
 /// <summary>
@@ -54,5 +92,10 @@ public record UploadUrlResult(
     /// <summary>
     /// S3 key where the file will be stored.
     /// </summary>
-    string S3Key
+    string S3Key,
+
+    /// <summary>
+    /// The media type of the file being uploaded.
+    /// </summary>
+    MediaType MediaType
 );

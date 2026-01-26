@@ -16,6 +16,7 @@ public record PostDetailsDto(
     Guid Id,
     string Content,
     string? MediaUrl,
+    string MediaType,
     string Platform,
     DateTime ScheduledAt,
     string Status,

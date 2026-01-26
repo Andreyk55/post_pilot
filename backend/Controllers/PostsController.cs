@@ -173,6 +173,7 @@ public class PostsController : ControllerBase
             Id: post.Id,
             Content: post.Content,
             MediaUrl: post.MediaUrl,
+            MediaType: post.MediaType.ToString(),
             Platform: post.Platform.ToString(),
             ScheduledAt: post.ScheduledAt,
             Status: post.Status.ToString(),
@@ -197,6 +198,7 @@ public class PostsController : ControllerBase
             Id = Guid.NewGuid(),
             Content = request.Content,
             MediaUrl = request.MediaUrl,
+            MediaType = request.MediaType ?? MediaType.None,
             Platform = request.Platform,
             ScheduledAt = request.ScheduledAt,
             TargetPageId = request.TargetPageId,
@@ -247,6 +249,7 @@ public class PostsController : ControllerBase
 
         post.Content = request.Content;
         post.MediaUrl = request.MediaUrl;
+        post.MediaType = request.MediaType ?? MediaType.None;
         post.Platform = request.Platform;
         post.ScheduledAt = request.ScheduledAt;
         post.TargetPageId = request.TargetPageId;
@@ -291,6 +294,7 @@ public class PostsController : ControllerBase
 public record CreatePostRequest(
     string Content,
     string? MediaUrl,
+    MediaType? MediaType,
     Platform Platform,
     DateTime ScheduledAt,
     Guid? TargetPageId = null
@@ -299,6 +303,7 @@ public record CreatePostRequest(
 public record UpdatePostRequest(
     string Content,
     string? MediaUrl,
+    MediaType? MediaType,
     Platform Platform,
     DateTime ScheduledAt,
     Guid? TargetPageId = null
@@ -320,6 +325,7 @@ public record PostDto(
     Guid Id,
     string Content,
     string? MediaUrl,
+    MediaType MediaType,
     Platform Platform,
     DateTime ScheduledAt,
     PostStatus Status,
@@ -337,6 +343,7 @@ public record PostDto(
         post.Id,
         post.Content,
         post.MediaUrl,
+        post.MediaType,
         post.Platform,
         post.ScheduledAt,
         post.Status,

@@ -180,29 +180,61 @@ public class FacebookPagePublisher : IPostPublisher
         string url;
         HttpContent content;
 
-        if (!string.IsNullOrEmpty(post.MediaUrl))
+        if (post.MediaType == MediaType.Video && !string.IsNullOrEmpty(post.MediaUrl))
         {
-            // Determine the image URL to send to Meta
+            // Video post - use videos endpoint
+            return await PublishVideoAsync(post, pageId, accessToken, cancellationToken);
+        }
+        else if (post.MediaType == MediaType.Image && !string.IsNullOrEmpty(post.MediaUrl))
+        {
+            // Image post - use photos endpoint
             string imageUrl;
             if (_mediaService.IsS3Key(post.MediaUrl))
             {
-                // Generate pre-signed download URL for Meta to fetch
                 imageUrl = _mediaService.GenerateDownloadUrl(post.MediaUrl, MetaDownloadUrlExpiration);
                 _logger.LogInformation("Generated pre-signed URL for S3 key {S3Key} for post {PostId}",
                     post.MediaUrl, post.Id);
             }
             else
             {
-                // Use external URL directly (backward compatibility)
                 imageUrl = post.MediaUrl;
             }
 
-            // For photos, use photos endpoint
             url = $"{GraphApiBaseUrl}/{pageId}/photos";
             content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["message"] = post.Content,
-                ["url"] = imageUrl,  // Meta will fetch from this URL
+                ["url"] = imageUrl,
+                ["access_token"] = accessToken
+            });
+        }
+        else if (!string.IsNullOrEmpty(post.MediaUrl))
+        {
+            // Legacy: MediaType not set but MediaUrl exists - infer from URL extension
+            var extension = Path.GetExtension(post.MediaUrl).ToLowerInvariant();
+            if (extension == ".mp4")
+            {
+                return await PublishVideoAsync(post, pageId, accessToken, cancellationToken);
+            }
+
+            // Assume image for backward compatibility
+            string imageUrl;
+            if (_mediaService.IsS3Key(post.MediaUrl))
+            {
+                imageUrl = _mediaService.GenerateDownloadUrl(post.MediaUrl, MetaDownloadUrlExpiration);
+                _logger.LogInformation("Generated pre-signed URL for S3 key {S3Key} for post {PostId}",
+                    post.MediaUrl, post.Id);
+            }
+            else
+            {
+                imageUrl = post.MediaUrl;
+            }
+
+            url = $"{GraphApiBaseUrl}/{pageId}/photos";
+            content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["message"] = post.Content,
+                ["url"] = imageUrl,
                 ["access_token"] = accessToken
             });
         }
@@ -218,13 +250,6 @@ public class FacebookPagePublisher : IPostPublisher
         }
 
         _logger.LogInformation("Calling Meta API: POST {Url} for post {PostId}", url, post.Id);
-        if (!string.IsNullOrEmpty(post.MediaUrl))
-        {
-            _logger.LogInformation("Image URL being sent to Meta: {ImageUrl}",
-                _mediaService.IsS3Key(post.MediaUrl)
-                    ? _mediaService.GenerateDownloadUrl(post.MediaUrl, MetaDownloadUrlExpiration)
-                    : post.MediaUrl);
-        }
 
         var response = await _httpClient.PostAsync(url, content, cancellationToken);
         var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -232,6 +257,49 @@ public class FacebookPagePublisher : IPostPublisher
         _logger.LogInformation("Meta API response for post {PostId}: {StatusCode} - {Body}",
             post.Id, response.StatusCode, responseBody);
 
+        return ParseMetaResponse(post.Id, response, responseBody);
+    }
+
+    private async Task<PublishResult> PublishVideoAsync(Post post, string pageId, string accessToken, CancellationToken cancellationToken)
+    {
+        // Generate download URL for Meta to fetch the video
+        string videoUrl;
+        if (_mediaService.IsS3Key(post.MediaUrl!))
+        {
+            // Use longer expiration for videos since processing takes time
+            videoUrl = _mediaService.GenerateDownloadUrl(post.MediaUrl!, TimeSpan.FromHours(2));
+            _logger.LogInformation("Generated pre-signed URL for video S3 key {S3Key} for post {PostId}",
+                post.MediaUrl, post.Id);
+        }
+        else
+        {
+            videoUrl = post.MediaUrl!;
+        }
+
+        // Use the videos endpoint for video uploads
+        var url = $"{GraphApiBaseUrl}/{pageId}/videos";
+
+        var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["file_url"] = videoUrl,          // URL where Meta will fetch the video
+            ["description"] = post.Content,    // Video description (similar to message for photos)
+            ["access_token"] = accessToken
+        });
+
+        _logger.LogInformation("Calling Meta Video API: POST {Url} for post {PostId}", url, post.Id);
+        _logger.LogInformation("Video URL being sent to Meta: {VideoUrl}", videoUrl);
+
+        var response = await _httpClient.PostAsync(url, content, cancellationToken);
+        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        _logger.LogInformation("Meta Video API response for post {PostId}: {StatusCode} - {Body}",
+            post.Id, response.StatusCode, responseBody);
+
+        return ParseMetaResponse(post.Id, response, responseBody);
+    }
+
+    private PublishResult ParseMetaResponse(Guid postId, HttpResponseMessage response, string responseBody)
+    {
         if (response.IsSuccessStatusCode)
         {
             var result = JsonSerializer.Deserialize<MetaPostResponse>(responseBody);
@@ -239,7 +307,7 @@ public class FacebookPagePublisher : IPostPublisher
 
             if (string.IsNullOrEmpty(externalId))
             {
-                _logger.LogWarning("Meta API returned success but no post ID for {PostId}", post.Id);
+                _logger.LogWarning("Meta API returned success but no post ID for {PostId}", postId);
             }
 
             return new PublishResult(true, ExternalPostId: externalId);
@@ -251,7 +319,7 @@ public class FacebookPagePublisher : IPostPublisher
             var errorType = ClassifyError(errorCode);
 
             _logger.LogWarning("Meta API error for post {PostId}: Code={Code}, Message={Message}",
-                post.Id, errorCode, error?.Error?.Message);
+                postId, errorCode, error?.Error?.Message);
 
             return new PublishResult(false,
                 ErrorType: errorType,

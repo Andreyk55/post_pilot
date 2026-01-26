@@ -1,3 +1,5 @@
+import type { MediaType } from './media'
+
 const API_URL = 'http://localhost:5122/api'
 
 export type Platform = 'Twitter' | 'Instagram' | 'Facebook' | 'LinkedIn'
@@ -8,6 +10,7 @@ export interface Post {
   id: string
   content: string
   mediaUrl: string | null
+  mediaType: MediaType
   platform: Platform
   scheduledAt: string
   status: PostStatus
@@ -24,6 +27,7 @@ export interface Post {
 export interface CreatePostRequest {
   content: string
   mediaUrl?: string | null
+  mediaType?: MediaType | null
   platform: Platform
   scheduledAt: string
   targetPageId?: string | null
@@ -49,6 +53,7 @@ export interface PostDetails {
   id: string
   content: string
   mediaUrl: string | null
+  mediaType: string
   platform: Platform
   scheduledAt: string
   status: PostStatus

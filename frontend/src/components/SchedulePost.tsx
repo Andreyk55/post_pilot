@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { metaApi } from '../api/meta'
+import type { MediaType } from '../api/media'
 import type { ConnectedPage } from '../types/meta'
-import { ImageUpload } from './ImageUpload'
+import { MediaUpload } from './MediaUpload'
 import './SchedulePost.css'
 
 interface SchedulePostProps {
@@ -12,6 +13,7 @@ interface SchedulePostProps {
     platforms: string[]
     targetPageId?: string
     mediaUrl?: string
+    mediaType?: MediaType
   }) => void
 }
 
@@ -31,6 +33,7 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
   const [selectedPageId, setSelectedPageId] = useState<string>('')
   const [loadingPages, setLoadingPages] = useState(false)
   const [mediaUrl, setMediaUrl] = useState<string | null>(null)
+  const [mediaType, setMediaType] = useState<MediaType | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploadKey, setUploadKey] = useState(0)
   const [isUploading, setIsUploading] = useState(false)
@@ -92,6 +95,7 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
       platforms: selectedPlatforms,
       targetPageId: isFacebookSelected ? selectedPageId : undefined,
       mediaUrl: mediaUrl || undefined,
+      mediaType: mediaType || undefined,
     })
 
     // Reset form
@@ -101,6 +105,7 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
     setSelectedPlatforms([])
     setSelectedPageId('')
     setMediaUrl(null)
+    setMediaType(null)
     setUploadError(null)
     setUploadKey(k => k + 1)
   }
@@ -129,15 +134,19 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
         </div>
 
         <div className="form-group">
-          <label>Image (optional)</label>
-          <ImageUpload
+          <label>Media (optional)</label>
+          <MediaUpload
             key={uploadKey}
-            onUploadComplete={(s3Key) => {
+            onUploadComplete={(s3Key, type) => {
               setMediaUrl(s3Key)
+              setMediaType(type)
               setUploadError(null)
             }}
             onUploadError={(error) => setUploadError(error)}
-            onClear={() => setMediaUrl(null)}
+            onClear={() => {
+              setMediaUrl(null)
+              setMediaType(null)
+            }}
             onUploadingChange={setIsUploading}
           />
           {uploadError && <div className="upload-error">{uploadError}</div>}

@@ -1,3 +1,5 @@
+using PostPilot.Api.Enums;
+
 namespace PostPilot.Api.Services.Media;
 
 /// <summary>
@@ -9,8 +11,9 @@ public class LocalMediaService : IMediaService
     private readonly string _uploadPath;
     private readonly string _baseUrl;
     private readonly ILogger<LocalMediaService> _logger;
+    private readonly long _maxVideoFileSizeBytes;
 
-    private static readonly HashSet<string> _allowedContentTypes = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> _allowedImageTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "image/jpeg",
         "image/jpg",
@@ -18,17 +21,27 @@ public class LocalMediaService : IMediaService
         "image/gif"
     };
 
-    private const long _maxFileSizeBytes = 10 * 1024 * 1024; // 10MB
+    private static readonly HashSet<string> _allowedVideoTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "video/mp4"
+    };
 
-    public IReadOnlyCollection<string> AllowedContentTypes => _allowedContentTypes;
-    public long MaxFileSizeBytes => _maxFileSizeBytes;
+    private const long DefaultMaxImageFileSizeBytes = 10 * 1024 * 1024; // 10MB
+    private const long DefaultMaxVideoFileSizeBytes = 200 * 1024 * 1024; // 200MB
 
-    public LocalMediaService(ILogger<LocalMediaService> logger, string? baseUrl = null)
+    public IReadOnlyCollection<string> AllowedImageTypes => _allowedImageTypes;
+    public IReadOnlyCollection<string> AllowedVideoTypes => _allowedVideoTypes;
+    public IReadOnlyCollection<string> AllowedContentTypes => _allowedImageTypes.Concat(_allowedVideoTypes).ToArray();
+    public long MaxImageFileSizeBytes => DefaultMaxImageFileSizeBytes;
+    public long MaxVideoFileSizeBytes => _maxVideoFileSizeBytes;
+
+    public LocalMediaService(ILogger<LocalMediaService> logger, string? baseUrl = null, long? maxVideoFileSizeBytes = null)
     {
         _uploadPath = Path.Combine(Directory.GetCurrentDirectory(), "uploads");
+        _maxVideoFileSizeBytes = maxVideoFileSizeBytes ?? DefaultMaxVideoFileSizeBytes;
 
         // Check for PUBLIC_URL env var (for ngrok or other tunneling)
-        // This URL is what Meta will use to fetch images
+        // This URL is what Meta will use to fetch media (images/videos)
         _baseUrl = Environment.GetEnvironmentVariable("PUBLIC_URL")
                    ?? baseUrl
                    ?? "http://localhost:5122";
@@ -43,12 +56,14 @@ public class LocalMediaService : IMediaService
 
     public Task<UploadUrlResult> GenerateUploadUrlAsync(string fileName, string contentType)
     {
-        if (!IsValidImageType(contentType))
+        if (!IsValidMediaType(contentType))
         {
-            throw new ArgumentException($"Invalid content type: {contentType}. Allowed types: {string.Join(", ", _allowedContentTypes)}");
+            throw new ArgumentException($"Invalid content type: {contentType}. Allowed types: {string.Join(", ", AllowedContentTypes)}");
         }
 
+        var mediaType = GetMediaType(contentType);
         var extension = Path.GetExtension(fileName)?.ToLowerInvariant();
+
         if (string.IsNullOrEmpty(extension))
         {
             extension = contentType switch
@@ -56,7 +71,8 @@ public class LocalMediaService : IMediaService
                 "image/jpeg" or "image/jpg" => ".jpg",
                 "image/png" => ".png",
                 "image/gif" => ".gif",
-                _ => ".jpg"
+                "video/mp4" => ".mp4",
+                _ => mediaType == MediaType.Video ? ".mp4" : ".jpg"
             };
         }
 
@@ -68,9 +84,9 @@ public class LocalMediaService : IMediaService
         // Use just the fileId to avoid path encoding issues
         var uploadUrl = $"{_baseUrl}/api/media/upload/{fileId}";
 
-        _logger.LogInformation("Generated local upload URL for key {S3Key}", s3Key);
+        _logger.LogInformation("Generated local upload URL for {MediaType} key {S3Key}", mediaType, s3Key);
 
-        return Task.FromResult(new UploadUrlResult(uploadUrl, s3Key));
+        return Task.FromResult(new UploadUrlResult(uploadUrl, s3Key, mediaType));
     }
 
     public string GenerateDownloadUrl(string s3Key, TimeSpan expiration)
@@ -95,7 +111,33 @@ public class LocalMediaService : IMediaService
 
     public bool IsValidImageType(string contentType)
     {
-        return _allowedContentTypes.Contains(contentType);
+        return _allowedImageTypes.Contains(contentType);
+    }
+
+    public bool IsValidVideoType(string contentType)
+    {
+        return _allowedVideoTypes.Contains(contentType);
+    }
+
+    public bool IsValidMediaType(string contentType)
+    {
+        return IsValidImageType(contentType) || IsValidVideoType(contentType);
+    }
+
+    public MediaType GetMediaType(string contentType)
+    {
+        if (IsValidImageType(contentType))
+            return MediaType.Image;
+        if (IsValidVideoType(contentType))
+            return MediaType.Video;
+        return MediaType.None;
+    }
+
+    public long GetMaxFileSizeBytes(string contentType)
+    {
+        if (IsValidVideoType(contentType))
+            return MaxVideoFileSizeBytes;
+        return MaxImageFileSizeBytes;
     }
 
     /// <summary>

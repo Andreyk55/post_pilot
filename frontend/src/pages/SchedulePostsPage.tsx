@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { postsApi, type Post, type CreatePostRequest, type Platform } from '../api/posts'
+import type { MediaType } from '../api/media'
 import { SchedulePost } from '../components/SchedulePost'
 import { ScheduledPosts } from '../components/ScheduledPosts'
 import './SchedulePostsPage.css'
@@ -68,6 +69,7 @@ export function SchedulePostsPage() {
     platforms: string[]
     targetPageId?: string
     mediaUrl?: string
+    mediaType?: MediaType
   }) => {
     try {
       const scheduledAt = new Date(`${formData.scheduledDate}T${formData.scheduledTime}`).toISOString()
@@ -84,8 +86,9 @@ export function SchedulePostsPage() {
           scheduledAt,
           // Include targetPageId for Facebook posts
           targetPageId: platform === 'Facebook' ? formData.targetPageId : undefined,
-          // Include media URL if an image was uploaded
+          // Include media URL and type if media was uploaded
           mediaUrl: formData.mediaUrl,
+          mediaType: formData.mediaType,
         }
         const post = await postsApi.create(request)
         newPosts.push(post)

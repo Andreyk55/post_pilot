@@ -7,6 +7,12 @@ public class Post
     public Guid Id { get; set; }
     public required string Content { get; set; }
     public string? MediaUrl { get; set; }
+
+    /// <summary>
+    /// Type of media attached to this post (None, Image, or Video).
+    /// </summary>
+    public MediaType MediaType { get; set; } = MediaType.None;
+
     public Platform Platform { get; set; }
     public DateTime ScheduledAt { get; set; }
     public PostStatus Status { get; set; }

@@ -184,6 +184,9 @@ namespace PostPilot.Api.Migrations
                     b.Property<int>("MaxRetries")
                         .HasColumnType("integer");
 
+                    b.Property<int>("MediaType")
+                        .HasColumnType("integer");
+
                     b.Property<string>("MediaUrl")
                         .HasColumnType("text");
 
