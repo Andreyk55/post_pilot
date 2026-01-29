@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
 import type { Post } from '../api/posts'
 import { getMediaUrl, getMediaTypeFromFile } from '../api/media'
+import { VideoThumbnail } from './VideoThumbnail'
 import './ScheduledPosts.css'
 
 // Helper to get effective media type (use mediaType if set, otherwise detect from URL)
@@ -216,11 +217,10 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
 
                 {post.mediaUrl && mediaType === 'Video' && (
                   <div className="post-media-preview">
-                    <div className="video-placeholder">
-                      <svg className="video-play-icon" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M8 5v14l11-7z"/>
-                      </svg>
-                    </div>
+                    <VideoThumbnail
+                      videoUrl={getMediaUrl(post.mediaUrl) || ''}
+                      className="media-thumbnail"
+                    />
                     <span className="media-indicator">
                       <VideoIcon />
                       Video
