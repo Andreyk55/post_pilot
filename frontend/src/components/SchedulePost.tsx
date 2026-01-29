@@ -3,6 +3,7 @@ import { metaApi } from '../api/meta'
 import type { MediaType } from '../api/media'
 import type { ConnectedPage } from '../types/meta'
 import { MediaUpload } from './MediaUpload'
+import { AiAssistPanel } from './AiAssistPanel'
 import './SchedulePost.css'
 
 interface SchedulePostProps {
@@ -131,6 +132,12 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
             rows={4}
           />
           <span className="char-count">{content.length} characters</span>
+
+          <AiAssistPanel
+            text={content}
+            onApplyText={(text) => setContent(text)}
+            onAppendText={(text) => setContent((prev) => prev + text)}
+          />
         </div>
 
         <div className="form-group">

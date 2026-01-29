@@ -2,8 +2,10 @@ using System.Text.Json.Serialization;
 using Amazon.S3;
 using Amazon.Scheduler;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using PostPilot.Api.Data;
 using PostPilot.Api.Services;
+using PostPilot.Api.Services.Ai;
 using PostPilot.Api.Services.Media;
 using PostPilot.Api.Services.Publishing;
 using PostPilot.Api.Services.Scheduling;
@@ -91,6 +93,9 @@ public class Startup
 
         // Configure Facebook insights service for fetching post engagement
         ConfigureInsightsService(services, featureSettings);
+
+        // Configure AI services (Gemini)
+        ConfigureAiServices(services);
 
         // Configure CORS for frontend
         services.AddCors(options =>
@@ -209,5 +214,29 @@ public class Startup
             // Engagement fetch disabled: use no-op implementation
             services.AddScoped<IFacebookInsightsService, DisabledFacebookInsightsService>();
         }
+    }
+
+    private static void ConfigureAiServices(IServiceCollection services)
+    {
+        // Memory cache for AI responses and rate limiting
+        services.AddMemoryCache();
+
+        // Gemini settings from environment variable or appsettings
+        var apiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? string.Empty;
+        var model = Environment.GetEnvironmentVariable("GEMINI_MODEL");
+
+        var geminiSettings = new GeminiSettings
+        {
+            ApiKey = apiKey,
+            Model = model
+        };
+
+        services.AddSingleton(geminiSettings);
+
+        // Gemini client with typed HttpClient
+        services.AddHttpClient<IGeminiClient, GeminiClient>();
+
+        // Rate limiter (in-memory for MVP)
+        services.AddSingleton<IAiRateLimiter, InMemoryAiRateLimiter>();
     }
 }
