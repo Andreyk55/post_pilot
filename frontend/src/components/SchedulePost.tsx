@@ -38,6 +38,7 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploadKey, setUploadKey] = useState(0)
   const [isUploading, setIsUploading] = useState(false)
+  const [aiPanelKey, setAiPanelKey] = useState(0)
 
   // Load connected Facebook Pages on mount
   useEffect(() => {
@@ -117,6 +118,22 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
     (!isFacebookSelected || selectedPageId) &&
     !isUploading
 
+  // Check if there's any data in the form to show reset button
+  const hasFormData = content || mediaUrl || scheduledDate || scheduledTime || selectedPlatforms.length > 0
+
+  const handleReset = () => {
+    setContent('')
+    setScheduledDate('')
+    setScheduledTime('')
+    setSelectedPlatforms([])
+    setSelectedPageId('')
+    setMediaUrl(null)
+    setMediaType(null)
+    setUploadError(null)
+    setUploadKey(k => k + 1)
+    setAiPanelKey(k => k + 1)
+  }
+
   return (
     <div className="schedule-post">
       <h2>Schedule a Post</h2>
@@ -134,6 +151,7 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
           <span className="char-count">{content.length} characters</span>
 
           <AiAssistPanel
+            key={aiPanelKey}
             text={content}
             onApplyText={(text) => setContent(text)}
             onAppendText={(text) => setContent((prev) => prev + text)}
@@ -228,13 +246,24 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
           </div>
         )}
 
-        <button
-          type="submit"
-          className="submit-btn"
-          disabled={!isFormValid}
-        >
-          Schedule Post
-        </button>
+        <div className="form-actions">
+          <button
+            type="submit"
+            className="submit-btn"
+            disabled={!isFormValid}
+          >
+            Schedule Post
+          </button>
+          {hasFormData && (
+            <button
+              type="button"
+              className="reset-btn"
+              onClick={handleReset}
+            >
+              Reset
+            </button>
+          )}
+        </div>
       </form>
     </div>
   )

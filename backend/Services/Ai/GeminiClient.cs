@@ -14,7 +14,7 @@ public class GeminiClient : IGeminiClient
     private readonly IMemoryCache _cache;
     private readonly ILogger<GeminiClient> _logger;
 
-    private static readonly TimeSpan CacheDuration = TimeSpan.FromHours(24);
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromHours(1);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
