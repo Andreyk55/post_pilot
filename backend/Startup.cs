@@ -221,9 +221,10 @@ public class Startup
         // Memory cache for AI responses and rate limiting
         services.AddMemoryCache();
 
-        // Gemini settings from environment variable or appsettings
+        // Gemini settings from environment variables only (no hardcoded defaults)
         var apiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? string.Empty;
-        var model = Environment.GetEnvironmentVariable("GEMINI_MODEL");
+        var model = Environment.GetEnvironmentVariable("GEMINI_MODEL")
+            ?? throw new InvalidOperationException("Required environment variable 'GEMINI_MODEL' is missing.");
 
         var geminiSettings = new GeminiSettings
         {
