@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { postsApi, type Post, type PostDetails, type PostStatus } from '../api/posts'
 import { getMediaUrl, getMediaTypeFromFile } from '../api/media'
+import { VideoThumbnail } from './VideoThumbnail'
 import './PostItem.css'
 
 // Helper to get effective media type (use mediaType if set, otherwise detect from URL)
@@ -184,11 +185,10 @@ export function PostItem({ post, onDelete, cachedDetails, onDetailsFetched }: Po
             />
           )}
           {post.mediaUrl && getEffectiveMediaType(post) === 'Video' && (
-            <div className="video-icon">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M8 5v14l11-7z"/>
-              </svg>
-            </div>
+            <VideoThumbnail
+              videoUrl={getMediaUrl(post.mediaUrl) || ''}
+              className="post-video-thumbnail"
+            />
           )}
         </div>
 
