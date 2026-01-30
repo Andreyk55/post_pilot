@@ -232,6 +232,7 @@ export function AiAssistPanel({
     handleMediaAction(async () => {
       // Convert S3 key to full URL for browser video element
       const videoUrl = getMediaUrl(mediaUrl)
+      console.log('Video caption ideas - mediaUrl:', mediaUrl, 'videoUrl:', videoUrl)
       if (!videoUrl) throw new Error('Invalid media URL')
 
       // Extract first frame client-side (works in Lambda - no FFmpeg needed)

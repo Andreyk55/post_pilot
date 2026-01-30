@@ -31,7 +31,7 @@ export async function extractVideoFrames(
 
   return new Promise((resolve, reject) => {
     const video = document.createElement('video')
-    video.crossOrigin = 'anonymous'
+    // Don't set crossOrigin - use same-origin request for localhost
     video.muted = true
     video.preload = 'metadata'
 
@@ -162,20 +162,35 @@ export async function extractSingleFrame(
 
   return new Promise((resolve, reject) => {
     const video = document.createElement('video')
-    video.crossOrigin = 'anonymous'
+    // Don't set crossOrigin - use same-origin request for localhost
     video.muted = true
     video.preload = 'metadata'
 
-    video.onerror = (e) => {
-      console.error('Video load error:', e)
-      reject(new Error('Failed to load video'))
+    const cleanup = () => {
+      video.onerror = null
+      video.onloadedmetadata = null
+      video.src = ''
+      video.load()
+    }
+
+    video.onerror = () => {
+      const error = video.error
+      // Ignore errors from cleanup (when we set src to '')
+      if (!video.src || video.src === window.location.href) {
+        return
+      }
+      console.error('Video load error for URL:', videoUrl, 'video.src:', video.src, 'Error code:', error?.code, 'Message:', error?.message)
+      cleanup()
+      reject(new Error(`Failed to load video: ${error?.message || 'Unknown error'}`))
     }
 
     video.onloadedmetadata = () => {
+      console.log('Video metadata loaded, duration:', video.duration)
       const canvas = document.createElement('canvas')
       const ctx = canvas.getContext('2d')
 
       if (!ctx) {
+        cleanup()
         reject(new Error('Failed to create canvas context'))
         return
       }
@@ -186,13 +201,11 @@ export async function extractSingleFrame(
 
       seekAndCapture(video, timestampSeconds, canvas, ctx, quality)
         .then((dataUrl) => {
-          video.src = ''
-          video.load()
+          cleanup()
           resolve({ timestampSeconds, dataUrl })
         })
         .catch((err) => {
-          video.src = ''
-          video.load()
+          cleanup()
           reject(err)
         })
     }

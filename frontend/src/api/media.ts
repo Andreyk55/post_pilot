@@ -5,7 +5,7 @@ export type MediaType = 'None' | 'Image' | 'Video'
 
 /**
  * Generates a URL for viewing/downloading media from its S3 key.
- * In local development, this points to the local media server.
+ * In local development, this uses a relative URL (proxied by Vite) to avoid CORS issues.
  * In production, this would generate a pre-signed S3 URL.
  */
 export function getMediaUrl(s3Key: string | null | undefined): string | null {
@@ -14,7 +14,8 @@ export function getMediaUrl(s3Key: string | null | undefined): string | null {
   // Extract filename from s3Key (e.g., "media/guid.jpg" -> "guid.jpg")
   const filename = s3Key.startsWith('media/') ? s3Key.slice(6) : s3Key
 
-  return `${API_URL}/media/files/${filename}`
+  // Use relative URL so Vite proxy can handle it (same-origin for canvas operations)
+  return `/api/media/files/${filename}`
 }
 
 /**
