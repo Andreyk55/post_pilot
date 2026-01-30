@@ -365,12 +365,13 @@ public class GeminiClient : IGeminiClient
     private string BuildVariantsPrompt(AiTextAction action, AiPlatform platform, string text, AiTone? tone, string language)
     {
         var maxLength = platform == AiPlatform.X ? 280 : 2000;
+        var toneStr = tone?.ToString().ToLower() ?? "professional";
         var actionInstruction = action switch
         {
-            AiTextAction.Polish => "Polish this text: fix grammar, improve clarity, remove repetition. Keep the original meaning and style.",
-            AiTextAction.RewriteTone => $"Rewrite this text in a {tone?.ToString().ToLower() ?? "professional"} tone.",
-            AiTextAction.Shorten => "Shorten this text while keeping the key message. Be concise.",
-            AiTextAction.Expand => "Expand this text with more detail, examples, and a call-to-action.",
+            AiTextAction.Polish => $"Polish this text in a {toneStr} tone: fix grammar, improve clarity, remove repetition. Keep the original meaning but ensure the tone is {toneStr}.",
+            AiTextAction.RewriteTone => $"Rewrite this text in a {toneStr} tone.",
+            AiTextAction.Shorten => $"Shorten this text while keeping it {toneStr}. Be concise but maintain the {toneStr} tone.",
+            AiTextAction.Expand => $"Expand this text in a {toneStr} tone with more detail, examples, and a call-to-action.",
             _ => throw new ArgumentException($"Invalid action for variants: {action}")
         };
 
