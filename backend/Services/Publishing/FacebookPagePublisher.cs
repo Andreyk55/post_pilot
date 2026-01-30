@@ -279,22 +279,45 @@ public class FacebookPagePublisher : IPostPublisher
         // Use the videos endpoint for video uploads
         var url = $"{GraphApiBaseUrl}/{pageId}/videos";
 
-        var formData = new Dictionary<string, string>
-        {
-            ["file_url"] = videoUrl,          // URL where Meta will fetch the video
-            ["description"] = post.Content,    // Video description (similar to message for photos)
-            ["access_token"] = accessToken
-        };
-
-        // Add custom thumbnail if user selected one
+        // Check if we have a custom thumbnail to upload
+        byte[]? thumbnailBytes = null;
         if (!string.IsNullOrEmpty(post.SelectedThumbnailUrl))
         {
-            formData["thumb"] = post.SelectedThumbnailUrl;
-            _logger.LogInformation("Including custom thumbnail for post {PostId}: {ThumbnailUrl}",
-                post.Id, post.SelectedThumbnailUrl);
+            thumbnailBytes = await FetchThumbnailBytesAsync(post.SelectedThumbnailUrl, cancellationToken);
+            if (thumbnailBytes != null)
+            {
+                _logger.LogInformation("Fetched thumbnail ({Size} bytes) for post {PostId}",
+                    thumbnailBytes.Length, post.Id);
+            }
         }
 
-        var content = new FormUrlEncodedContent(formData);
+        HttpContent content;
+        if (thumbnailBytes != null)
+        {
+            // Use multipart form data when we have a thumbnail to upload
+            var multipartContent = new MultipartFormDataContent();
+            multipartContent.Add(new StringContent(videoUrl), "file_url");
+            multipartContent.Add(new StringContent(post.Content), "description");
+            multipartContent.Add(new StringContent(accessToken), "access_token");
+
+            // Add thumbnail as raw file data
+            var thumbnailContent = new ByteArrayContent(thumbnailBytes);
+            thumbnailContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/jpeg");
+            multipartContent.Add(thumbnailContent, "thumb", "thumbnail.jpg");
+
+            content = multipartContent;
+            _logger.LogInformation("Including custom thumbnail as multipart upload for post {PostId}", post.Id);
+        }
+        else
+        {
+            // Use form-urlencoded when no thumbnail
+            content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["file_url"] = videoUrl,
+                ["description"] = post.Content,
+                ["access_token"] = accessToken
+            });
+        }
 
         _logger.LogInformation("Calling Meta Video API: POST {Url} for post {PostId}", url, post.Id);
         _logger.LogInformation("Video URL being sent to Meta: {VideoUrl}", videoUrl);
@@ -306,6 +329,41 @@ public class FacebookPagePublisher : IPostPublisher
             post.Id, response.StatusCode, responseBody);
 
         return ParseMetaResponse(post.Id, response, responseBody);
+    }
+
+    private async Task<byte[]?> FetchThumbnailBytesAsync(string thumbnailUrl, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // If it's a local file path (for frames stored locally)
+            if (thumbnailUrl.Contains("/api/media/frames/"))
+            {
+                var filename = thumbnailUrl.Split("/api/media/frames/").Last();
+                var framesDirectory = Path.Combine(Directory.GetCurrentDirectory(), "uploads", "frames");
+                var framePath = Path.Combine(framesDirectory, filename);
+
+                if (File.Exists(framePath))
+                {
+                    return await File.ReadAllBytesAsync(framePath, cancellationToken);
+                }
+            }
+
+            // Otherwise fetch from URL
+            var response = await _httpClient.GetAsync(thumbnailUrl, cancellationToken);
+            if (response.IsSuccessStatusCode)
+            {
+                return await response.Content.ReadAsByteArrayAsync(cancellationToken);
+            }
+
+            _logger.LogWarning("Failed to fetch thumbnail from {Url}: {StatusCode}",
+                thumbnailUrl, response.StatusCode);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error fetching thumbnail from {Url}", thumbnailUrl);
+            return null;
+        }
     }
 
     private PublishResult ParseMetaResponse(Guid postId, HttpResponseMessage response, string responseBody)
