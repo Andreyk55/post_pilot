@@ -231,6 +231,33 @@
   height: 20px;
 }
 
+/* Custom Thumbnail for Video */
+.post-media .custom-thumbnail {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.post-media .custom-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.post-media .custom-thumbnail .video-badge {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  padding: 1px 4px;
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 2px;
+  font-size: 0.5rem;
+  font-weight: 600;
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 /* Expand Indicator */
 .post-expand-indicator {
   flex-shrink: 0;

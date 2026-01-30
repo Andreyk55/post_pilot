@@ -155,6 +155,8 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
             text={content}
             onApplyText={(text) => setContent(text)}
             onAppendText={(text) => setContent((prev) => prev + text)}
+            mediaUrl={mediaUrl}
+            mediaType={mediaType}
           />
         </div>
 

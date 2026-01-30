@@ -185,10 +185,17 @@ export function PostItem({ post, onDelete, cachedDetails, onDetailsFetched }: Po
             />
           )}
           {post.mediaUrl && getEffectiveMediaType(post) === 'Video' && (
-            <VideoThumbnail
-              videoUrl={getMediaUrl(post.mediaUrl) || ''}
-              className="post-video-thumbnail"
-            />
+            post.selectedThumbnailUrl ? (
+              <div className="post-video-thumbnail custom-thumbnail">
+                <img src={post.selectedThumbnailUrl} alt="Video thumbnail" />
+                <span className="video-badge">Video</span>
+              </div>
+            ) : (
+              <VideoThumbnail
+                videoUrl={getMediaUrl(post.mediaUrl) || ''}
+                className="post-video-thumbnail"
+              />
+            )
           )}
         </div>
 

@@ -209,6 +209,9 @@ namespace PostPilot.Api.Migrations
                     b.Property<DateTime>("ScheduledAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("SelectedThumbnailUrl")
+                        .HasColumnType("text");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("text");

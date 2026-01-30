@@ -23,4 +23,33 @@ public interface IGeminiClient
         string text,
         string language,
         CancellationToken cancellationToken = default);
+
+    // Vision API methods for media AI
+
+    /// <summary>
+    /// Generates caption ideas for an image, considering platform and existing post text.
+    /// </summary>
+    Task<AiMediaCaptionIdeasResponse> GenerateImageCaptionIdeasAsync(
+        byte[] imageBytes,
+        string imageMimeType,
+        AiPlatform platform,
+        string? existingText,
+        string language,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Performs a quality check on an image, returning a score and issues.
+    /// </summary>
+    Task<AiImageQualityCheckResponse> CheckImageQualityAsync(
+        byte[] imageBytes,
+        string imageMimeType,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Generates alt text for an image.
+    /// </summary>
+    Task<AiAltTextResponse> GenerateAltTextAsync(
+        byte[] imageBytes,
+        string imageMimeType,
+        CancellationToken cancellationToken = default);
 }

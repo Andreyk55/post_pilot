@@ -239,5 +239,24 @@ public class Startup
 
         // Rate limiter (in-memory for MVP)
         services.AddSingleton<IAiRateLimiter, InMemoryAiRateLimiter>();
+
+        // Media AI services
+        services.AddHttpClient<IAssetResolver, AssetResolver>();
+
+        // Video frame extractor: Use no-op in Lambda (client-side extraction),
+        // FFmpeg for local development (if available)
+        if (IsRunningInLambda())
+        {
+            // Lambda: No FFmpeg available, use no-op extractor
+            // Client should extract frames and submit via POST /api/ai/media/thumbnails
+            services.AddSingleton<IVideoFrameExtractor, NoOpVideoFrameExtractor>();
+        }
+        else
+        {
+            // Local development: Try FFmpeg if available
+            services.AddSingleton<IVideoFrameExtractor, FFmpegVideoFrameExtractor>();
+        }
+
+        services.AddScoped<IMediaAiService, MediaAiService>();
     }
 }

@@ -336,7 +336,8 @@ public record PostDto(
     DateTime? PublishedAt,
     string? ExternalPostId,
     string? ErrorMessage,
-    int RetryCount
+    int RetryCount,
+    string? SelectedThumbnailUrl
 )
 {
     public static PostDto FromEntity(Post post) => new(
@@ -354,6 +355,7 @@ public record PostDto(
         post.PublishedAt,
         post.ExternalPostId,
         post.ErrorMessage,
-        post.RetryCount
+        post.RetryCount,
+        post.SelectedThumbnailUrl
     );
 }

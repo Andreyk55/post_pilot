@@ -106,6 +106,41 @@ backend/
 
 - .NET 10 SDK
 - PostgreSQL (localhost:5432)
+- FFmpeg (required for video AI features)
+
+#### Installing FFmpeg
+
+FFmpeg is required for video thumbnail extraction and video caption AI features.
+
+**Windows:**
+```bash
+# Using Chocolatey
+choco install ffmpeg
+
+# Using winget
+winget install FFmpeg
+
+# Or download from https://ffmpeg.org/download.html and add to PATH
+```
+
+**macOS:**
+```bash
+# Using Homebrew
+brew install ffmpeg
+```
+
+**Linux (Ubuntu/Debian):**
+```bash
+sudo apt update
+sudo apt install ffmpeg
+```
+
+**Verify installation:**
+```bash
+ffmpeg -version
+```
+
+If FFmpeg is not available, video AI features (thumbnail suggestions and video caption ideas) will return a 503 error with a message indicating FFmpeg is required.
 
 ### Running Locally
 

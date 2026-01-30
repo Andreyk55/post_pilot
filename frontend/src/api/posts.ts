@@ -22,6 +22,7 @@ export interface Post {
   externalPostId: string | null
   errorMessage: string | null
   retryCount: number
+  selectedThumbnailUrl: string | null
 }
 
 export interface CreatePostRequest {

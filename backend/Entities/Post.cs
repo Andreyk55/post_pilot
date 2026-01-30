@@ -63,6 +63,12 @@ public class Post
     /// </summary>
     public string? ScheduleArn { get; set; }
 
+    /// <summary>
+    /// Custom thumbnail URL for video posts (user-selected from AI-suggested frames).
+    /// If null, uses the default first frame.
+    /// </summary>
+    public string? SelectedThumbnailUrl { get; set; }
+
     // Navigation property
     public ConnectedPage? TargetPage { get; set; }
 }
