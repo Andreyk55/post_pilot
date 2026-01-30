@@ -35,16 +35,29 @@ export async function extractVideoFrames(
     video.muted = true
     video.preload = 'metadata'
 
-    // Handle CORS issues gracefully
-    video.onerror = (e) => {
-      console.error('Video load error:', e)
-      reject(new Error('Failed to load video. The video may not support cross-origin access.'))
+    const cleanup = () => {
+      video.onerror = null
+      video.onloadedmetadata = null
+      video.src = ''
+      video.load()
+    }
+
+    video.onerror = () => {
+      const error = video.error
+      // Ignore errors from cleanup (when we set src to '')
+      if (!video.src || video.src === window.location.href) {
+        return
+      }
+      console.error('Video load error for URL:', videoUrl, 'Error code:', error?.code, 'Message:', error?.message)
+      cleanup()
+      reject(new Error(`Failed to load video: ${error?.message || 'Unknown error'}`))
     }
 
     video.onloadedmetadata = async () => {
       const duration = video.duration
 
       if (!duration || duration <= 0 || !isFinite(duration)) {
+        cleanup()
         reject(new Error('Invalid video duration'))
         return
       }
@@ -53,6 +66,7 @@ export async function extractVideoFrames(
       const ctx = canvas.getContext('2d')
 
       if (!ctx) {
+        cleanup()
         reject(new Error('Failed to create canvas context'))
         return
       }
@@ -95,8 +109,7 @@ export async function extractVideoFrames(
       }
 
       // Clean up
-      video.src = ''
-      video.load()
+      cleanup()
 
       if (frames.length === 0) {
         reject(new Error('Failed to extract any frames from video'))
