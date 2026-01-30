@@ -471,10 +471,6 @@ export function AiAssistPanel({
       {/* Media Tab Content */}
       {activeTab === 'media' && (
         <>
-          {!hasMedia && (
-            <div className="ai-empty-state">Add media to enable media AI features</div>
-          )}
-
           {hasMedia && (
             <div className="ai-media-info">
               <span className={`media-type-indicator ${isImage ? 'image' : 'video'}`}>
@@ -484,46 +480,51 @@ export function AiAssistPanel({
             </div>
           )}
 
-          <div className="ai-actions">
-            {isImage && (
-              <>
-                <button
-                  type="button"
-                  className="ai-action-btn"
-                  onClick={handleImageCaptionIdeas}
-                  disabled={!hasMedia || loading}
-                  title="Generate caption ideas based on image"
-                >
-                  Caption ideas
-                </button>
-                <button
-                  type="button"
-                  className="ai-action-btn"
-                  onClick={handleImageQualityCheck}
-                  disabled={!hasMedia || loading}
-                  title="Check image quality for social media"
-                >
-                  Quality check
-                </button>
-                <button
-                  type="button"
-                  className="ai-action-btn"
-                  onClick={handleAltText}
-                  disabled={!hasMedia || loading}
-                  title="Generate accessibility alt text"
-                >
-                  Alt text
-                </button>
-              </>
-            )}
+          {/* Image Features */}
+          {isImage && (
+            <div className="ai-actions">
+              <button
+                type="button"
+                className="ai-action-btn"
+                onClick={handleImageCaptionIdeas}
+                disabled={!hasMedia || loading}
+                title="Generate caption ideas based on image"
+              >
+                Caption ideas
+              </button>
+              <button
+                type="button"
+                className="ai-action-btn"
+                onClick={handleImageQualityCheck}
+                disabled={!hasMedia || loading}
+                title="Check image quality for social media"
+              >
+                Quality check
+              </button>
+              <button
+                type="button"
+                className="ai-action-btn"
+                onClick={handleAltText}
+                disabled={!hasMedia || loading}
+                title="Generate accessibility alt text"
+              >
+                Alt text
+              </button>
+            </div>
+          )}
 
-            {isVideo && (
-              <>
+          {/* Video Features - always show, disabled until video uploaded */}
+          {(!hasMedia || isVideo) && (
+            <>
+              {!isVideo && (
+                <div className="ai-empty-state">Upload a video to enable video AI features</div>
+              )}
+              <div className="ai-actions">
                 <button
                   type="button"
                   className="ai-action-btn"
                   onClick={handleVideoCaptionIdeas}
-                  disabled={!hasMedia || loading}
+                  disabled={!isVideo || loading}
                   title="Generate caption ideas based on video"
                 >
                   Caption ideas
@@ -532,14 +533,14 @@ export function AiAssistPanel({
                   type="button"
                   className="ai-action-btn"
                   onClick={handleThumbnailSuggest}
-                  disabled={!hasMedia || loading}
+                  disabled={!isVideo || loading}
                   title="Pick a thumbnail from video frames"
                 >
                   Pick thumbnail
                 </button>
-              </>
-            )}
-          </div>
+              </div>
+            </>
+          )}
         </>
       )}
 
