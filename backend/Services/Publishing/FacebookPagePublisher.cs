@@ -6,6 +6,7 @@ using PostPilot.Api.Entities;
 using PostPilot.Api.Enums;
 using PostPilot.Api.Services.Media;
 using PostPilot.Api.Services.Scheduling;
+using PostPilot.Api.Settings;
 
 namespace PostPilot.Api.Services.Publishing;
 
@@ -17,6 +18,7 @@ public class FacebookPagePublisher : IPostPublisher
     private readonly AppDbContext _dbContext;
     private readonly IPostScheduler _scheduler;
     private readonly IMediaService _mediaService;
+    private readonly FeatureSettings _featureSettings;
     private readonly HttpClient _httpClient;
     private readonly ILogger<FacebookPagePublisher> _logger;
 
@@ -59,12 +61,14 @@ public class FacebookPagePublisher : IPostPublisher
         AppDbContext dbContext,
         IPostScheduler scheduler,
         IMediaService mediaService,
+        FeatureSettings featureSettings,
         HttpClient httpClient,
         ILogger<FacebookPagePublisher> logger)
     {
         _dbContext = dbContext;
         _scheduler = scheduler;
         _mediaService = mediaService;
+        _featureSettings = featureSettings;
         _httpClient = httpClient;
         _logger = logger;
     }
@@ -287,8 +291,8 @@ public class FacebookPagePublisher : IPostPublisher
             ["access_token"] = accessToken
         };
 
-        // Add thumbnail URL if available
-        if (!string.IsNullOrEmpty(post.SelectedThumbnailUrl))
+        // Add thumbnail URL if available and feature is enabled
+        if (_featureSettings.EnableFacebookThumbnail && !string.IsNullOrEmpty(post.SelectedThumbnailUrl))
         {
             var thumbnailUrl = GetThumbnailUrl(post.SelectedThumbnailUrl);
             if (!string.IsNullOrEmpty(thumbnailUrl))
@@ -297,6 +301,11 @@ public class FacebookPagePublisher : IPostPublisher
                 _logger.LogInformation("Including custom thumbnail URL for post {PostId}: {ThumbnailUrl}",
                     post.Id, thumbnailUrl);
             }
+        }
+        else if (!string.IsNullOrEmpty(post.SelectedThumbnailUrl))
+        {
+            _logger.LogDebug("Facebook thumbnail disabled by configuration. Thumbnail URL for post {PostId} will only be used in app UI.",
+                post.Id);
         }
 
         var content = new FormUrlEncodedContent(parameters);
