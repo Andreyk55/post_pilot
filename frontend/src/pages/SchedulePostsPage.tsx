@@ -70,6 +70,7 @@ export function SchedulePostsPage() {
     targetPageId?: string
     mediaUrl?: string
     mediaType?: MediaType
+    selectedThumbnailUrl?: string
   }) => {
     try {
       const scheduledAt = new Date(`${formData.scheduledDate}T${formData.scheduledTime}`).toISOString()
@@ -89,6 +90,8 @@ export function SchedulePostsPage() {
           // Include media URL and type if media was uploaded
           mediaUrl: formData.mediaUrl,
           mediaType: formData.mediaType,
+          // Include selected thumbnail URL for video posts
+          selectedThumbnailUrl: formData.selectedThumbnailUrl,
         }
         const post = await postsApi.create(request)
         newPosts.push(post)

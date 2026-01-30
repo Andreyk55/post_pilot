@@ -217,10 +217,18 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
 
                 {post.mediaUrl && mediaType === 'Video' && (
                   <div className="post-media-preview">
-                    <VideoThumbnail
-                      videoUrl={getMediaUrl(post.mediaUrl) || ''}
-                      className="media-thumbnail"
-                    />
+                    {post.selectedThumbnailUrl ? (
+                      <img
+                        src={post.selectedThumbnailUrl}
+                        alt="Video thumbnail"
+                        className="media-thumbnail"
+                      />
+                    ) : (
+                      <VideoThumbnail
+                        videoUrl={getMediaUrl(post.mediaUrl) || ''}
+                        className="media-thumbnail"
+                      />
+                    )}
                     <span className="media-indicator">
                       <VideoIcon />
                       Video

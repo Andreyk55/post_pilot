@@ -32,6 +32,7 @@ export interface CreatePostRequest {
   platform: Platform
   scheduledAt: string
   targetPageId?: string | null
+  selectedThumbnailUrl?: string | null
 }
 
 export interface PaginatedResponse<T> {

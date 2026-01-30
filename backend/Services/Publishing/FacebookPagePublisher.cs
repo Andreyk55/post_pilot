@@ -279,12 +279,22 @@ public class FacebookPagePublisher : IPostPublisher
         // Use the videos endpoint for video uploads
         var url = $"{GraphApiBaseUrl}/{pageId}/videos";
 
-        var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        var formData = new Dictionary<string, string>
         {
             ["file_url"] = videoUrl,          // URL where Meta will fetch the video
             ["description"] = post.Content,    // Video description (similar to message for photos)
             ["access_token"] = accessToken
-        });
+        };
+
+        // Add custom thumbnail if user selected one
+        if (!string.IsNullOrEmpty(post.SelectedThumbnailUrl))
+        {
+            formData["thumb"] = post.SelectedThumbnailUrl;
+            _logger.LogInformation("Including custom thumbnail for post {PostId}: {ThumbnailUrl}",
+                post.Id, post.SelectedThumbnailUrl);
+        }
+
+        var content = new FormUrlEncodedContent(formData);
 
         _logger.LogInformation("Calling Meta Video API: POST {Url} for post {PostId}", url, post.Id);
         _logger.LogInformation("Video URL being sent to Meta: {VideoUrl}", videoUrl);

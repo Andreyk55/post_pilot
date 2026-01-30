@@ -15,6 +15,7 @@ interface SchedulePostProps {
     targetPageId?: string
     mediaUrl?: string
     mediaType?: MediaType
+    selectedThumbnailUrl?: string
   }) => void
 }
 
@@ -39,6 +40,7 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
   const [uploadKey, setUploadKey] = useState(0)
   const [isUploading, setIsUploading] = useState(false)
   const [aiPanelKey, setAiPanelKey] = useState(0)
+  const [selectedThumbnailUrl, setSelectedThumbnailUrl] = useState<string | null>(null)
 
   // Load connected Facebook Pages on mount
   useEffect(() => {
@@ -98,6 +100,7 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
       targetPageId: isFacebookSelected ? selectedPageId : undefined,
       mediaUrl: mediaUrl || undefined,
       mediaType: mediaType || undefined,
+      selectedThumbnailUrl: selectedThumbnailUrl || undefined,
     })
 
     // Reset form
@@ -110,6 +113,7 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
     setMediaType(null)
     setUploadError(null)
     setUploadKey(k => k + 1)
+    setSelectedThumbnailUrl(null)
   }
 
   // Form is valid if there's content OR media, plus date/time/platform, and not uploading
@@ -132,6 +136,7 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
     setUploadError(null)
     setUploadKey(k => k + 1)
     setAiPanelKey(k => k + 1)
+    setSelectedThumbnailUrl(null)
   }
 
   return (
@@ -157,6 +162,7 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
             onAppendText={(text) => setContent((prev) => prev + text)}
             mediaUrl={mediaUrl}
             mediaType={mediaType}
+            onSelectThumbnail={(url) => setSelectedThumbnailUrl(url)}
           />
         </div>
 

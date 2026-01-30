@@ -202,6 +202,7 @@ public class PostsController : ControllerBase
             Platform = request.Platform,
             ScheduledAt = request.ScheduledAt,
             TargetPageId = request.TargetPageId,
+            SelectedThumbnailUrl = request.SelectedThumbnailUrl,
             Status = PostStatus.Pending,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
@@ -297,7 +298,8 @@ public record CreatePostRequest(
     MediaType? MediaType,
     Platform Platform,
     DateTime ScheduledAt,
-    Guid? TargetPageId = null
+    Guid? TargetPageId = null,
+    string? SelectedThumbnailUrl = null
 );
 
 public record UpdatePostRequest(
