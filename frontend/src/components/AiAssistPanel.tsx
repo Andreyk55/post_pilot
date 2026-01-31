@@ -16,7 +16,7 @@ import {
   type AiGeneratedVariant,
   type AiGenerateVariantsRequest,
 } from '../api/ai'
-import { voiceProfileApi, type VoiceProfileSummary, type VoiceProfile } from '../api/voiceProfiles'
+import { type VoiceProfileSummary } from '../api/voiceProfiles'
 import { getMediaUrl, type MediaType } from '../api/media'
 import { extractVideoFrames, extractSingleFrame } from '../utils/videoFrameExtractor'
 import './AiAssistPanel.css'
@@ -152,6 +152,13 @@ export function AiAssistPanel({
   // Media tab state
   const [mediaResult, setMediaResult] = useState<MediaResult | null>(null)
   const [altTextCopied, setAltTextCopied] = useState(false)
+
+  // Clear selected voice profile if it's no longer available (e.g., deleted)
+  useEffect(() => {
+    if (selectedVoiceProfileId && !voiceProfiles.some(p => p.id === selectedVoiceProfileId)) {
+      setSelectedVoiceProfileId(null)
+    }
+  }, [voiceProfiles, selectedVoiceProfileId])
 
   const handleVoiceProfileChange = (value: string) => {
     if (value === 'create') {

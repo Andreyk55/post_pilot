@@ -36,7 +36,7 @@ public class AiVoiceProfileController : ControllerBase
     public async Task<ActionResult<List<VoiceProfileSummary>>> GetProfiles(CancellationToken cancellationToken)
     {
         var profiles = await _db.AiVoiceProfiles
-            .Where(p => p.UserId == CurrentUserId)
+            .Where(p => p.UserId == CurrentUserId && !p.IsDeleted)
             .OrderBy(p => p.Name)
             .Select(p => new VoiceProfileSummary(p.Id, p.Name, p.UpdatedAt))
             .ToListAsync(cancellationToken);
@@ -53,7 +53,7 @@ public class AiVoiceProfileController : ControllerBase
     public async Task<ActionResult<VoiceProfileResponse>> GetProfile(Guid id, CancellationToken cancellationToken)
     {
         var profile = await _db.AiVoiceProfiles
-            .FirstOrDefaultAsync(p => p.Id == id && p.UserId == CurrentUserId, cancellationToken);
+            .FirstOrDefaultAsync(p => p.Id == id && p.UserId == CurrentUserId && !p.IsDeleted, cancellationToken);
 
         if (profile == null)
         {
@@ -116,7 +116,7 @@ public class AiVoiceProfileController : ControllerBase
         CancellationToken cancellationToken)
     {
         var profile = await _db.AiVoiceProfiles
-            .FirstOrDefaultAsync(p => p.Id == id && p.UserId == CurrentUserId, cancellationToken);
+            .FirstOrDefaultAsync(p => p.Id == id && p.UserId == CurrentUserId && !p.IsDeleted, cancellationToken);
 
         if (profile == null)
         {
@@ -152,20 +152,33 @@ public class AiVoiceProfileController : ControllerBase
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> DeleteProfile(Guid id, CancellationToken cancellationToken)
     {
         var profile = await _db.AiVoiceProfiles
-            .FirstOrDefaultAsync(p => p.Id == id && p.UserId == CurrentUserId, cancellationToken);
+            .FirstOrDefaultAsync(p => p.Id == id && p.UserId == CurrentUserId && !p.IsDeleted, cancellationToken);
 
         if (profile == null)
         {
             return NotFound();
         }
 
-        _db.AiVoiceProfiles.Remove(profile);
+        // Check if profile is currently in use
+        if (await IsVoiceProfileInUseAsync(id, CurrentUserId, cancellationToken))
+        {
+            return Conflict(new
+            {
+                error = "VOICE_PROFILE_IN_USE",
+                message = "This voice profile is used by one or more posts/settings. Remove it first."
+            });
+        }
+
+        // Soft delete the profile
+        profile.IsDeleted = true;
+        profile.DeletedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Deleted voice profile {ProfileId} for user {UserId}", profile.Id, CurrentUserId);
+        _logger.LogInformation("Soft deleted voice profile {ProfileId} for user {UserId}", profile.Id, CurrentUserId);
 
         return NoContent();
     }
@@ -182,6 +195,19 @@ public class AiVoiceProfileController : ControllerBase
             profile.CreatedAt,
             profile.UpdatedAt
         );
+
+    private async Task<bool> IsVoiceProfileInUseAsync(Guid profileId, Guid userId, CancellationToken cancellationToken)
+    {
+        // TODO: Check if voiceProfileId is referenced in:
+        // - User settings/preferences (if they exist)
+        // - ScheduledPosts (if they store voiceProfileId)
+        // - Drafts (if they exist)
+        // - Any other persistent storage
+
+        // For now, since voiceProfileId is only used in transient AI requests,
+        // it's not persistently stored, so profiles are never "in use"
+        return false;
+    }
 
     private static Dictionary<string, string[]> ValidateRequest(
         string name,
