@@ -97,7 +97,8 @@ public class GeminiClient : IGeminiClient
         }
 
         var prompt = BuildPreFlightPrompt(platform, text, language);
-        var responseText = await CallGeminiAsync(prompt, cancellationToken);
+        // Use higher token limit to avoid truncation of issues array
+        var responseText = await CallGeminiAsync(prompt, cancellationToken, maxOutputTokens: 3072);
         var result = ParsePreFlightResponse(responseText);
 
         _cache.Set(cacheKey, result, CacheDuration);
@@ -505,9 +506,10 @@ Check for:
 
 Rules:
 - Score 0-100 based on overall quality
-- Return 3-8 issues, sorted by severity (error > warning > info)
+- Return 3-6 issues maximum, sorted by severity (error > warning > info)
 - severity must be one of: ""info"", ""warning"", ""error""
-- suggestedFix can be null if no specific fix
+- Keep messages under 80 characters
+- Keep suggestedFix under 100 characters, or use null if no specific fix
 - Output ONLY the JSON, no other text";
     }
 
@@ -904,8 +906,22 @@ Rules:
     private static AiPreFlightResponse ParsePreFlightResponse(string responseText)
     {
         var json = ExtractJson(responseText);
-        var parsed = JsonSerializer.Deserialize<PreFlightJsonResponse>(json, JsonOptions)
-            ?? throw new GeminiApiException("Failed to parse pre-flight response", 500);
+        PreFlightJsonResponse? parsed = null;
+
+        try
+        {
+            parsed = JsonSerializer.Deserialize<PreFlightJsonResponse>(json, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            // JSON might be truncated due to token limits - try to salvage
+            parsed = TrySalvagePartialPreFlightJson(json);
+        }
+
+        if (parsed == null)
+        {
+            throw new GeminiApiException("Failed to parse pre-flight response", 500);
+        }
 
         var issues = parsed.Issues
             .Select(i => new AiPreFlightIssue(
@@ -915,6 +931,123 @@ Rules:
             .ToList();
 
         return new AiPreFlightResponse(AiTextAction.PreFlight, parsed.Score, issues);
+    }
+
+    /// <summary>
+    /// Attempts to salvage a truncated pre-flight JSON response by extracting complete issue objects.
+    /// </summary>
+    private static PreFlightJsonResponse? TrySalvagePartialPreFlightJson(string json)
+    {
+        try
+        {
+            var issues = new List<PreFlightIssueItem>();
+            var score = 0;
+
+            // Try to extract the score first
+            var scoreMatch = System.Text.RegularExpressions.Regex.Match(json, @"""score""\s*:\s*(\d+)");
+            if (scoreMatch.Success)
+            {
+                score = int.Parse(scoreMatch.Groups[1].Value);
+            }
+
+            // Find the issues array start
+            var issuesStart = json.IndexOf("\"issues\"", StringComparison.OrdinalIgnoreCase);
+            if (issuesStart < 0)
+            {
+                // No issues array found - if we have a score, return empty issues
+                if (scoreMatch.Success)
+                {
+                    return new PreFlightJsonResponse { Score = score, Issues = issues };
+                }
+                return null;
+            }
+
+            var arrayStart = json.IndexOf('[', issuesStart);
+            if (arrayStart < 0) return null;
+
+            var currentPos = arrayStart + 1;
+
+            // Try to extract each complete issue object
+            while (currentPos < json.Length)
+            {
+                var objectStart = json.IndexOf('{', currentPos);
+                if (objectStart < 0) break;
+
+                // Find the matching closing brace by counting braces
+                var braceCount = 1;
+                var objectEnd = -1;
+                var inString = false;
+                var escapeNext = false;
+
+                for (var i = objectStart + 1; i < json.Length; i++)
+                {
+                    var c = json[i];
+
+                    if (escapeNext)
+                    {
+                        escapeNext = false;
+                        continue;
+                    }
+
+                    if (c == '\\' && inString)
+                    {
+                        escapeNext = true;
+                        continue;
+                    }
+
+                    if (c == '"')
+                    {
+                        inString = !inString;
+                        continue;
+                    }
+
+                    if (!inString)
+                    {
+                        if (c == '{') braceCount++;
+                        else if (c == '}')
+                        {
+                            braceCount--;
+                            if (braceCount == 0)
+                            {
+                                objectEnd = i;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (objectEnd < 0) break; // Incomplete object - stop here
+
+                // Extract and try to parse this object
+                var objectJson = json.Substring(objectStart, objectEnd - objectStart + 1);
+                try
+                {
+                    var issue = JsonSerializer.Deserialize<PreFlightIssueItem>(objectJson, JsonOptions);
+                    if (issue != null && !string.IsNullOrWhiteSpace(issue.Message))
+                    {
+                        issues.Add(issue);
+                    }
+                }
+                catch
+                {
+                    // Skip this object if it can't be parsed
+                }
+
+                currentPos = objectEnd + 1;
+            }
+
+            // Return result if we have a score (even with no issues) or if we have issues
+            if (scoreMatch.Success || issues.Count > 0)
+            {
+                return new PreFlightJsonResponse { Score = score, Issues = issues };
+            }
+        }
+        catch
+        {
+            // If salvage fails, return null
+        }
+
+        return null;
     }
 
     private static string ExtractJson(string text)

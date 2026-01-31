@@ -665,6 +665,88 @@ public class GeminiClientTests
             _client.GenerateCreatorVariantsAsync(request));
     }
 
+    [Fact]
+    public async Task PreFlightCheckAsync_TruncatedJson_SalvagesPartialIssues()
+    {
+        // Simulate truncated JSON with 2 complete issues and 1 incomplete
+        var truncatedJson = @"{
+            ""score"": 75,
+            ""issues"": [
+                { ""severity"": ""Warning"", ""message"": ""Post is quite long"", ""suggestedFix"": ""Consider shortening"" },
+                { ""severity"": ""Info"", ""message"": ""No hashtags detected"", ""suggestedFix"": ""Add relevant hashtags"" },
+                { ""severity"": ""Error"", ""message"": ""Missing call to action"", ""suggestedFix"": ""Add a CTA like 'Learn more at";  // Truncated
+
+        var geminiResponse = new
+        {
+            candidates = new[]
+            {
+                new
+                {
+                    content = new
+                    {
+                        parts = new[]
+                        {
+                            new { text = truncatedJson }
+                        }
+                    }
+                }
+            }
+        };
+
+        SetupHttpResponse(HttpStatusCode.OK, JsonSerializer.Serialize(geminiResponse));
+
+        var result = await _client.PreFlightCheckAsync(
+            AiPlatform.Facebook,
+            "This is a test post without hashtags or CTA",
+            "en");
+
+        // Should salvage the score and 2 complete issues
+        Assert.Equal(75, result.Score);
+        Assert.Equal(2, result.Issues.Count);
+        Assert.Equal(AiIssueSeverity.Warning, result.Issues[0].Severity);
+        Assert.Equal("Post is quite long", result.Issues[0].Message);
+        Assert.Equal(AiIssueSeverity.Info, result.Issues[1].Severity);
+        Assert.Equal("No hashtags detected", result.Issues[1].Message);
+    }
+
+    [Fact]
+    public async Task PreFlightCheckAsync_TruncatedJsonScoreOnly_ReturnsScoreWithNoIssues()
+    {
+        // Simulate truncated JSON with only the score complete
+        var truncatedJson = @"{
+            ""score"": 90,
+            ""issues"": [
+                { ""severity"": ""Info"", ""message"": ""Trun";  // Truncated immediately
+
+        var geminiResponse = new
+        {
+            candidates = new[]
+            {
+                new
+                {
+                    content = new
+                    {
+                        parts = new[]
+                        {
+                            new { text = truncatedJson }
+                        }
+                    }
+                }
+            }
+        };
+
+        SetupHttpResponse(HttpStatusCode.OK, JsonSerializer.Serialize(geminiResponse));
+
+        var result = await _client.PreFlightCheckAsync(
+            AiPlatform.Facebook,
+            "Short test post",
+            "en");
+
+        // Should salvage the score with empty issues
+        Assert.Equal(90, result.Score);
+        Assert.Empty(result.Issues);
+    }
+
     private void SetupHttpResponse(HttpStatusCode statusCode, string content)
     {
         _httpHandlerMock
