@@ -1,5 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using PostPilot.Api.Data;
 using PostPilot.Api.DTOs;
+using PostPilot.Api.Entities;
 using PostPilot.Api.Services.Ai;
 
 namespace PostPilot.Api.Controllers;
@@ -10,6 +13,7 @@ public class AiTextController : ControllerBase
 {
     private readonly IGeminiClient _geminiClient;
     private readonly IAiRateLimiter _rateLimiter;
+    private readonly AppDbContext _db;
     private readonly ILogger<AiTextController> _logger;
 
     // TODO: Replace with real user authentication
@@ -21,10 +25,12 @@ public class AiTextController : ControllerBase
     public AiTextController(
         IGeminiClient geminiClient,
         IAiRateLimiter rateLimiter,
+        AppDbContext db,
         ILogger<AiTextController> logger)
     {
         _geminiClient = geminiClient;
         _rateLimiter = rateLimiter;
+        _db = db;
         _logger = logger;
     }
 
@@ -64,6 +70,20 @@ public class AiTextController : ControllerBase
 
         try
         {
+            // Load voice profile if provided
+            AiVoiceProfile? voiceProfile = null;
+            if (request.VoiceProfileId.HasValue)
+            {
+                voiceProfile = await _db.AiVoiceProfiles
+                    .FirstOrDefaultAsync(p => p.Id == request.VoiceProfileId.Value && p.UserId == CurrentUserId, cancellationToken);
+
+                if (voiceProfile == null)
+                {
+                    _logger.LogWarning("Voice profile {ProfileId} not found for user {UserId}", request.VoiceProfileId, CurrentUserId);
+                    // Continue without voice profile rather than failing
+                }
+            }
+
             return request.Action switch
             {
                 AiTextAction.Polish or AiTextAction.RewriteTone or AiTextAction.Shorten or AiTextAction.Expand =>
@@ -73,6 +93,7 @@ public class AiTextController : ControllerBase
                         request.Text,
                         request.Tone,
                         request.Language,
+                        voiceProfile,
                         cancellationToken)),
 
                 AiTextAction.Hashtags =>
@@ -80,6 +101,7 @@ public class AiTextController : ControllerBase
                         request.Platform,
                         request.Text,
                         request.Language,
+                        voiceProfile,
                         cancellationToken)),
 
                 AiTextAction.PreFlight =>
@@ -87,6 +109,7 @@ public class AiTextController : ControllerBase
                         request.Platform,
                         request.Text,
                         request.Language,
+                        voiceProfile,
                         cancellationToken)),
 
                 _ => BadRequest(new { error = $"Unknown action: {request.Action}" })
@@ -159,7 +182,20 @@ public class AiTextController : ControllerBase
 
         try
         {
-            var result = await _geminiClient.GenerateCreatorVariantsAsync(request, cancellationToken);
+            // Load voice profile if provided
+            AiVoiceProfile? voiceProfile = null;
+            if (request.VoiceProfileId.HasValue)
+            {
+                voiceProfile = await _db.AiVoiceProfiles
+                    .FirstOrDefaultAsync(p => p.Id == request.VoiceProfileId.Value && p.UserId == CurrentUserId, cancellationToken);
+
+                if (voiceProfile == null)
+                {
+                    _logger.LogWarning("Voice profile {ProfileId} not found for user {UserId}", request.VoiceProfileId, CurrentUserId);
+                }
+            }
+
+            var result = await _geminiClient.GenerateCreatorVariantsAsync(request, voiceProfile, cancellationToken);
             return Ok(result);
         }
         catch (GeminiApiException ex) when (ex.StatusCode == 429)

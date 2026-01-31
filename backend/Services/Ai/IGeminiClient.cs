@@ -1,4 +1,5 @@
 using PostPilot.Api.DTOs;
+using PostPilot.Api.Entities;
 
 namespace PostPilot.Api.Services.Ai;
 
@@ -10,18 +11,21 @@ public interface IGeminiClient
         string text,
         AiTone? tone,
         string language,
+        AiVoiceProfile? voiceProfile = null,
         CancellationToken cancellationToken = default);
 
     Task<AiHashtagsResponse> GenerateHashtagsAsync(
         AiPlatform platform,
         string text,
         string language,
+        AiVoiceProfile? voiceProfile = null,
         CancellationToken cancellationToken = default);
 
     Task<AiPreFlightResponse> RunPreFlightCheckAsync(
         AiPlatform platform,
         string text,
         string language,
+        AiVoiceProfile? voiceProfile = null,
         CancellationToken cancellationToken = default);
 
     // Vision API methods for media AI
@@ -58,5 +62,6 @@ public interface IGeminiClient
     /// </summary>
     Task<AiGenerateVariantsResponse> GenerateCreatorVariantsAsync(
         AiGenerateVariantsRequest request,
+        AiVoiceProfile? voiceProfile = null,
         CancellationToken cancellationToken = default);
 }

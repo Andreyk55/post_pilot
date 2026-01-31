@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<ConnectedPage> ConnectedPages => Set<ConnectedPage>();
     public DbSet<ConnectedInstagramAccount> ConnectedInstagramAccounts => Set<ConnectedInstagramAccount>();
     public DbSet<MetaOAuthState> MetaOAuthStates => Set<MetaOAuthState>();
+    public DbSet<AiVoiceProfile> AiVoiceProfiles => Set<AiVoiceProfile>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -76,6 +77,18 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.State).IsUnique();
             entity.Property(e => e.State).IsRequired();
+        });
+
+        modelBuilder.Entity<AiVoiceProfile>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.UserId);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.DoRules).HasMaxLength(2000);
+            entity.Property(e => e.DontRules).HasMaxLength(2000);
+            entity.Property(e => e.BannedWords).HasMaxLength(1000);
+            entity.Property(e => e.ExamplePosts).HasMaxLength(5000);
         });
     }
 }

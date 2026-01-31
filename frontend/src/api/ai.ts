@@ -13,6 +13,7 @@ export interface AiTextRequest {
   text: string
   tone?: AiTone
   language?: string
+  voiceProfileId?: string | null
 }
 
 export interface AiTextVariant {
@@ -58,6 +59,7 @@ export interface AiGenerateVariantsRequest {
   numVariants?: number
   language?: string
   regenerateIndex?: number
+  voiceProfileId?: string | null
 }
 
 export interface AiGeneratedVariant {
@@ -95,57 +97,63 @@ export const aiApi = {
     return response.json()
   },
 
-  async polish(platform: AiPlatform, text: string): Promise<AiTextVariantsResponse> {
+  async polish(platform: AiPlatform, text: string, voiceProfileId?: string | null): Promise<AiTextVariantsResponse> {
     const response = await this.processText({
       action: 'Polish',
       platform,
       text,
+      voiceProfileId,
     })
     return response as AiTextVariantsResponse
   },
 
-  async rewriteTone(platform: AiPlatform, text: string, tone: AiTone): Promise<AiTextVariantsResponse> {
+  async rewriteTone(platform: AiPlatform, text: string, tone: AiTone, voiceProfileId?: string | null): Promise<AiTextVariantsResponse> {
     const response = await this.processText({
       action: 'RewriteTone',
       platform,
       text,
       tone,
+      voiceProfileId,
     })
     return response as AiTextVariantsResponse
   },
 
-  async shorten(platform: AiPlatform, text: string): Promise<AiTextVariantsResponse> {
+  async shorten(platform: AiPlatform, text: string, voiceProfileId?: string | null): Promise<AiTextVariantsResponse> {
     const response = await this.processText({
       action: 'Shorten',
       platform,
       text,
+      voiceProfileId,
     })
     return response as AiTextVariantsResponse
   },
 
-  async expand(platform: AiPlatform, text: string): Promise<AiTextVariantsResponse> {
+  async expand(platform: AiPlatform, text: string, voiceProfileId?: string | null): Promise<AiTextVariantsResponse> {
     const response = await this.processText({
       action: 'Expand',
       platform,
       text,
+      voiceProfileId,
     })
     return response as AiTextVariantsResponse
   },
 
-  async hashtags(platform: AiPlatform, text: string): Promise<AiHashtagsResponse> {
+  async hashtags(platform: AiPlatform, text: string, voiceProfileId?: string | null): Promise<AiHashtagsResponse> {
     const response = await this.processText({
       action: 'Hashtags',
       platform,
       text,
+      voiceProfileId,
     })
     return response as AiHashtagsResponse
   },
 
-  async preFlight(platform: AiPlatform, text: string): Promise<AiPreFlightResponse> {
+  async preFlight(platform: AiPlatform, text: string, voiceProfileId?: string | null): Promise<AiPreFlightResponse> {
     const response = await this.processText({
       action: 'PreFlight',
       platform,
       text,
+      voiceProfileId,
     })
     return response as AiPreFlightResponse
   },

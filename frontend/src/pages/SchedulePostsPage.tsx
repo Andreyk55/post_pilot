@@ -3,6 +3,8 @@ import { postsApi, type Post, type CreatePostRequest, type Platform } from '../a
 import type { MediaType } from '../api/media'
 import { SchedulePost } from '../components/SchedulePost'
 import { ScheduledPosts } from '../components/ScheduledPosts'
+import { VoiceProfileModal } from '../components/VoiceProfileModal'
+import { voiceProfileApi, type VoiceProfileSummary, type VoiceProfile } from '../api/voiceProfiles'
 import './SchedulePostsPage.css'
 
 const platformMap: Record<string, Platform> = {
@@ -23,8 +25,15 @@ export function SchedulePostsPage() {
   const [hasMore, setHasMore] = useState(true)
   const [totalCount, setTotalCount] = useState(0)
 
+  // Voice Profile state
+  const [voiceProfiles, setVoiceProfiles] = useState<VoiceProfileSummary[]>([])
+  const [voiceProfileModalOpen, setVoiceProfileModalOpen] = useState(false)
+  const [editingProfileId, setEditingProfileId] = useState<string | null>(null)
+  const [loadingProfiles, setLoadingProfiles] = useState(false)
+
   useEffect(() => {
     loadPosts()
+    loadVoiceProfiles()
   }, [])
 
   const loadPosts = async () => {
@@ -41,6 +50,18 @@ export function SchedulePostsPage() {
       console.error(err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadVoiceProfiles = async () => {
+    setLoadingProfiles(true)
+    try {
+      const profiles = await voiceProfileApi.getProfiles()
+      setVoiceProfiles(profiles)
+    } catch (err) {
+      console.error('Failed to load voice profiles:', err)
+    } finally {
+      setLoadingProfiles(false)
     }
   }
 
@@ -118,6 +139,21 @@ export function SchedulePostsPage() {
     }
   }
 
+  const handleProfileSaved = (profile: VoiceProfile) => {
+    // Refresh the list and select the saved profile
+    loadVoiceProfiles()
+  }
+
+  const handleProfileDeleted = () => {
+    // Refresh the list
+    loadVoiceProfiles()
+  }
+
+  const handleVoiceProfileModalOpen = (profileId?: string | null) => {
+    setEditingProfileId(profileId || null)
+    setVoiceProfileModalOpen(true)
+  }
+
   return (
     <div className="schedule-posts-page">
       <h1>Schedule Posts</h1>
@@ -126,7 +162,11 @@ export function SchedulePostsPage() {
       {error && <div className="error-message">{error}</div>}
 
       <div className="schedule-content">
-        <SchedulePost onSchedule={handleSchedule} />
+        <SchedulePost 
+          onSchedule={handleSchedule}
+          voiceProfiles={voiceProfiles}
+          onVoiceProfileModalOpen={handleVoiceProfileModalOpen}
+        />
         {loading ? (
           <div className="loading">Loading posts...</div>
         ) : (
@@ -140,6 +180,14 @@ export function SchedulePostsPage() {
           />
         )}
       </div>
+
+      <VoiceProfileModal
+        isOpen={voiceProfileModalOpen}
+        onClose={() => setVoiceProfileModalOpen(false)}
+        profileId={editingProfileId}
+        onSaved={handleProfileSaved}
+        onDeleted={handleProfileDeleted}
+      />
     </div>
   )
 }

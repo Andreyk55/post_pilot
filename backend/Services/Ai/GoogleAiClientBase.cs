@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Caching.Memory;
 using PostPilot.Api.DTOs;
+using PostPilot.Api.Entities;
 
 namespace PostPilot.Api.Services.Ai;
 
@@ -557,6 +558,276 @@ Rules:
 - Be objective and factual
 - If there's text in the image, include it in the description
 - Output ONLY the JSON, no other text";
+    }
+
+    #endregion
+
+    #region Voice Profile-Aware Prompt Builders
+
+    /// <summary>
+    /// Builds the voice profile section for prompts.
+    /// </summary>
+    protected static string BuildVoiceProfileSection(AiVoiceProfile? profile)
+    {
+        if (profile == null)
+            return "";
+
+        var sb = new StringBuilder();
+        sb.AppendLine("\n=== BRAND VOICE PROFILE ===");
+
+        if (!string.IsNullOrWhiteSpace(profile.Description))
+        {
+            sb.AppendLine($"Brand/Audience: {profile.Description}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(profile.DoRules))
+        {
+            sb.AppendLine("\nDO (style guidelines):");
+            foreach (var rule in profile.DoRules.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                sb.AppendLine($"- {rule.Trim()}");
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(profile.DontRules))
+        {
+            sb.AppendLine("\nDON'T (avoid these):");
+            foreach (var rule in profile.DontRules.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                sb.AppendLine($"- {rule.Trim()}");
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(profile.BannedWords))
+        {
+            var banned = profile.BannedWords
+                .Split(new[] { ',', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(w => w.Trim())
+                .Where(w => !string.IsNullOrWhiteSpace(w));
+            sb.AppendLine($"\nBANNED WORDS/PHRASES (never use): {string.Join(", ", banned)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(profile.ExamplePosts))
+        {
+            sb.AppendLine("\nEXAMPLE POSTS (match this style):");
+            var examples = profile.ExamplePosts.Split(new[] { "\n\n" }, StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < examples.Length && i < 3; i++)
+            {
+                sb.AppendLine($"Example {i + 1}: \"{examples[i].Trim()}\"");
+            }
+        }
+
+        sb.AppendLine("=== END VOICE PROFILE ===\n");
+        return sb.ToString();
+    }
+
+    protected static string BuildVariantsPromptWithVoice(AiTextAction action, AiPlatform platform, string text, AiTone? tone, string language, AiVoiceProfile? profile)
+    {
+        var basePrompt = BuildVariantsPrompt(action, platform, text, tone, language);
+        if (profile == null)
+            return basePrompt;
+
+        var voiceSection = BuildVoiceProfileSection(profile);
+
+        // Insert voice section after the first line of instructions
+        var insertPoint = basePrompt.IndexOf("\n\nPlatform:");
+        if (insertPoint > 0)
+        {
+            return basePrompt.Insert(insertPoint, voiceSection);
+        }
+
+        return voiceSection + basePrompt;
+    }
+
+    protected static string BuildHashtagsPromptWithVoice(AiPlatform platform, string text, string language, AiVoiceProfile? profile)
+    {
+        var basePrompt = BuildHashtagsPrompt(platform, text, language);
+        if (profile == null)
+            return basePrompt;
+
+        // For hashtags, add context about the brand/niche
+        var brandContext = "";
+        if (!string.IsNullOrWhiteSpace(profile.Description))
+        {
+            brandContext = $"\nBrand context: {profile.Description}\nConsider this niche/audience when selecting hashtags.";
+        }
+
+        var insertPoint = basePrompt.IndexOf("\n\nPost text:");
+        if (insertPoint > 0)
+        {
+            return basePrompt.Insert(insertPoint, brandContext);
+        }
+
+        return basePrompt;
+    }
+
+    protected static string BuildPreFlightPromptWithVoice(AiPlatform platform, string text, string language, AiVoiceProfile? profile)
+    {
+        var charLimit = platform == AiPlatform.X ? 280 : 2000;
+
+        var voiceSection = "";
+        var bannedWordsCheck = "";
+
+        if (profile != null)
+        {
+            voiceSection = BuildVoiceProfileSection(profile);
+
+            if (!string.IsNullOrWhiteSpace(profile.BannedWords))
+            {
+                var banned = profile.BannedWords
+                    .Split(new[] { ',', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(w => w.Trim().ToLowerInvariant())
+                    .Where(w => !string.IsNullOrWhiteSpace(w))
+                    .ToList();
+
+                if (banned.Count > 0)
+                {
+                    bannedWordsCheck = $"\n- Banned words used (severity: error) - check for: {string.Join(", ", banned)}";
+                }
+            }
+        }
+
+        return $@"You are a social media content reviewer. Analyze this post and provide a quality score and issues.
+{voiceSection}
+Platform: {platform}
+Language: {language}
+Character limit: {charLimit}
+Current length: {text.Length} characters
+
+Post text:
+{text}
+
+Return ONLY valid JSON in this exact format:
+{{
+  ""score"": 85,
+  ""issues"": [
+    {{ ""severity"": ""warning"", ""message"": ""..."", ""suggestedFix"": ""..."" }},
+    {{ ""severity"": ""info"", ""message"": ""..."", ""suggestedFix"": null }}
+  ]
+}}
+
+Check for:
+- Grammar and spelling errors (severity: error)
+- Character limit violations (severity: error){bannedWordsCheck}
+- Missing call-to-action (severity: info)
+- Readability issues (severity: warning)
+- Engagement optimization (severity: info)
+- Platform-specific best practices (severity: info)
+- Overuse of caps or punctuation (severity: warning)
+- Missing hashtags if appropriate (severity: info)
+{(profile != null ? "- Voice profile rule violations (severity: warning)" : "")}
+
+Rules:
+- Score 0-100 based on overall quality
+- Return 3-6 issues maximum, sorted by severity (error > warning > info)
+- severity must be one of: ""info"", ""warning"", ""error""
+- Keep messages under 80 characters
+- Keep suggestedFix under 100 characters, or use null if no specific fix
+{(profile != null && !string.IsNullOrWhiteSpace(profile.BannedWords) ? "- If banned words are found, flag as error and suggest alternatives" : "")}
+- Output ONLY the JSON, no other text";
+    }
+
+    protected static string BuildCreatorVariantsPromptWithVoice(AiGenerateVariantsRequest request, int numVariants, AiVoiceProfile? profile)
+    {
+        var maxLength = request.Platform == AiPlatform.X ? 280 : 2000;
+        var toneStr = request.Tone.ToString().ToLower();
+
+        var lengthGuidance = request.Length switch
+        {
+            AiLength.Short => "1-2 sentences (under 100 characters ideal, max 150)",
+            AiLength.Medium => "3-5 sentences (150-300 characters)",
+            AiLength.Long => "6-10 sentences (300-600 characters, or more for longer platforms)",
+            _ => "3-5 sentences"
+        };
+
+        var goalInstruction = request.Goal switch
+        {
+            AiGoal.Engage => "Create engaging content that encourages interaction, comments, and shares. Ask questions or spark discussion.",
+            AiGoal.Promote => "Create promotional content that highlights value, benefits, and drives action. Focus on offers or unique selling points.",
+            AiGoal.Announce => "Create announcement-style content that clearly communicates news, updates, or important information.",
+            AiGoal.Educate => "Create educational content that provides tips, insights, or valuable information. Position as helpful and informative.",
+            AiGoal.Story => "Create narrative-style content that tells a mini story or shares an experience. Use a personal, relatable voice.",
+            _ => "Create engaging social media content."
+        };
+
+        var includeInstructions = new List<string>();
+        if (request.IncludeEmojis)
+            includeInstructions.Add("Include relevant emojis naturally throughout the text");
+        else
+            includeInstructions.Add("Do NOT include any emojis");
+
+        if (request.IncludeHashtags)
+            includeInstructions.Add("Include 2-5 relevant hashtags at the end");
+        else
+            includeInstructions.Add("Do NOT include any hashtags");
+
+        if (request.IncludeCta)
+            includeInstructions.Add("Include a clear call-to-action (e.g., 'Learn more', 'Shop now', 'Comment below', 'Link in bio')");
+
+        if (request.IncludeQuestion)
+            includeInstructions.Add("End with an engaging question to encourage comments");
+
+        var includeSection = string.Join("\n- ", includeInstructions);
+
+        var voiceSection = BuildVoiceProfileSection(profile);
+        var voiceRulesReminder = profile != null
+            ? "\n- CRITICAL: Respect all voice profile rules, especially banned words\n- Match the style shown in example posts"
+            : "";
+
+        return $@"You are a social media content creator assistant. Generate {numVariants} distinct text variant(s) based on the following input and requirements.
+{voiceSection}
+INPUT TEXT:
+{request.InputText}
+
+REQUIREMENTS:
+- Platform: {request.Platform}
+- Goal: {request.Goal} - {goalInstruction}
+- Tone: {toneStr}
+- Length: {request.Length} - {lengthGuidance}
+- Language: {request.Language}
+- Max characters: {maxLength}
+
+INCLUDE/EXCLUDE:
+- {includeSection}
+
+Return ONLY valid JSON in this exact format:
+{{
+  ""variants"": [
+    {{ ""id"": ""v1"", ""text"": ""..."" }},
+    {{ ""id"": ""v2"", ""text"": ""..."" }},
+    {{ ""id"": ""v3"", ""text"": ""..."" }}
+  ]
+}}
+
+RULES:
+- Generate exactly {numVariants} variant(s)
+- Each variant must be unique and distinct in approach/wording
+- Each variant must respect the max character limit ({maxLength})
+- Maintain the core message from the input
+- Apply the {toneStr} tone consistently
+- Follow the {request.Goal} goal structure{voiceRulesReminder}
+- DO NOT include labels like ""Option 1:"" or ""Variant 1:"" in the text itself
+- Output plain text only (no markdown formatting)
+- Output ONLY the JSON, no other text";
+    }
+
+    #endregion
+
+    #region Cache Key Helpers with Voice Profile
+
+    protected static string BuildCacheKeyWithVoiceProfile(string action, string platform, string tone, string language, string text, AiVoiceProfile? profile)
+    {
+        var textHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)))[..16];
+        var voiceKey = profile != null ? $":{profile.Id}:{profile.UpdatedAt.Ticks}" : "";
+        return $"ai:{action}:{platform}:{tone}:{language}:{textHash}{voiceKey}";
+    }
+
+    protected static string BuildCreatorVariantsCacheKeyWithVoice(AiGenerateVariantsRequest request, AiVoiceProfile? profile)
+    {
+        var inputHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(request.InputText)))[..16];
+        var flags = $"{(request.IncludeEmojis ? "E" : "")}{(request.IncludeHashtags ? "H" : "")}{(request.IncludeCta ? "C" : "")}{(request.IncludeQuestion ? "Q" : "")}";
+        var voiceKey = profile != null ? $":{profile.Id}:{profile.UpdatedAt.Ticks}" : "";
+        return $"ai:CreatorVariants:{request.Platform}:{request.Goal}:{request.Tone}:{request.Length}:{flags}:{request.Language}:{inputHash}{voiceKey}";
     }
 
     #endregion

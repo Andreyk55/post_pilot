@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   aiApi,
   aiMediaApi,
@@ -16,6 +16,7 @@ import {
   type AiGeneratedVariant,
   type AiGenerateVariantsRequest,
 } from '../api/ai'
+import { voiceProfileApi, type VoiceProfileSummary, type VoiceProfile } from '../api/voiceProfiles'
 import { getMediaUrl, type MediaType } from '../api/media'
 import { extractVideoFrames, extractSingleFrame } from '../utils/videoFrameExtractor'
 import './AiAssistPanel.css'
@@ -30,6 +31,9 @@ interface AiAssistPanelProps {
   mediaUrl?: string | null
   mediaType?: MediaType | null
   onSelectThumbnail?: (thumbnailUrl: string) => void
+  // Voice Profile props
+  voiceProfiles: VoiceProfileSummary[]
+  onVoiceProfileModalOpen: (profileId?: string | null) => void
 }
 
 // Text Results
@@ -119,12 +123,17 @@ export function AiAssistPanel({
   mediaUrl,
   mediaType,
   onSelectThumbnail,
+  voiceProfiles,
+  onVoiceProfileModalOpen,
 }: AiAssistPanelProps) {
   const [activeTab, setActiveTab] = useState<TabType>('text')
   const [platform, setPlatform] = useState<AiPlatform>('Facebook')
   const [tone, setTone] = useState<AiTone>('Professional')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Voice Profile state
+  const [selectedVoiceProfileId, setSelectedVoiceProfileId] = useState<string | null>(null)
 
   // Text tab state - new generator controls
   const [goal, setGoal] = useState<AiGoal>('Engage')
@@ -143,6 +152,22 @@ export function AiAssistPanel({
   // Media tab state
   const [mediaResult, setMediaResult] = useState<MediaResult | null>(null)
   const [altTextCopied, setAltTextCopied] = useState(false)
+
+  const handleVoiceProfileChange = (value: string) => {
+    if (value === 'create') {
+      onVoiceProfileModalOpen(null)
+    } else if (value === 'none') {
+      setSelectedVoiceProfileId(null)
+    } else {
+      setSelectedVoiceProfileId(value)
+    }
+  }
+
+  const handleEditProfile = () => {
+    if (selectedVoiceProfileId) {
+      onVoiceProfileModalOpen(selectedVoiceProfileId)
+    }
+  }
 
   const isTextEmpty = !text.trim()
   const hasMedia = !!mediaUrl && mediaType && mediaType !== 'None'
@@ -211,7 +236,7 @@ export function AiAssistPanel({
   // Text actions
   const handleHashtags = () =>
     handleTextAction(async () => {
-      const response = await aiApi.hashtags(platform, text)
+      const response = await aiApi.hashtags(platform, text, selectedVoiceProfileId)
       setTextResult({ type: 'hashtags', hashtags: response.hashtags })
       // Select all hashtags by default
       setSelectedHashtags(new Set(response.hashtags))
@@ -241,7 +266,7 @@ export function AiAssistPanel({
 
   const handlePreFlight = () =>
     handleTextAction(async () => {
-      const response = await aiApi.preFlight(platform, text)
+      const response = await aiApi.preFlight(platform, text, selectedVoiceProfileId)
       setTextResult({ type: 'preflight', score: response.score, issues: response.issues })
     })
 
@@ -259,6 +284,7 @@ export function AiAssistPanel({
         includeCta,
         includeQuestion,
         numVariants: 3,
+        voiceProfileId: selectedVoiceProfileId,
       }
       const response = await aiApi.generateVariants(request)
       setTextResult({ type: 'generated', variants: response.variants })
@@ -284,6 +310,7 @@ export function AiAssistPanel({
         includeQuestion,
         numVariants: 1,
         regenerateIndex: index,
+        voiceProfileId: selectedVoiceProfileId,
       }
       const response = await aiApi.generateVariants(request)
 
@@ -478,6 +505,36 @@ export function AiAssistPanel({
           </select>
         </div>
 
+        <div className="ai-control-group ai-voice-profile-control">
+          <label htmlFor="ai-voice-profile">Voice Profile</label>
+          <div className="voice-profile-selector">
+            <select
+              id="ai-voice-profile"
+              value={selectedVoiceProfileId || 'none'}
+              onChange={(e) => handleVoiceProfileChange(e.target.value)}
+              disabled={loading}
+            >
+              <option value="none">None (Default)</option>
+              {voiceProfiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.name}
+                </option>
+              ))}
+              <option value="create">+ Create new...</option>
+            </select>
+            {selectedVoiceProfileId && (
+              <button
+                type="button"
+                className="voice-profile-edit-btn"
+                onClick={handleEditProfile}
+                disabled={loading}
+                title="Edit voice profile"
+              >
+                Edit
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Text Tab Content */}

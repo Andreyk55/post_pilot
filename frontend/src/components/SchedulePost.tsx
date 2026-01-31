@@ -4,6 +4,7 @@ import type { MediaType } from '../api/media'
 import type { ConnectedPage } from '../types/meta'
 import { MediaUpload } from './MediaUpload'
 import { AiAssistPanel } from './AiAssistPanel'
+import { type VoiceProfileSummary } from '../api/voiceProfiles'
 import './SchedulePost.css'
 
 interface SchedulePostProps {
@@ -17,6 +18,8 @@ interface SchedulePostProps {
     mediaType?: MediaType
     selectedThumbnailUrl?: string
   }) => void
+  voiceProfiles: VoiceProfileSummary[]
+  onVoiceProfileModalOpen: (profileId?: string | null) => void
 }
 
 const platforms = [
@@ -26,7 +29,7 @@ const platforms = [
   { id: 'linkedin', name: 'LinkedIn', icon: 'in' },
 ]
 
-export function SchedulePost({ onSchedule }: SchedulePostProps) {
+export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpen }: SchedulePostProps) {
   const [content, setContent] = useState('')
   const [scheduledDate, setScheduledDate] = useState('')
   const [scheduledTime, setScheduledTime] = useState('')
@@ -163,6 +166,8 @@ export function SchedulePost({ onSchedule }: SchedulePostProps) {
             mediaUrl={mediaUrl}
             mediaType={mediaType}
             onSelectThumbnail={(url) => setSelectedThumbnailUrl(url)}
+            voiceProfiles={voiceProfiles}
+            onVoiceProfileModalOpen={onVoiceProfileModalOpen}
           />
         </div>
 

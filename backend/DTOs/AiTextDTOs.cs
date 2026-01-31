@@ -69,7 +69,8 @@ public record AiTextRequest(
     AiPlatform Platform,
     string Text,
     AiTone? Tone = null,
-    string Language = "en"
+    string Language = "en",
+    Guid? VoiceProfileId = null
 );
 
 /// <summary>
@@ -87,7 +88,8 @@ public record AiGenerateVariantsRequest(
     bool IncludeQuestion = false,
     int NumVariants = 3,
     string Language = "en",
-    int? RegenerateIndex = null
+    int? RegenerateIndex = null,
+    Guid? VoiceProfileId = null
 );
 
 /// <summary>

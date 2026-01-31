@@ -27,7 +27,8 @@
       "Bash(npm run build:*)",
       "Read(//d/**)",
       "Bash(dotnet test:*)",
-      "Bash(dotnet msbuild:*)"
+      "Bash(dotnet msbuild:*)",
+      "Bash(dotnet ef migrations:*)"
     ]
   }
 }

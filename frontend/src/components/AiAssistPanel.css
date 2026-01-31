@@ -37,10 +37,52 @@
   display: flex;
   gap: 1rem;
   margin-bottom: 1rem;
+  flex-wrap: wrap;
 }
 
 .ai-control-group {
   flex: 1;
+  min-width: 120px;
+}
+
+/* Voice Profile Control */
+.ai-voice-profile-control {
+  flex: 1.5;
+  min-width: 180px;
+}
+
+.voice-profile-selector {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.voice-profile-selector select {
+  flex: 1;
+}
+
+.voice-profile-edit-btn {
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.75rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.voice-profile-edit-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+.voice-profile-edit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .ai-control-group label {

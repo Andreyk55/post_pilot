@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Caching.Memory;
 using PostPilot.Api.DTOs;
+using PostPilot.Api.Entities;
 
 namespace PostPilot.Api.Services.Ai;
 
@@ -28,9 +29,10 @@ public class GeminiTextClient : GoogleAiClientBase, IGeminiClient
         string text,
         AiTone? tone,
         string language,
+        AiVoiceProfile? voiceProfile = null,
         CancellationToken cancellationToken = default)
     {
-        var cacheKey = BuildCacheKey(action.ToString(), platform.ToString(), tone?.ToString() ?? "", language, text);
+        var cacheKey = BuildCacheKeyWithVoiceProfile(action.ToString(), platform.ToString(), tone?.ToString() ?? "", language, text, voiceProfile);
 
         if (Cache.TryGetValue(cacheKey, out AiTextVariantsResponse? cached) && cached != null)
         {
@@ -38,7 +40,7 @@ public class GeminiTextClient : GoogleAiClientBase, IGeminiClient
             return cached;
         }
 
-        var prompt = BuildVariantsPrompt(action, platform, text, tone, language);
+        var prompt = BuildVariantsPromptWithVoice(action, platform, text, tone, language, voiceProfile);
         var responseText = await CallGenerateContentAsync(prompt, cancellationToken);
         var result = ParseVariantsResponse(responseText, action);
 
@@ -50,9 +52,10 @@ public class GeminiTextClient : GoogleAiClientBase, IGeminiClient
         AiPlatform platform,
         string text,
         string language,
+        AiVoiceProfile? voiceProfile = null,
         CancellationToken cancellationToken = default)
     {
-        var cacheKey = BuildCacheKey("Hashtags", platform.ToString(), "", language, text);
+        var cacheKey = BuildCacheKeyWithVoiceProfile("Hashtags", platform.ToString(), "", language, text, voiceProfile);
 
         if (Cache.TryGetValue(cacheKey, out AiHashtagsResponse? cached) && cached != null)
         {
@@ -60,7 +63,7 @@ public class GeminiTextClient : GoogleAiClientBase, IGeminiClient
             return cached;
         }
 
-        var prompt = BuildHashtagsPrompt(platform, text, language);
+        var prompt = BuildHashtagsPromptWithVoice(platform, text, language, voiceProfile);
         var responseText = await CallGenerateContentAsync(prompt, cancellationToken);
         var result = ParseHashtagsResponse(responseText);
 
@@ -72,9 +75,10 @@ public class GeminiTextClient : GoogleAiClientBase, IGeminiClient
         AiPlatform platform,
         string text,
         string language,
+        AiVoiceProfile? voiceProfile = null,
         CancellationToken cancellationToken = default)
     {
-        var cacheKey = BuildCacheKey("PreFlight", platform.ToString(), "", language, text);
+        var cacheKey = BuildCacheKeyWithVoiceProfile("PreFlight", platform.ToString(), "", language, text, voiceProfile);
 
         if (Cache.TryGetValue(cacheKey, out AiPreFlightResponse? cached) && cached != null)
         {
@@ -82,7 +86,7 @@ public class GeminiTextClient : GoogleAiClientBase, IGeminiClient
             return cached;
         }
 
-        var prompt = BuildPreFlightPrompt(platform, text, language);
+        var prompt = BuildPreFlightPromptWithVoice(platform, text, language, voiceProfile);
         var responseText = await CallGenerateContentAsync(prompt, cancellationToken, maxOutputTokens: 3072);
         var result = ParsePreFlightResponse(responseText);
 
@@ -92,11 +96,12 @@ public class GeminiTextClient : GoogleAiClientBase, IGeminiClient
 
     public async Task<AiGenerateVariantsResponse> GenerateCreatorVariantsAsync(
         AiGenerateVariantsRequest request,
+        AiVoiceProfile? voiceProfile = null,
         CancellationToken cancellationToken = default)
     {
         var numToGenerate = request.RegenerateIndex.HasValue ? 1 : request.NumVariants;
         var skipCache = request.RegenerateIndex.HasValue;
-        var cacheKey = BuildCreatorVariantsCacheKey(request);
+        var cacheKey = BuildCreatorVariantsCacheKeyWithVoice(request, voiceProfile);
 
         if (!skipCache && Cache.TryGetValue(cacheKey, out AiGenerateVariantsResponse? cached) && cached != null)
         {
@@ -105,7 +110,7 @@ public class GeminiTextClient : GoogleAiClientBase, IGeminiClient
             return cached;
         }
 
-        var prompt = BuildCreatorVariantsPrompt(request, numToGenerate);
+        var prompt = BuildCreatorVariantsPromptWithVoice(request, numToGenerate, voiceProfile);
         var responseText = await CallGenerateContentAsync(prompt, cancellationToken, maxOutputTokens: 4096);
         var result = ParseCreatorVariantsResponse(responseText, numToGenerate);
 

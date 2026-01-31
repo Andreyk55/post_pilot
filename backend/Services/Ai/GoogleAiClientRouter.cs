@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Caching.Memory;
 using PostPilot.Api.DTOs;
+using PostPilot.Api.Entities;
 
 namespace PostPilot.Api.Services.Ai;
 
@@ -65,34 +66,38 @@ public class GoogleAiClientRouter : IGeminiClient
         string text,
         AiTone? tone,
         string language,
+        AiVoiceProfile? voiceProfile = null,
         CancellationToken cancellationToken = default)
     {
-        return _client.GenerateVariantsAsync(action, platform, text, tone, language, cancellationToken);
+        return _client.GenerateVariantsAsync(action, platform, text, tone, language, voiceProfile, cancellationToken);
     }
 
     public Task<AiHashtagsResponse> GenerateHashtagsAsync(
         AiPlatform platform,
         string text,
         string language,
+        AiVoiceProfile? voiceProfile = null,
         CancellationToken cancellationToken = default)
     {
-        return _client.GenerateHashtagsAsync(platform, text, language, cancellationToken);
+        return _client.GenerateHashtagsAsync(platform, text, language, voiceProfile, cancellationToken);
     }
 
     public Task<AiPreFlightResponse> RunPreFlightCheckAsync(
         AiPlatform platform,
         string text,
         string language,
+        AiVoiceProfile? voiceProfile = null,
         CancellationToken cancellationToken = default)
     {
-        return _client.RunPreFlightCheckAsync(platform, text, language, cancellationToken);
+        return _client.RunPreFlightCheckAsync(platform, text, language, voiceProfile, cancellationToken);
     }
 
     public Task<AiGenerateVariantsResponse> GenerateCreatorVariantsAsync(
         AiGenerateVariantsRequest request,
+        AiVoiceProfile? voiceProfile = null,
         CancellationToken cancellationToken = default)
     {
-        return _client.GenerateCreatorVariantsAsync(request, cancellationToken);
+        return _client.GenerateCreatorVariantsAsync(request, voiceProfile, cancellationToken);
     }
 
     public Task<AiMediaCaptionIdeasResponse> GenerateImageCaptionIdeasAsync(
