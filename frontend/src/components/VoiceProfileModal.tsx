@@ -258,7 +258,7 @@ export function VoiceProfileModal({
               <button type="submit" className="btn-save" disabled={loading || !name.trim() || totalChars > 8000}>
                 {loading ? (
                   <>
-                    <div className="voice-profile-spinner" style={{width: '12px', height: '12px', marginRight: '0.5rem'}}></div>
+                    <div className="voice-profile-spinner" style={{width: '14px', height: '14px'}}></div>
                     Saving...
                   </>
                 ) : isEditMode ? 'Save Changes' : 'Create Profile'}
@@ -290,7 +290,7 @@ export function VoiceProfileModal({
                 >
                   {loading ? (
                     <>
-                      <div className="voice-profile-spinner" style={{width: '12px', height: '12px', marginRight: '0.5rem'}}></div>
+                      <div className="voice-profile-spinner" style={{width: '14px', height: '14px'}}></div>
                       Deleting...
                     </>
                   ) : 'Delete'}
