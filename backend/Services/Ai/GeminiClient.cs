@@ -104,6 +104,42 @@ public class GeminiClient : IGeminiClient
         return result;
     }
 
+    public async Task<AiGenerateVariantsResponse> GenerateCreatorVariantsAsync(
+        AiGenerateVariantsRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var numToGenerate = request.RegenerateIndex.HasValue ? 1 : request.NumVariants;
+
+        // Don't cache if regenerating (we want fresh variants)
+        var skipCache = request.RegenerateIndex.HasValue;
+        var cacheKey = BuildCreatorVariantsCacheKey(request);
+
+        if (!skipCache && _cache.TryGetValue(cacheKey, out AiGenerateVariantsResponse? cached) && cached != null)
+        {
+            _logger.LogDebug("Cache hit for creator variants: {Goal}, {Tone}, {Platform}",
+                request.Goal, request.Tone, request.Platform);
+            return cached;
+        }
+
+        var prompt = BuildCreatorVariantsPrompt(request, numToGenerate);
+        // Use higher token limit to avoid truncation when generating multiple longer variants
+        var responseText = await CallGeminiAsync(prompt, cancellationToken, maxOutputTokens: 4096);
+        var result = ParseCreatorVariantsResponse(responseText, numToGenerate);
+
+        // Validate we got the expected number of variants
+        if (result.Variants.Count < numToGenerate)
+        {
+            _logger.LogWarning("Expected {Expected} variants but got {Actual}", numToGenerate, result.Variants.Count);
+        }
+
+        if (!skipCache)
+        {
+            _cache.Set(cacheKey, result, CacheDuration);
+        }
+
+        return result;
+    }
+
     #region Vision API Methods
 
     public async Task<AiMediaCaptionIdeasResponse> GenerateImageCaptionIdeasAsync(
@@ -177,7 +213,7 @@ public class GeminiClient : IGeminiClient
 
     #endregion
 
-    private async Task<string> CallGeminiAsync(string prompt, CancellationToken cancellationToken)
+    private async Task<string> CallGeminiAsync(string prompt, CancellationToken cancellationToken, int maxOutputTokens = 2048)
     {
         var url = $"{_settings.BaseUrl}/models/{_settings.Model}:generateContent?key={_settings.ApiKey}";
 
@@ -193,7 +229,7 @@ public class GeminiClient : IGeminiClient
             GenerationConfig = new GeminiGenerationConfig
             {
                 Temperature = 0.7,
-                MaxOutputTokens = 2048,
+                MaxOutputTokens = maxOutputTokens,
                 ResponseMimeType = "application/json"
             }
         };
@@ -475,6 +511,236 @@ Rules:
 - Output ONLY the JSON, no other text";
     }
 
+    private string BuildCreatorVariantsPrompt(AiGenerateVariantsRequest request, int numVariants)
+    {
+        var maxLength = request.Platform == AiPlatform.X ? 280 : 2000;
+        var toneStr = request.Tone.ToString().ToLower();
+
+        // Build length guidance
+        var lengthGuidance = request.Length switch
+        {
+            AiLength.Short => "1-2 sentences (under 100 characters ideal, max 150)",
+            AiLength.Medium => "3-5 sentences (150-300 characters)",
+            AiLength.Long => "6-10 sentences (300-600 characters, or more for longer platforms)",
+            _ => "3-5 sentences"
+        };
+
+        // Build goal-specific instructions
+        var goalInstruction = request.Goal switch
+        {
+            AiGoal.Engage => "Create engaging content that encourages interaction, comments, and shares. Ask questions or spark discussion.",
+            AiGoal.Promote => "Create promotional content that highlights value, benefits, and drives action. Focus on offers or unique selling points.",
+            AiGoal.Announce => "Create announcement-style content that clearly communicates news, updates, or important information.",
+            AiGoal.Educate => "Create educational content that provides tips, insights, or valuable information. Position as helpful and informative.",
+            AiGoal.Story => "Create narrative-style content that tells a mini story or shares an experience. Use a personal, relatable voice.",
+            _ => "Create engaging social media content."
+        };
+
+        // Build include flags instructions
+        var includeInstructions = new List<string>();
+        if (request.IncludeEmojis)
+            includeInstructions.Add("Include relevant emojis naturally throughout the text");
+        else
+            includeInstructions.Add("Do NOT include any emojis");
+
+        if (request.IncludeHashtags)
+            includeInstructions.Add("Include 2-5 relevant hashtags at the end");
+        else
+            includeInstructions.Add("Do NOT include any hashtags");
+
+        if (request.IncludeCta)
+            includeInstructions.Add("Include a clear call-to-action (e.g., 'Learn more', 'Shop now', 'Comment below', 'Link in bio')");
+
+        if (request.IncludeQuestion)
+            includeInstructions.Add("End with an engaging question to encourage comments");
+
+        var includeSection = string.Join("\n- ", includeInstructions);
+
+        return $@"You are a social media content creator assistant. Generate {numVariants} distinct text variant(s) based on the following input and requirements.
+
+INPUT TEXT:
+{request.InputText}
+
+REQUIREMENTS:
+- Platform: {request.Platform}
+- Goal: {request.Goal} - {goalInstruction}
+- Tone: {toneStr}
+- Length: {request.Length} - {lengthGuidance}
+- Language: {request.Language}
+- Max characters: {maxLength}
+
+INCLUDE/EXCLUDE:
+- {includeSection}
+
+Return ONLY valid JSON in this exact format:
+{{
+  ""variants"": [
+    {{ ""id"": ""v1"", ""text"": ""..."" }},
+    {{ ""id"": ""v2"", ""text"": ""..."" }},
+    {{ ""id"": ""v3"", ""text"": ""..."" }}
+  ]
+}}
+
+RULES:
+- Generate exactly {numVariants} variant(s)
+- Each variant must be unique and distinct in approach/wording
+- Each variant must respect the max character limit ({maxLength})
+- Maintain the core message from the input
+- Apply the {toneStr} tone consistently
+- Follow the {request.Goal} goal structure
+- DO NOT include labels like ""Option 1:"" or ""Variant 1:"" in the text itself
+- Output plain text only (no markdown formatting)
+- Output ONLY the JSON, no other text";
+    }
+
+    private static AiGenerateVariantsResponse ParseCreatorVariantsResponse(string responseText, int expectedCount)
+    {
+        var json = ExtractJson(responseText);
+
+        // Try to parse the JSON, handling truncated responses
+        CreatorVariantsJsonResponse? parsed = null;
+        try
+        {
+            parsed = JsonSerializer.Deserialize<CreatorVariantsJsonResponse>(json, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            // JSON is likely truncated - try to salvage partial variants
+            parsed = TrySalvagePartialVariantsJson(json);
+        }
+
+        if (parsed == null || parsed.Variants.Count == 0)
+        {
+            throw new GeminiApiException("Failed to parse creator variants response. The AI response may have been truncated.", 500);
+        }
+
+        var variants = parsed.Variants
+            .Where(v => !string.IsNullOrWhiteSpace(v.Text))
+            .Select(v => new AiGeneratedVariant(
+                string.IsNullOrWhiteSpace(v.Id) ? Guid.NewGuid().ToString("N")[..8] : v.Id,
+                v.Text.Trim()))
+            .ToList();
+
+        // Ensure we have at least 1 variant
+        if (variants.Count == 0)
+        {
+            throw new GeminiApiException("No valid variants in response", 500);
+        }
+
+        return new AiGenerateVariantsResponse(variants);
+    }
+
+    /// <summary>
+    /// Attempts to salvage partial JSON when Gemini returns truncated responses.
+    /// Extracts any complete variant objects that were returned before truncation.
+    /// </summary>
+    private static CreatorVariantsJsonResponse? TrySalvagePartialVariantsJson(string json)
+    {
+        try
+        {
+            // Look for complete variant objects in the truncated JSON
+            // Pattern: { "id": "...", "text": "..." }
+            var variants = new List<CreatorVariantItem>();
+            var currentPos = 0;
+
+            // Find the variants array start
+            var variantsStart = json.IndexOf("\"variants\"", StringComparison.OrdinalIgnoreCase);
+            if (variantsStart < 0) return null;
+
+            var arrayStart = json.IndexOf('[', variantsStart);
+            if (arrayStart < 0) return null;
+
+            currentPos = arrayStart + 1;
+
+            // Try to extract each complete variant object
+            while (currentPos < json.Length)
+            {
+                var objectStart = json.IndexOf('{', currentPos);
+                if (objectStart < 0) break;
+
+                // Find the matching closing brace by counting braces
+                var braceCount = 1;
+                var objectEnd = -1;
+                var inString = false;
+                var escapeNext = false;
+
+                for (var i = objectStart + 1; i < json.Length; i++)
+                {
+                    var c = json[i];
+
+                    if (escapeNext)
+                    {
+                        escapeNext = false;
+                        continue;
+                    }
+
+                    if (c == '\\' && inString)
+                    {
+                        escapeNext = true;
+                        continue;
+                    }
+
+                    if (c == '"')
+                    {
+                        inString = !inString;
+                        continue;
+                    }
+
+                    if (!inString)
+                    {
+                        if (c == '{') braceCount++;
+                        else if (c == '}')
+                        {
+                            braceCount--;
+                            if (braceCount == 0)
+                            {
+                                objectEnd = i;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (objectEnd < 0) break; // Incomplete object - stop here
+
+                // Extract and try to parse this object
+                var objectJson = json.Substring(objectStart, objectEnd - objectStart + 1);
+                try
+                {
+                    var variant = JsonSerializer.Deserialize<CreatorVariantItem>(objectJson, JsonOptions);
+                    if (variant != null && !string.IsNullOrWhiteSpace(variant.Text))
+                    {
+                        variants.Add(variant);
+                    }
+                }
+                catch
+                {
+                    // Skip this object if it can't be parsed
+                }
+
+                currentPos = objectEnd + 1;
+            }
+
+            if (variants.Count > 0)
+            {
+                return new CreatorVariantsJsonResponse { Variants = variants };
+            }
+        }
+        catch
+        {
+            // If salvage fails, return null
+        }
+
+        return null;
+    }
+
+    private static string BuildCreatorVariantsCacheKey(AiGenerateVariantsRequest request)
+    {
+        var inputHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(request.InputText)))[..16];
+        var flags = $"{(request.IncludeEmojis ? "E" : "")}{(request.IncludeHashtags ? "H" : "")}{(request.IncludeCta ? "C" : "")}{(request.IncludeQuestion ? "Q" : "")}";
+        return $"ai:CreatorVariants:{request.Platform}:{request.Goal}:{request.Tone}:{request.Length}:{flags}:{request.Language}:{inputHash}";
+    }
+
     #region Vision Prompt Builders
 
     private static string BuildImageCaptionPrompt(AiPlatform platform, string? existingText, string language)
@@ -738,6 +1004,17 @@ Rules:
     private class AltTextJsonResponse
     {
         public string AltText { get; set; } = string.Empty;
+    }
+
+    private class CreatorVariantsJsonResponse
+    {
+        public List<CreatorVariantItem> Variants { get; set; } = new();
+    }
+
+    private class CreatorVariantItem
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Text { get; set; } = string.Empty;
     }
 
     // Vision API request DTOs

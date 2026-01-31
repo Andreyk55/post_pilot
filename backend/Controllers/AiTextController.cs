@@ -126,6 +126,126 @@ public class AiTextController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Generate text variants with full control options (goal, tone, length, include flags).
+    /// </summary>
+    [HttpPost("text/generate")]
+    [ProducesResponseType(typeof(AiGenerateVariantsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> GenerateVariants(
+        [FromBody] AiGenerateVariantsRequest request,
+        CancellationToken cancellationToken)
+    {
+        // Validate request
+        var validationErrors = ValidateGenerateRequest(request);
+        if (validationErrors.Count > 0)
+        {
+            return ValidationProblem(new ValidationProblemDetails(validationErrors));
+        }
+
+        // Check rate limit
+        var canProceed = await _rateLimiter.TryAcquireAsync(CurrentUserId, cancellationToken);
+        if (!canProceed)
+        {
+            _logger.LogWarning("Rate limit exceeded for user {UserId}", CurrentUserId);
+
+            return Problem(
+                title: "Rate limit exceeded",
+                detail: "You've reached the maximum number of AI requests for today. Please try again tomorrow.",
+                statusCode: StatusCodes.Status429TooManyRequests);
+        }
+
+        try
+        {
+            var result = await _geminiClient.GenerateCreatorVariantsAsync(request, cancellationToken);
+            return Ok(result);
+        }
+        catch (GeminiApiException ex) when (ex.StatusCode == 429)
+        {
+            return Problem(
+                title: "AI service quota exceeded",
+                detail: ex.Message,
+                statusCode: StatusCodes.Status429TooManyRequests);
+        }
+        catch (GeminiApiException ex) when (ex.StatusCode == 504)
+        {
+            return Problem(
+                title: "Request timed out",
+                detail: "The AI service took too long to respond. Please try again.",
+                statusCode: StatusCodes.Status504GatewayTimeout);
+        }
+        catch (GeminiApiException ex)
+        {
+            _logger.LogError(ex, "Gemini API error: {Message}, Status: {StatusCode}", ex.Message, ex.StatusCode);
+
+            return Problem(
+                title: "AI service unavailable",
+                detail: "The AI service is temporarily unavailable. Please try again later.",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error generating AI variants");
+
+            return Problem(
+                title: "Internal error",
+                detail: "An unexpected error occurred. Please try again.",
+                statusCode: StatusCodes.Status500InternalServerError);
+        }
+    }
+
+    private static Dictionary<string, string[]> ValidateGenerateRequest(AiGenerateVariantsRequest request)
+    {
+        var errors = new Dictionary<string, string[]>();
+
+        if (string.IsNullOrWhiteSpace(request.InputText))
+        {
+            errors["inputText"] = new[] { "Input text is required." };
+        }
+        else if (request.InputText.Length < MinTextLength)
+        {
+            errors["inputText"] = new[] { $"Input text must be at least {MinTextLength} character(s)." };
+        }
+        else if (request.InputText.Length > MaxTextLength)
+        {
+            errors["inputText"] = new[] { $"Input text must not exceed {MaxTextLength} characters." };
+        }
+
+        if (!Enum.IsDefined(request.Platform))
+        {
+            errors["platform"] = new[] { "Invalid platform value." };
+        }
+
+        if (!Enum.IsDefined(request.Goal))
+        {
+            errors["goal"] = new[] { "Invalid goal value." };
+        }
+
+        if (!Enum.IsDefined(request.Tone))
+        {
+            errors["tone"] = new[] { "Invalid tone value." };
+        }
+
+        if (!Enum.IsDefined(request.Length))
+        {
+            errors["length"] = new[] { "Invalid length value." };
+        }
+
+        if (request.NumVariants < 1 || request.NumVariants > 5)
+        {
+            errors["numVariants"] = new[] { "Number of variants must be between 1 and 5." };
+        }
+
+        if (request.RegenerateIndex.HasValue && (request.RegenerateIndex < 0 || request.RegenerateIndex >= request.NumVariants))
+        {
+            errors["regenerateIndex"] = new[] { "Regenerate index is out of range." };
+        }
+
+        return errors;
+    }
+
     private static Dictionary<string, string[]> ValidateRequest(AiTextRequest request)
     {
         var errors = new Dictionary<string, string[]>();

@@ -52,4 +52,11 @@ public interface IGeminiClient
         byte[] imageBytes,
         string imageMimeType,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Generates text variants with full control options (goal, tone, length, include flags).
+    /// </summary>
+    Task<AiGenerateVariantsResponse> GenerateCreatorVariantsAsync(
+        AiGenerateVariantsRequest request,
+        CancellationToken cancellationToken = default);
 }

@@ -10,7 +10,8 @@ public enum AiTextAction
     Shorten,
     Expand,
     Hashtags,
-    PreFlight
+    PreFlight,
+    GenerateVariants
 }
 
 /// <summary>
@@ -21,7 +22,32 @@ public enum AiTone
     Professional,
     Casual,
     Funny,
-    Sales
+    Sales,
+    Humorous,
+    Urgent,
+    Inspirational
+}
+
+/// <summary>
+/// Content goal for AI text generation.
+/// </summary>
+public enum AiGoal
+{
+    Engage,
+    Promote,
+    Announce,
+    Educate,
+    Story
+}
+
+/// <summary>
+/// Desired length for generated text.
+/// </summary>
+public enum AiLength
+{
+    Short,
+    Medium,
+    Long
 }
 
 /// <summary>
@@ -44,6 +70,39 @@ public record AiTextRequest(
     string Text,
     AiTone? Tone = null,
     string Language = "en"
+);
+
+/// <summary>
+/// Request for generating AI text variants with full control options.
+/// </summary>
+public record AiGenerateVariantsRequest(
+    AiPlatform Platform,
+    string InputText,
+    AiGoal Goal,
+    AiTone Tone,
+    AiLength Length,
+    bool IncludeEmojis = false,
+    bool IncludeHashtags = false,
+    bool IncludeCta = false,
+    bool IncludeQuestion = false,
+    int NumVariants = 3,
+    string Language = "en",
+    int? RegenerateIndex = null
+);
+
+/// <summary>
+/// A single generated text variant with unique ID for regeneration.
+/// </summary>
+public record AiGeneratedVariant(
+    string Id,
+    string Text
+);
+
+/// <summary>
+/// Response containing generated text variants.
+/// </summary>
+public record AiGenerateVariantsResponse(
+    List<AiGeneratedVariant> Variants
 );
 
 /// <summary>

@@ -5,12 +5,16 @@ import {
   AiError,
   type AiPlatform,
   type AiTone,
+  type AiGoal,
+  type AiLength,
   type AiTextVariant,
   type AiPreFlightIssue,
   type AiIssueSeverity,
   type AiMediaCaptionVariant,
   type AiImageQualityIssue,
   type AiVideoFrame,
+  type AiGeneratedVariant,
+  type AiGenerateVariantsRequest,
 } from '../api/ai'
 import { getMediaUrl, type MediaType } from '../api/media'
 import { extractVideoFrames, extractSingleFrame } from '../utils/videoFrameExtractor'
@@ -45,7 +49,12 @@ interface PreFlightResult {
   issues: AiPreFlightIssue[]
 }
 
-type TextResult = VariantsResult | HashtagsResult | PreFlightResult
+interface GeneratedVariantsResult {
+  type: 'generated'
+  variants: AiGeneratedVariant[]
+}
+
+type TextResult = VariantsResult | HashtagsResult | PreFlightResult | GeneratedVariantsResult
 
 // Media Results
 interface CaptionsResult {
@@ -83,7 +92,24 @@ const toneOptions: { value: AiTone; label: string }[] = [
   { value: 'Professional', label: 'Professional' },
   { value: 'Casual', label: 'Casual' },
   { value: 'Funny', label: 'Funny' },
+  { value: 'Humorous', label: 'Humorous' },
+  { value: 'Urgent', label: 'Urgent' },
+  { value: 'Inspirational', label: 'Inspirational' },
   { value: 'Sales', label: 'Sales' },
+]
+
+const goalOptions: { value: AiGoal; label: string; description: string }[] = [
+  { value: 'Engage', label: 'Engage', description: 'Encourage interaction and comments' },
+  { value: 'Promote', label: 'Promote', description: 'Highlight value and drive action' },
+  { value: 'Announce', label: 'Announce', description: 'Share news or updates' },
+  { value: 'Educate', label: 'Educate', description: 'Provide tips and insights' },
+  { value: 'Story', label: 'Story', description: 'Tell a mini narrative' },
+]
+
+const lengthOptions: { value: AiLength; label: string }[] = [
+  { value: 'Short', label: 'Short' },
+  { value: 'Medium', label: 'Medium' },
+  { value: 'Long', label: 'Long' },
 ]
 
 export function AiAssistPanel({
@@ -100,9 +126,18 @@ export function AiAssistPanel({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Text tab state
+  // Text tab state - new generator controls
+  const [goal, setGoal] = useState<AiGoal>('Engage')
+  const [length, setLength] = useState<AiLength>('Medium')
+  const [includeEmojis, setIncludeEmojis] = useState(false)
+  const [includeHashtags, setIncludeHashtags] = useState(false)
+  const [includeCta, setIncludeCta] = useState(false)
+  const [includeQuestion, setIncludeQuestion] = useState(false)
+
+  // Text tab state - results
   const [textResult, setTextResult] = useState<TextResult | null>(null)
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
+  const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null)
 
   // Media tab state
   const [mediaResult, setMediaResult] = useState<MediaResult | null>(null)
@@ -173,30 +208,6 @@ export function AiAssistPanel({
   }
 
   // Text actions
-  const handlePolish = () =>
-    handleTextAction(async () => {
-      const response = await aiApi.polish(platform, text)
-      setTextResult({ type: 'variants', variants: response.variants })
-    })
-
-  const handleRewriteTone = () =>
-    handleTextAction(async () => {
-      const response = await aiApi.rewriteTone(platform, text, tone)
-      setTextResult({ type: 'variants', variants: response.variants })
-    })
-
-  const handleShorten = () =>
-    handleTextAction(async () => {
-      const response = await aiApi.shorten(platform, text)
-      setTextResult({ type: 'variants', variants: response.variants })
-    })
-
-  const handleExpand = () =>
-    handleTextAction(async () => {
-      const response = await aiApi.expand(platform, text)
-      setTextResult({ type: 'variants', variants: response.variants })
-    })
-
   const handleHashtags = () =>
     handleTextAction(async () => {
       const response = await aiApi.hashtags(platform, text)
@@ -208,6 +219,61 @@ export function AiAssistPanel({
       const response = await aiApi.preFlight(platform, text)
       setTextResult({ type: 'preflight', score: response.score, issues: response.issues })
     })
+
+  // New generate variants handler
+  const handleGenerateVariants = () =>
+    handleTextAction(async () => {
+      const request: AiGenerateVariantsRequest = {
+        platform,
+        inputText: text,
+        goal,
+        tone,
+        length,
+        includeEmojis,
+        includeHashtags,
+        includeCta,
+        includeQuestion,
+        numVariants: 3,
+      }
+      const response = await aiApi.generateVariants(request)
+      setTextResult({ type: 'generated', variants: response.variants })
+    })
+
+  // Regenerate a single variant
+  const handleRegenerateVariant = async (index: number) => {
+    if (isTextEmpty || loading) return
+
+    setRegeneratingIndex(index)
+    setError(null)
+
+    try {
+      const request: AiGenerateVariantsRequest = {
+        platform,
+        inputText: text,
+        goal,
+        tone,
+        length,
+        includeEmojis,
+        includeHashtags,
+        includeCta,
+        includeQuestion,
+        numVariants: 1,
+        regenerateIndex: index,
+      }
+      const response = await aiApi.generateVariants(request)
+
+      // Replace the single variant in the existing results
+      if (textResult?.type === 'generated' && response.variants.length > 0) {
+        const newVariants = [...textResult.variants]
+        newVariants[index] = response.variants[0]
+        setTextResult({ type: 'generated', variants: newVariants })
+      }
+    } catch (err) {
+      handleError(err)
+    } finally {
+      setRegeneratingIndex(null)
+    }
+  }
 
   // Media actions
   const handleImageCaptionIdeas = () =>
@@ -385,23 +451,6 @@ export function AiAssistPanel({
           </select>
         </div>
 
-        {activeTab === 'text' && (
-          <div className="ai-control-group">
-            <label htmlFor="ai-tone">Tone (for rewrite)</label>
-            <select
-              id="ai-tone"
-              value={tone}
-              onChange={(e) => setTone(e.target.value as AiTone)}
-              disabled={loading}
-            >
-              {toneOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
       </div>
 
       {/* Text Tab Content */}
@@ -409,46 +458,112 @@ export function AiAssistPanel({
         <>
           {isTextEmpty && <div className="ai-empty-state">Enter text to enable AI features</div>}
 
-          <div className="ai-actions">
+          {/* Generator Controls */}
+          <div className="ai-generator-controls">
+            <div className="ai-control-row">
+              <div className="ai-control-group">
+                <label htmlFor="ai-goal">Goal</label>
+                <select
+                  id="ai-goal"
+                  value={goal}
+                  onChange={(e) => setGoal(e.target.value as AiGoal)}
+                  disabled={loading}
+                >
+                  {goalOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value} title={opt.description}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="ai-control-group">
+                <label htmlFor="ai-tone-gen">Tone</label>
+                <select
+                  id="ai-tone-gen"
+                  value={tone}
+                  onChange={(e) => setTone(e.target.value as AiTone)}
+                  disabled={loading}
+                >
+                  {toneOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="ai-control-group">
+                <label htmlFor="ai-length">Length</label>
+                <select
+                  id="ai-length"
+                  value={length}
+                  onChange={(e) => setLength(e.target.value as AiLength)}
+                  disabled={loading}
+                >
+                  {lengthOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="ai-include-toggles">
+              <label className="ai-toggle">
+                <input
+                  type="checkbox"
+                  checked={includeEmojis}
+                  onChange={(e) => setIncludeEmojis(e.target.checked)}
+                  disabled={loading}
+                />
+                <span>Emojis</span>
+              </label>
+              <label className="ai-toggle">
+                <input
+                  type="checkbox"
+                  checked={includeHashtags}
+                  onChange={(e) => setIncludeHashtags(e.target.checked)}
+                  disabled={loading}
+                />
+                <span>Hashtags</span>
+              </label>
+              <label className="ai-toggle">
+                <input
+                  type="checkbox"
+                  checked={includeCta}
+                  onChange={(e) => setIncludeCta(e.target.checked)}
+                  disabled={loading}
+                />
+                <span>CTA</span>
+              </label>
+              <label className="ai-toggle">
+                <input
+                  type="checkbox"
+                  checked={includeQuestion}
+                  onChange={(e) => setIncludeQuestion(e.target.checked)}
+                  disabled={loading}
+                />
+                <span>Question</span>
+              </label>
+            </div>
+
             <button
               type="button"
-              className="ai-action-btn"
-              onClick={handlePolish}
+              className="ai-generate-btn"
+              onClick={handleGenerateVariants}
               disabled={isTextEmpty || loading}
-              title="Fix grammar, clarity, remove repetition"
             >
-              Polish
+              {loading && !regeneratingIndex ? 'Generating...' : 'Generate'}
             </button>
+          </div>
+
+          {/* Quick Actions (secondary) */}
+          <div className="ai-quick-actions">
             <button
               type="button"
-              className="ai-action-btn"
-              onClick={handleRewriteTone}
-              disabled={isTextEmpty || loading}
-              title={`Rewrite in ${tone.toLowerCase()} tone`}
-            >
-              Rewrite
-            </button>
-            <button
-              type="button"
-              className="ai-action-btn"
-              onClick={handleShorten}
-              disabled={isTextEmpty || loading}
-              title="Make text shorter"
-            >
-              Shorten
-            </button>
-            <button
-              type="button"
-              className="ai-action-btn"
-              onClick={handleExpand}
-              disabled={isTextEmpty || loading}
-              title="Add more detail and CTA"
-            >
-              Expand
-            </button>
-            <button
-              type="button"
-              className="ai-action-btn"
+              className="ai-quick-btn"
               onClick={handleHashtags}
               disabled={isTextEmpty || loading}
               title="Suggest relevant hashtags"
@@ -457,7 +572,7 @@ export function AiAssistPanel({
             </button>
             <button
               type="button"
-              className="ai-action-btn ai-action-preflight"
+              className="ai-quick-btn"
               onClick={handlePreFlight}
               disabled={isTextEmpty || loading}
               title="Check post quality before publishing"
@@ -560,7 +675,60 @@ export function AiAssistPanel({
         </div>
       )}
 
-      {/* Text Results */}
+      {/* Text Results - Generated Variants (new workflow) */}
+      {activeTab === 'text' && textResult?.type === 'generated' && (
+        <div className="ai-results">
+          <h4>Generated Variants</h4>
+          <div className="ai-variants">
+            {textResult.variants.map((variant, index) => (
+              <div
+                key={variant.id}
+                className={`ai-variant-card ${regeneratingIndex === index ? 'regenerating' : ''}`}
+              >
+                <div className="variant-header">
+                  <span className="variant-number">Option {index + 1}</span>
+                  {regeneratingIndex === index && (
+                    <span className="variant-regenerating">Regenerating...</span>
+                  )}
+                </div>
+                <div className="variant-text">{variant.text}</div>
+                <div className="variant-meta">
+                  <span className="char-count">{variant.text.length} chars</span>
+                </div>
+                <div className="variant-actions">
+                  <button
+                    type="button"
+                    className="variant-btn variant-btn-apply"
+                    onClick={() => handleApply(variant.text)}
+                    disabled={regeneratingIndex !== null}
+                  >
+                    Apply
+                  </button>
+                  <button
+                    type="button"
+                    className="variant-btn variant-btn-copy"
+                    onClick={() => handleCopy(variant.text, index)}
+                    disabled={regeneratingIndex !== null}
+                  >
+                    {copiedIndex === index ? 'Copied!' : 'Copy'}
+                  </button>
+                  <button
+                    type="button"
+                    className="variant-btn variant-btn-regenerate"
+                    onClick={() => handleRegenerateVariant(index)}
+                    disabled={regeneratingIndex !== null || loading}
+                    title="Generate a new version of this variant"
+                  >
+                    {regeneratingIndex === index ? '...' : 'Regenerate'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Text Results - Legacy variants (from old actions, kept for backward compat) */}
       {activeTab === 'text' && textResult?.type === 'variants' && (
         <div className="ai-results">
           <h4>Suggestions</h4>
@@ -640,10 +808,10 @@ export function AiAssistPanel({
             <button
               type="button"
               className="fix-with-polish-btn"
-              onClick={handlePolish}
+              onClick={handleGenerateVariants}
               disabled={loading}
             >
-              Fix with Polish
+              Generate improved versions
             </button>
           )}
         </div>

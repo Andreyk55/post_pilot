@@ -285,6 +285,386 @@ public class GeminiClientTests
             ItExpr.IsAny<CancellationToken>());
     }
 
+    [Fact]
+    public async Task GenerateCreatorVariantsAsync_ValidResponse_ReturnsVariants()
+    {
+        var geminiResponse = new
+        {
+            candidates = new[]
+            {
+                new
+                {
+                    content = new
+                    {
+                        parts = new[]
+                        {
+                            new
+                            {
+                                text = @"{
+                                    ""variants"": [
+                                        { ""id"": ""v1"", ""text"": ""Engaging post with emoji!"" },
+                                        { ""id"": ""v2"", ""text"": ""Another engaging variant"" },
+                                        { ""id"": ""v3"", ""text"": ""Third creative option"" }
+                                    ]
+                                }"
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        SetupHttpResponse(HttpStatusCode.OK, JsonSerializer.Serialize(geminiResponse));
+
+        var request = new AiGenerateVariantsRequest(
+            Platform: AiPlatform.Facebook,
+            InputText: "Check out our new product!",
+            Goal: AiGoal.Engage,
+            Tone: AiTone.Casual,
+            Length: AiLength.Medium,
+            IncludeEmojis: true,
+            IncludeHashtags: false,
+            IncludeCta: true,
+            IncludeQuestion: false,
+            NumVariants: 3
+        );
+
+        var result = await _client.GenerateCreatorVariantsAsync(request);
+
+        Assert.Equal(3, result.Variants.Count);
+        Assert.Equal("v1", result.Variants[0].Id);
+        Assert.Equal("Engaging post with emoji!", result.Variants[0].Text);
+    }
+
+    [Fact]
+    public async Task GenerateCreatorVariantsAsync_WithRegenerateIndex_ReturnsOneVariant()
+    {
+        var geminiResponse = new
+        {
+            candidates = new[]
+            {
+                new
+                {
+                    content = new
+                    {
+                        parts = new[]
+                        {
+                            new
+                            {
+                                text = @"{
+                                    ""variants"": [
+                                        { ""id"": ""regen1"", ""text"": ""Regenerated variant"" }
+                                    ]
+                                }"
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        SetupHttpResponse(HttpStatusCode.OK, JsonSerializer.Serialize(geminiResponse));
+
+        var request = new AiGenerateVariantsRequest(
+            Platform: AiPlatform.Instagram,
+            InputText: "Original text",
+            Goal: AiGoal.Promote,
+            Tone: AiTone.Professional,
+            Length: AiLength.Short,
+            NumVariants: 1,
+            RegenerateIndex: 0
+        );
+
+        var result = await _client.GenerateCreatorVariantsAsync(request);
+
+        Assert.Single(result.Variants);
+        Assert.Equal("Regenerated variant", result.Variants[0].Text);
+    }
+
+    [Theory]
+    [InlineData(AiGoal.Engage)]
+    [InlineData(AiGoal.Promote)]
+    [InlineData(AiGoal.Announce)]
+    [InlineData(AiGoal.Educate)]
+    [InlineData(AiGoal.Story)]
+    public async Task GenerateCreatorVariantsAsync_AllGoals_ProcessesSuccessfully(AiGoal goal)
+    {
+        var geminiResponse = new
+        {
+            candidates = new[]
+            {
+                new
+                {
+                    content = new
+                    {
+                        parts = new[]
+                        {
+                            new { text = @"{ ""variants"": [{ ""id"": ""1"", ""text"": ""Test"" }] }" }
+                        }
+                    }
+                }
+            }
+        };
+
+        SetupHttpResponse(HttpStatusCode.OK, JsonSerializer.Serialize(geminiResponse));
+
+        var request = new AiGenerateVariantsRequest(
+            Platform: AiPlatform.LinkedIn,
+            InputText: $"Test input for {goal}",
+            Goal: goal,
+            Tone: AiTone.Professional,
+            Length: AiLength.Medium,
+            NumVariants: 1
+        );
+
+        var result = await _client.GenerateCreatorVariantsAsync(request);
+        Assert.NotEmpty(result.Variants);
+    }
+
+    [Theory]
+    [InlineData(AiLength.Short)]
+    [InlineData(AiLength.Medium)]
+    [InlineData(AiLength.Long)]
+    public async Task GenerateCreatorVariantsAsync_AllLengths_ProcessesSuccessfully(AiLength length)
+    {
+        var geminiResponse = new
+        {
+            candidates = new[]
+            {
+                new
+                {
+                    content = new
+                    {
+                        parts = new[]
+                        {
+                            new { text = @"{ ""variants"": [{ ""id"": ""1"", ""text"": ""Test"" }] }" }
+                        }
+                    }
+                }
+            }
+        };
+
+        SetupHttpResponse(HttpStatusCode.OK, JsonSerializer.Serialize(geminiResponse));
+
+        var request = new AiGenerateVariantsRequest(
+            Platform: AiPlatform.X,
+            InputText: $"Test input for {length}",
+            Goal: AiGoal.Engage,
+            Tone: AiTone.Casual,
+            Length: length,
+            NumVariants: 1
+        );
+
+        var result = await _client.GenerateCreatorVariantsAsync(request);
+        Assert.NotEmpty(result.Variants);
+    }
+
+    [Fact]
+    public async Task GenerateCreatorVariantsAsync_WithAllIncludeFlags_ProcessesSuccessfully()
+    {
+        var geminiResponse = new
+        {
+            candidates = new[]
+            {
+                new
+                {
+                    content = new
+                    {
+                        parts = new[]
+                        {
+                            new { text = @"{ ""variants"": [{ ""id"": ""1"", ""text"": ""Full featured post!"" }] }" }
+                        }
+                    }
+                }
+            }
+        };
+
+        SetupHttpResponse(HttpStatusCode.OK, JsonSerializer.Serialize(geminiResponse));
+
+        var request = new AiGenerateVariantsRequest(
+            Platform: AiPlatform.Instagram,
+            InputText: "My awesome product",
+            Goal: AiGoal.Promote,
+            Tone: AiTone.Inspirational,
+            Length: AiLength.Medium,
+            IncludeEmojis: true,
+            IncludeHashtags: true,
+            IncludeCta: true,
+            IncludeQuestion: true,
+            NumVariants: 3
+        );
+
+        var result = await _client.GenerateCreatorVariantsAsync(request);
+
+        Assert.NotEmpty(result.Variants);
+    }
+
+    [Fact]
+    public async Task GenerateCreatorVariantsAsync_EmptyVariantsArray_ThrowsException()
+    {
+        var geminiResponse = new
+        {
+            candidates = new[]
+            {
+                new
+                {
+                    content = new
+                    {
+                        parts = new[]
+                        {
+                            new { text = @"{ ""variants"": [] }" }
+                        }
+                    }
+                }
+            }
+        };
+
+        SetupHttpResponse(HttpStatusCode.OK, JsonSerializer.Serialize(geminiResponse));
+
+        var request = new AiGenerateVariantsRequest(
+            Platform: AiPlatform.Facebook,
+            InputText: "Test",
+            Goal: AiGoal.Engage,
+            Tone: AiTone.Professional,
+            Length: AiLength.Medium,
+            NumVariants: 3
+        );
+
+        await Assert.ThrowsAsync<GeminiApiException>(() =>
+            _client.GenerateCreatorVariantsAsync(request));
+    }
+
+    [Fact]
+    public async Task GenerateCreatorVariantsAsync_SkipsCache_WhenRegenerating()
+    {
+        var geminiResponse = new
+        {
+            candidates = new[]
+            {
+                new
+                {
+                    content = new
+                    {
+                        parts = new[]
+                        {
+                            new { text = @"{ ""variants"": [{ ""id"": ""1"", ""text"": ""Fresh"" }] }" }
+                        }
+                    }
+                }
+            }
+        };
+
+        SetupHttpResponse(HttpStatusCode.OK, JsonSerializer.Serialize(geminiResponse));
+
+        var request = new AiGenerateVariantsRequest(
+            Platform: AiPlatform.Facebook,
+            InputText: "Same text",
+            Goal: AiGoal.Engage,
+            Tone: AiTone.Professional,
+            Length: AiLength.Medium,
+            NumVariants: 1,
+            RegenerateIndex: 0
+        );
+
+        // Call twice with regenerate index - should NOT cache
+        await _client.GenerateCreatorVariantsAsync(request);
+        await _client.GenerateCreatorVariantsAsync(request);
+
+        // HTTP should be called twice (no caching for regenerate)
+        _httpHandlerMock.Protected().Verify(
+            "SendAsync",
+            Times.Exactly(2),
+            ItExpr.IsAny<HttpRequestMessage>(),
+            ItExpr.IsAny<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GenerateCreatorVariantsAsync_TruncatedJson_SalvagesPartialVariants()
+    {
+        // Simulate truncated JSON response (what Gemini might return if it runs out of tokens)
+        var truncatedJson = @"{
+            ""variants"": [
+                { ""id"": ""v1"", ""text"": ""First complete variant"" },
+                { ""id"": ""v2"", ""text"": ""Second complete variant"" },
+                { ""id"": ""v3"", ""text"": ""Third vari";  // Truncated mid-variant
+
+        var geminiResponse = new
+        {
+            candidates = new[]
+            {
+                new
+                {
+                    content = new
+                    {
+                        parts = new[]
+                        {
+                            new { text = truncatedJson }
+                        }
+                    }
+                }
+            }
+        };
+
+        SetupHttpResponse(HttpStatusCode.OK, JsonSerializer.Serialize(geminiResponse));
+
+        var request = new AiGenerateVariantsRequest(
+            Platform: AiPlatform.Facebook,
+            InputText: "Test text",
+            Goal: AiGoal.Engage,
+            Tone: AiTone.Professional,
+            Length: AiLength.Medium,
+            NumVariants: 3
+        );
+
+        var result = await _client.GenerateCreatorVariantsAsync(request);
+
+        // Should salvage the 2 complete variants
+        Assert.Equal(2, result.Variants.Count);
+        Assert.Equal("First complete variant", result.Variants[0].Text);
+        Assert.Equal("Second complete variant", result.Variants[1].Text);
+    }
+
+    [Fact]
+    public async Task GenerateCreatorVariantsAsync_TruncatedJsonNoCompleteVariants_ThrowsException()
+    {
+        // Simulate truncated JSON with no complete variants
+        var truncatedJson = @"{
+            ""variants"": [
+                { ""id"": ""v1"", ""text"": ""Incom";  // Truncated immediately
+
+        var geminiResponse = new
+        {
+            candidates = new[]
+            {
+                new
+                {
+                    content = new
+                    {
+                        parts = new[]
+                        {
+                            new { text = truncatedJson }
+                        }
+                    }
+                }
+            }
+        };
+
+        SetupHttpResponse(HttpStatusCode.OK, JsonSerializer.Serialize(geminiResponse));
+
+        var request = new AiGenerateVariantsRequest(
+            Platform: AiPlatform.Facebook,
+            InputText: "Test text",
+            Goal: AiGoal.Engage,
+            Tone: AiTone.Professional,
+            Length: AiLength.Medium,
+            NumVariants: 3
+        );
+
+        // Should throw because no complete variants could be salvaged
+        await Assert.ThrowsAsync<GeminiApiException>(() =>
+            _client.GenerateCreatorVariantsAsync(request));
+    }
+
     private void SetupHttpResponse(HttpStatusCode statusCode, string content)
     {
         _httpHandlerMock

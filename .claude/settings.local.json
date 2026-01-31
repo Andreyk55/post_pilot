@@ -25,7 +25,9 @@
       "Bash(docker exec:*)",
       "Bash(echo \"Check if ngrok is running and get the URL:\" curl -s http://localhost:4040/api/tunnels)",
       "Bash(npm run build:*)",
-      "Read(//d/**)"
+      "Read(//d/**)",
+      "Bash(dotnet test:*)",
+      "Bash(dotnet msbuild:*)"
     ]
   }
 }

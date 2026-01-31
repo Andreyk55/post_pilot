@@ -1,9 +1,11 @@
 const API_URL = 'http://localhost:5122/api'
 
-export type AiTextAction = 'Polish' | 'RewriteTone' | 'Shorten' | 'Expand' | 'Hashtags' | 'PreFlight'
-export type AiTone = 'Professional' | 'Casual' | 'Funny' | 'Sales'
+export type AiTextAction = 'Polish' | 'RewriteTone' | 'Shorten' | 'Expand' | 'Hashtags' | 'PreFlight' | 'GenerateVariants'
+export type AiTone = 'Professional' | 'Casual' | 'Funny' | 'Sales' | 'Humorous' | 'Urgent' | 'Inspirational'
 export type AiPlatform = 'Facebook' | 'Instagram' | 'LinkedIn' | 'X'
 export type AiIssueSeverity = 'Info' | 'Warning' | 'Error'
+export type AiGoal = 'Engage' | 'Promote' | 'Announce' | 'Educate' | 'Story'
+export type AiLength = 'Short' | 'Medium' | 'Long'
 
 export interface AiTextRequest {
   action: AiTextAction
@@ -41,6 +43,31 @@ export interface AiPreFlightResponse {
 }
 
 export type AiTextResponse = AiTextVariantsResponse | AiHashtagsResponse | AiPreFlightResponse
+
+// New Generate Variants types
+export interface AiGenerateVariantsRequest {
+  platform: AiPlatform
+  inputText: string
+  goal: AiGoal
+  tone: AiTone
+  length: AiLength
+  includeEmojis?: boolean
+  includeHashtags?: boolean
+  includeCta?: boolean
+  includeQuestion?: boolean
+  numVariants?: number
+  language?: string
+  regenerateIndex?: number
+}
+
+export interface AiGeneratedVariant {
+  id: string
+  text: string
+}
+
+export interface AiGenerateVariantsResponse {
+  variants: AiGeneratedVariant[]
+}
 
 export interface AiApiError {
   title: string
@@ -121,6 +148,28 @@ export const aiApi = {
       text,
     })
     return response as AiPreFlightResponse
+  },
+
+  /**
+   * Generate text variants with full control options (goal, tone, length, include flags).
+   */
+  async generateVariants(request: AiGenerateVariantsRequest): Promise<AiGenerateVariantsResponse> {
+    const response = await fetch(`${API_URL}/ai/text/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    })
+
+    if (!response.ok) {
+      const error: AiApiError = await response.json().catch(() => ({
+        title: 'Error',
+        detail: 'An unexpected error occurred',
+        status: response.status,
+      }))
+      throw new AiError(error.detail, response.status, error.title)
+    }
+
+    return response.json()
   },
 }
 

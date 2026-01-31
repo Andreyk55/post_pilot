@@ -615,6 +615,199 @@
   font-weight: 700;
 }
 
+/* New Generator Controls */
+.ai-generator-controls {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.ai-control-row {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.ai-control-row .ai-control-group {
+  flex: 1;
+  min-width: 0;
+}
+
+.ai-length-chips {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.ai-chip {
+  padding: 0.375rem 0.625rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.ai-chip:hover:not(:disabled) {
+  background: rgba(102, 126, 234, 0.15);
+  border-color: rgba(102, 126, 234, 0.3);
+}
+
+.ai-chip.active {
+  background: rgba(102, 126, 234, 0.25);
+  border-color: rgba(102, 126, 234, 0.5);
+  color: #a8b4f0;
+}
+
+.ai-chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ai-include-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.ai-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.ai-toggle input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: #667eea;
+  cursor: pointer;
+}
+
+.ai-toggle span {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.ai-toggle:hover span {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.ai-generate-btn {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.ai-generate-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
+}
+
+.ai-generate-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Quick Actions (secondary buttons) */
+.ai-quick-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.ai-quick-btn {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.ai-quick-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.ai-quick-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Variant card header (for generated variants) */
+.variant-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.variant-number {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(102, 126, 234, 0.9);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.variant-regenerating {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-style: italic;
+}
+
+/* Regenerating state */
+.ai-variant-card.regenerating {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.ai-variant-card.regenerating .variant-text {
+  filter: blur(2px);
+}
+
+/* Regenerate button */
+.variant-btn-regenerate {
+  background: transparent;
+  border: 1px solid rgba(255, 152, 0, 0.3);
+  color: rgba(255, 152, 0, 0.8);
+}
+
+.variant-btn-regenerate:hover:not(:disabled) {
+  background: rgba(255, 152, 0, 0.1);
+  border-color: rgba(255, 152, 0, 0.5);
+  color: #ff9800;
+}
+
+.variant-btn-regenerate:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 @media (max-width: 480px) {
   .ai-controls {
     flex-direction: column;
@@ -632,5 +825,18 @@
 
   .thumbnail-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .ai-control-row {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .ai-length-chips {
+    justify-content: flex-start;
+  }
+
+  .ai-include-toggles {
+    gap: 0.5rem 1rem;
   }
 }
