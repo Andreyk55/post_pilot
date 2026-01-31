@@ -682,7 +682,7 @@ export function AiAssistPanel({
           <div className="ai-variants">
             {textResult.variants.map((variant, index) => (
               <div
-                key={variant.id}
+                key={index}
                 className={`ai-variant-card ${regeneratingIndex === index ? 'regenerating' : ''}`}
               >
                 <div className="variant-header">

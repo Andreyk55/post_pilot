@@ -234,8 +234,10 @@ public class Startup
 
         services.AddSingleton(geminiSettings);
 
-        // Gemini client with typed HttpClient
-        services.AddHttpClient<IGeminiClient, GeminiClient>();
+        // Google AI client with typed HttpClient
+        // GoogleAiClientRouter automatically routes to GeminiTextClient or GemmaTextClient
+        // based on the model name (gemma-* uses Gemma client, others use Gemini client)
+        services.AddHttpClient<IGeminiClient, GoogleAiClientRouter>();
 
         // Rate limiter (in-memory for MVP)
         services.AddSingleton<IAiRateLimiter, InMemoryAiRateLimiter>();

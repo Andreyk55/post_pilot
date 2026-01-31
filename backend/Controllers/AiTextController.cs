@@ -238,9 +238,12 @@ public class AiTextController : ControllerBase
             errors["numVariants"] = new[] { "Number of variants must be between 1 and 5." };
         }
 
-        if (request.RegenerateIndex.HasValue && (request.RegenerateIndex < 0 || request.RegenerateIndex >= request.NumVariants))
+        // RegenerateIndex is the position in the UI list to replace, not related to numVariants.
+        // When regenerating, numVariants indicates how many new variants to generate (usually 1),
+        // while regenerateIndex indicates which position in the original list to replace.
+        if (request.RegenerateIndex.HasValue && request.RegenerateIndex < 0)
         {
-            errors["regenerateIndex"] = new[] { "Regenerate index is out of range." };
+            errors["regenerateIndex"] = new[] { "Regenerate index cannot be negative." };
         }
 
         return errors;
