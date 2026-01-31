@@ -138,6 +138,7 @@ export function AiAssistPanel({
   const [textResult, setTextResult] = useState<TextResult | null>(null)
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
   const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null)
+  const [selectedHashtags, setSelectedHashtags] = useState<Set<string>>(new Set())
 
   // Media tab state
   const [mediaResult, setMediaResult] = useState<MediaResult | null>(null)
@@ -212,7 +213,31 @@ export function AiAssistPanel({
     handleTextAction(async () => {
       const response = await aiApi.hashtags(platform, text)
       setTextResult({ type: 'hashtags', hashtags: response.hashtags })
+      // Select all hashtags by default
+      setSelectedHashtags(new Set(response.hashtags))
     })
+
+  const toggleHashtag = (hashtag: string) => {
+    setSelectedHashtags((prev) => {
+      const next = new Set(prev)
+      if (next.has(hashtag)) {
+        next.delete(hashtag)
+      } else {
+        next.add(hashtag)
+      }
+      return next
+    })
+  }
+
+  const selectAllHashtags = () => {
+    if (textResult?.type === 'hashtags') {
+      setSelectedHashtags(new Set(textResult.hashtags))
+    }
+  }
+
+  const deselectAllHashtags = () => {
+    setSelectedHashtags(new Set())
+  }
 
   const handlePreFlight = () =>
     handleTextAction(async () => {
@@ -357,9 +382,11 @@ export function AiAssistPanel({
   }
 
   const handleInsertHashtags = (hashtags: string[]) => {
+    if (hashtags.length === 0) return
     const hashtagText = ' ' + hashtags.join(' ')
     onAppendText(hashtagText)
     setTextResult(null)
+    setSelectedHashtags(new Set())
   }
 
   const handleSelectThumbnail = (index: number) => {
@@ -765,20 +792,45 @@ export function AiAssistPanel({
       {activeTab === 'text' && textResult?.type === 'hashtags' && (
         <div className="ai-results">
           <h4>Suggested Hashtags</h4>
+          <p className="hashtags-hint">Click to select/deselect hashtags</p>
           <div className="ai-hashtags">
             {textResult.hashtags.map((hashtag, index) => (
-              <span key={index} className="hashtag-chip">
+              <button
+                key={index}
+                type="button"
+                className={`hashtag-chip ${selectedHashtags.has(hashtag) ? 'selected' : ''}`}
+                onClick={() => toggleHashtag(hashtag)}
+              >
                 {hashtag}
-              </span>
+              </button>
             ))}
           </div>
-          <button
-            type="button"
-            className="hashtags-insert-btn"
-            onClick={() => handleInsertHashtags(textResult.hashtags)}
-          >
-            Insert at end
-          </button>
+          <div className="hashtags-actions">
+            <div className="hashtags-select-actions">
+              <button
+                type="button"
+                className="hashtags-select-btn"
+                onClick={selectAllHashtags}
+              >
+                Select All
+              </button>
+              <button
+                type="button"
+                className="hashtags-select-btn"
+                onClick={deselectAllHashtags}
+              >
+                Deselect All
+              </button>
+            </div>
+            <button
+              type="button"
+              className="hashtags-insert-btn"
+              onClick={() => handleInsertHashtags(Array.from(selectedHashtags))}
+              disabled={selectedHashtags.size === 0}
+            >
+              Insert {selectedHashtags.size > 0 ? `(${selectedHashtags.size})` : ''} at end
+            </button>
+          </div>
         </div>
       )}
 
