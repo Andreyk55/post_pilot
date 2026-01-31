@@ -42,6 +42,17 @@ public class GeminiTextClient : GoogleAiClientBase, IGeminiClient
 
         var prompt = BuildVariantsPromptWithVoice(action, platform, text, tone, language, voiceProfile);
         var responseText = await CallGenerateContentAsync(prompt, cancellationToken);
+        
+        // Debug logging in development
+        #if DEBUG
+        var examplePostsCount = voiceProfile?.ExamplePosts?.Split(new[] { "\n\n" }, StringSplitOptions.RemoveEmptyEntries).Length ?? 0;
+        var doRulesCount = voiceProfile?.DoRules?.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length ?? 0;
+        var dontRulesCount = voiceProfile?.DontRules?.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length ?? 0;
+        var bannedWordsCount = voiceProfile?.BannedWords?.Split(new[] { ',', '\n' }, StringSplitOptions.RemoveEmptyEntries).Length ?? 0;
+        Logger.LogDebug("AI Prompt for {Action}: VoiceProfile={VoiceProfileId}, Tone={Tone}, Platform={Platform}, PromptLength={PromptLength}, ExamplePosts={ExamplePosts}, DoRules={DoRules}, DontRules={DontRules}, BannedWords={BannedWords}", 
+            action, voiceProfile?.Id.ToString() ?? "none", tone?.ToString() ?? "none", platform, prompt.Length, examplePostsCount, doRulesCount, dontRulesCount, bannedWordsCount);
+        #endif
+        
         var result = ParseVariantsResponse(responseText, action);
 
         Cache.Set(cacheKey, result, CacheDuration);
@@ -65,6 +76,17 @@ public class GeminiTextClient : GoogleAiClientBase, IGeminiClient
 
         var prompt = BuildHashtagsPromptWithVoice(platform, text, language, voiceProfile);
         var responseText = await CallGenerateContentAsync(prompt, cancellationToken);
+        
+        // Debug logging in development
+        #if DEBUG
+        var examplePostsCount = voiceProfile?.ExamplePosts?.Split(new[] { "\n\n" }, StringSplitOptions.RemoveEmptyEntries).Length ?? 0;
+        var doRulesCount = voiceProfile?.DoRules?.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length ?? 0;
+        var dontRulesCount = voiceProfile?.DontRules?.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length ?? 0;
+        var bannedWordsCount = voiceProfile?.BannedWords?.Split(new[] { ',', '\n' }, StringSplitOptions.RemoveEmptyEntries).Length ?? 0;
+        Logger.LogDebug("AI Hashtags Prompt: VoiceProfile={VoiceProfileId}, Platform={Platform}, PromptLength={PromptLength}, ExamplePosts={ExamplePosts}, DoRules={DoRules}, DontRules={DontRules}, BannedWords={BannedWords}", 
+            voiceProfile?.Id.ToString() ?? "none", platform, prompt.Length, examplePostsCount, doRulesCount, dontRulesCount, bannedWordsCount);
+        #endif
+        
         var result = ParseHashtagsResponse(responseText);
 
         Cache.Set(cacheKey, result, CacheDuration);
@@ -88,6 +110,17 @@ public class GeminiTextClient : GoogleAiClientBase, IGeminiClient
 
         var prompt = BuildPreFlightPromptWithVoice(platform, text, language, voiceProfile);
         var responseText = await CallGenerateContentAsync(prompt, cancellationToken, maxOutputTokens: 3072);
+        
+        // Debug logging in development
+        #if DEBUG
+        var examplePostsCount = voiceProfile?.ExamplePosts?.Split(new[] { "\n\n" }, StringSplitOptions.RemoveEmptyEntries).Length ?? 0;
+        var doRulesCount = voiceProfile?.DoRules?.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length ?? 0;
+        var dontRulesCount = voiceProfile?.DontRules?.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length ?? 0;
+        var bannedWordsCount = voiceProfile?.BannedWords?.Split(new[] { ',', '\n' }, StringSplitOptions.RemoveEmptyEntries).Length ?? 0;
+        Logger.LogDebug("AI PreFlight Prompt: VoiceProfile={VoiceProfileId}, Platform={Platform}, PromptLength={PromptLength}, ExamplePosts={ExamplePosts}, DoRules={DoRules}, DontRules={DontRules}, BannedWords={BannedWords}", 
+            voiceProfile?.Id.ToString() ?? "none", platform, prompt.Length, examplePostsCount, doRulesCount, dontRulesCount, bannedWordsCount);
+        #endif
+        
         var result = ParsePreFlightResponse(responseText);
 
         Cache.Set(cacheKey, result, CacheDuration);
@@ -112,6 +145,17 @@ public class GeminiTextClient : GoogleAiClientBase, IGeminiClient
 
         var prompt = BuildCreatorVariantsPromptWithVoice(request, numToGenerate, voiceProfile);
         var responseText = await CallGenerateContentAsync(prompt, cancellationToken, maxOutputTokens: 4096);
+        
+        // Debug logging in development
+        #if DEBUG
+        var examplePostsCount = voiceProfile?.ExamplePosts?.Split(new[] { "\n\n" }, StringSplitOptions.RemoveEmptyEntries).Length ?? 0;
+        var doRulesCount = voiceProfile?.DoRules?.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length ?? 0;
+        var dontRulesCount = voiceProfile?.DontRules?.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length ?? 0;
+        var bannedWordsCount = voiceProfile?.BannedWords?.Split(new[] { ',', '\n' }, StringSplitOptions.RemoveEmptyEntries).Length ?? 0;
+        Logger.LogDebug("AI Creator Variants Prompt: VoiceProfile={VoiceProfileId}, Tone={Tone}, Goal={Goal}, Platform={Platform}, PromptLength={PromptLength}, ExamplePosts={ExamplePosts}, DoRules={DoRules}, DontRules={DontRules}, BannedWords={BannedWords}", 
+            voiceProfile?.Id.ToString() ?? "none", request.Tone, request.Goal, request.Platform, prompt.Length, examplePostsCount, doRulesCount, dontRulesCount, bannedWordsCount);
+        #endif
+        
         var result = ParseCreatorVariantsResponse(responseText, numToGenerate);
 
         if (result.Variants.Count < numToGenerate)

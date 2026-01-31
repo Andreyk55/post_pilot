@@ -629,14 +629,15 @@ Rules:
 
         var voiceSection = BuildVoiceProfileSection(profile);
 
-        // Insert voice section after the first line of instructions
+        // Insert voice section after the first line of instructions, with priority rule
+        var priorityRule = "\n\nPRIORITY RULE: Follow the Voice Profile strictly. Apply Tone only as a light adjustment within the Voice Profile. If Tone conflicts with Voice rules, follow Voice.\n";
         var insertPoint = basePrompt.IndexOf("\n\nPlatform:");
         if (insertPoint > 0)
         {
-            return basePrompt.Insert(insertPoint, voiceSection);
+            return basePrompt.Insert(insertPoint, priorityRule + voiceSection);
         }
 
-        return voiceSection + basePrompt;
+        return priorityRule + voiceSection + basePrompt;
     }
 
     protected static string BuildHashtagsPromptWithVoice(AiPlatform platform, string text, string language, AiVoiceProfile? profile)
@@ -645,20 +646,17 @@ Rules:
         if (profile == null)
             return basePrompt;
 
-        // For hashtags, add context about the brand/niche
-        var brandContext = "";
-        if (!string.IsNullOrWhiteSpace(profile.Description))
-        {
-            brandContext = $"\nBrand context: {profile.Description}\nConsider this niche/audience when selecting hashtags.";
-        }
+        // Always include voice section when profile exists, with priority rule
+        var voiceSection = BuildVoiceProfileSection(profile);
+        var priorityRule = "\n\nPRIORITY RULE: Use the Voice Profile to infer niche/audience and avoid banned terms. IMPORTANT: Do NOT include any banned words/phrases from the Voice Profile (including inside hashtags).\n";
 
         var insertPoint = basePrompt.IndexOf("\n\nPost text:");
         if (insertPoint > 0)
         {
-            return basePrompt.Insert(insertPoint, brandContext);
+            return basePrompt.Insert(insertPoint, priorityRule + voiceSection);
         }
 
-        return basePrompt;
+        return priorityRule + voiceSection + basePrompt;
     }
 
     protected static string BuildPreFlightPromptWithVoice(AiPlatform platform, string text, string language, AiVoiceProfile? profile)
@@ -667,10 +665,12 @@ Rules:
 
         var voiceSection = "";
         var bannedWordsCheck = "";
+        var priorityRule = "";
 
         if (profile != null)
         {
             voiceSection = BuildVoiceProfileSection(profile);
+            priorityRule = "\n\nPRIORITY RULE: When evaluating content quality, Voice Profile rules take precedence over general best practices. Flag violations of Voice Profile rules as errors.\n";
 
             if (!string.IsNullOrWhiteSpace(profile.BannedWords))
             {
@@ -688,7 +688,7 @@ Rules:
         }
 
         return $@"You are a social media content reviewer. Analyze this post and provide a quality score and issues.
-{voiceSection}
+{priorityRule}{voiceSection}
 Platform: {platform}
 Language: {language}
 Character limit: {charLimit}
@@ -715,7 +715,7 @@ Check for:
 - Platform-specific best practices (severity: info)
 - Overuse of caps or punctuation (severity: warning)
 - Missing hashtags if appropriate (severity: info)
-{(profile != null ? "- Voice profile rule violations (severity: warning)" : "")}
+{(profile != null ? "- Voice profile rule violations (severity: error)" : "")}
 
 Rules:
 - Score 0-100 based on overall quality
@@ -769,9 +769,17 @@ Rules:
 
         var includeSection = string.Join("\n- ", includeInstructions);
 
+        // Build dynamic JSON example based on numVariants
+        var jsonExampleVariants = new List<string>();
+        for (int i = 1; i <= numVariants; i++)
+        {
+            jsonExampleVariants.Add($@"    {{ ""id"": ""v{i}"", ""text"": ""..."" }}");
+        }
+        var jsonExample = string.Join(",\n", jsonExampleVariants);
+
         var voiceSection = BuildVoiceProfileSection(profile);
         var voiceRulesReminder = profile != null
-            ? "\n- CRITICAL: Respect all voice profile rules, especially banned words\n- Match the style shown in example posts"
+            ? "\n- CRITICAL: Respect all voice profile rules, especially banned words\n- Match the style shown in example posts\n- PRIORITY RULE: Follow the Voice Profile strictly. Apply Tone only as a light adjustment within the Voice Profile. If Tone conflicts with Voice rules, follow Voice."
             : "";
 
         return $@"You are a social media content creator assistant. Generate {numVariants} distinct text variant(s) based on the following input and requirements.
@@ -793,9 +801,7 @@ INCLUDE/EXCLUDE:
 Return ONLY valid JSON in this exact format:
 {{
   ""variants"": [
-    {{ ""id"": ""v1"", ""text"": ""..."" }},
-    {{ ""id"": ""v2"", ""text"": ""..."" }},
-    {{ ""id"": ""v3"", ""text"": ""..."" }}
+{jsonExample}
   ]
 }}
 
@@ -804,7 +810,7 @@ RULES:
 - Each variant must be unique and distinct in approach/wording
 - Each variant must respect the max character limit ({maxLength})
 - Maintain the core message from the input
-- Apply the {toneStr} tone consistently
+- Apply tone as a modifier within the Voice Profile boundaries (Voice Profile overrides Tone if conflict)
 - Follow the {request.Goal} goal structure{voiceRulesReminder}
 - DO NOT include labels like ""Option 1:"" or ""Variant 1:"" in the text itself
 - Output plain text only (no markdown formatting)
