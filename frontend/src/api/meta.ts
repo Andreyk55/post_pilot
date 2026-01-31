@@ -121,4 +121,13 @@ export const metaApi = {
     })
     if (!response.ok) throw new Error('Failed to disconnect Meta')
   },
+
+  /**
+   * Get validation limits for the application
+   */
+  async getLimits(): Promise<ValidationLimitsResponse> {
+    const response = await fetch(`${API_URL}/meta/limits`)
+    if (!response.ok) throw new Error('Failed to get validation limits')
+    return response.json()
+  },
 }

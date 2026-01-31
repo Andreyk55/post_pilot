@@ -193,6 +193,12 @@ public class PostsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<PostDto>> CreatePost(CreatePostRequest request)
     {
+        var validationErrors = ValidateCreatePostRequest(request);
+        if (validationErrors.Count > 0)
+        {
+            return ValidationProblem(new ValidationProblemDetails(validationErrors));
+        }
+
         var post = new Post
         {
             Id = Guid.NewGuid(),
@@ -246,6 +252,12 @@ public class PostsController : ControllerBase
             return BadRequest(new { error = "Cannot update a post that is not pending" });
         }
 
+        var validationErrors = ValidateUpdatePostRequest(request);
+        if (validationErrors.Count > 0)
+        {
+            return ValidationProblem(new ValidationProblemDetails(validationErrors));
+        }
+
         var scheduledAtChanged = post.ScheduledAt != request.ScheduledAt;
 
         post.Content = request.Content;
@@ -289,6 +301,34 @@ public class PostsController : ControllerBase
         await _context.SaveChangesAsync();
 
         return NoContent();
+    }
+
+    private static Dictionary<string, string[]> ValidateCreatePostRequest(CreatePostRequest request)
+    {
+        var errors = new Dictionary<string, string[]>();
+
+        if (request.Content?.Length > ValidationLimits.PostTextMaxLength)
+        {
+            errors["content"] = [$"Post content must not exceed {ValidationLimits.PostTextMaxLength} characters."];
+        }
+
+        // Note: Media validation is handled in MediaController when generating upload URLs
+        // and file size is checked before upload. Here we could add additional validation
+        // if needed, but for now, rely on the media service limits.
+
+        return errors;
+    }
+
+    private static Dictionary<string, string[]> ValidateUpdatePostRequest(UpdatePostRequest request)
+    {
+        var errors = new Dictionary<string, string[]>();
+
+        if (request.Content?.Length > ValidationLimits.PostTextMaxLength)
+        {
+            errors["content"] = [$"Post content must not exceed {ValidationLimits.PostTextMaxLength} characters."];
+        }
+
+        return errors;
     }
 }
 

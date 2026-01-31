@@ -109,3 +109,33 @@ public record ConnectedInstagramAccountDto(
 public record MetaAvailablePagesResponse(
     List<FacebookPageDto> Pages
 );
+
+// Validation Limits
+public record ValidationLimitsResponse(
+    VoiceProfileLimits VoiceProfile,
+    PostLimits Post,
+    MediaLimits Media
+);
+
+public record VoiceProfileLimits(
+    int NameMinLength,
+    int NameMaxLength,
+    int DescriptionMaxLength,
+    int DoRulesMaxLength,
+    int DontRulesMaxLength,
+    int BannedWordsMaxLength,
+    int ExamplePostsMaxLength,
+    int TotalMaxLength
+);
+
+public record PostLimits(
+    int TextMaxLength,
+    int TitleMaxLength,
+    int MaxHashtags,
+    int MaxMediaFiles
+);
+
+public record MediaLimits(
+    long ImageMaxBytes,
+    long VideoMaxBytes
+);

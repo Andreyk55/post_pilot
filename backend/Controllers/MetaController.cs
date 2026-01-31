@@ -219,4 +219,34 @@ public class MetaController : ControllerBase
             return StatusCode(500, new { error = "Failed to disconnect" });
         }
     }
+
+    /// <summary>
+    /// Get validation limits for the application
+    /// </summary>
+    [HttpGet("limits")]
+    public ActionResult<ValidationLimitsResponse> GetLimits()
+    {
+        return Ok(new ValidationLimitsResponse(
+            new VoiceProfileLimits(
+                ValidationLimits.VoiceProfileNameMinLength,
+                ValidationLimits.VoiceProfileNameMaxLength,
+                ValidationLimits.VoiceProfileDescriptionMaxLength,
+                ValidationLimits.VoiceProfileDoRulesMaxLength,
+                ValidationLimits.VoiceProfileDontRulesMaxLength,
+                ValidationLimits.VoiceProfileBannedWordsMaxLength,
+                ValidationLimits.VoiceProfileExamplePostsMaxLength,
+                ValidationLimits.VoiceProfileTotalMaxLength
+            ),
+            new PostLimits(
+                ValidationLimits.PostTextMaxLength,
+                ValidationLimits.PostTitleMaxLength,
+                ValidationLimits.PostMaxHashtags,
+                ValidationLimits.PostMaxMediaFiles
+            ),
+            new MediaLimits(
+                ValidationLimits.MediaImageMaxBytes,
+                ValidationLimits.MediaVideoMaxBytes
+            )
+        ));
+    }
 }

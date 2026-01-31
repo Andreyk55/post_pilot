@@ -26,7 +26,7 @@ public class LocalMediaService : IMediaService
         "video/mp4"
     };
 
-    private const long DefaultMaxImageFileSizeBytes = 10 * 1024 * 1024; // 10MB
+    private const long DefaultMaxImageFileSizeBytes = 20 * 1024 * 1024; // 20MB
     private const long DefaultMaxVideoFileSizeBytes = 200 * 1024 * 1024; // 200MB
 
     public IReadOnlyCollection<string> AllowedImageTypes => _allowedImageTypes;

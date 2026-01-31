@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   voiceProfileApi,
   type VoiceProfile,
@@ -33,6 +33,10 @@ export function VoiceProfileModal({
   const [loadingProfile, setLoadingProfile] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
+  const totalChars = useMemo(() => {
+    return name.length + description.length + doRules.length + dontRules.length + bannedWords.length + examplePosts.length
+  }, [name, description, doRules, dontRules, bannedWords, examplePosts])
 
   const isEditMode = !!profileId
 
@@ -71,6 +75,11 @@ export function VoiceProfileModal({
     e.preventDefault()
     if (!name.trim()) {
       setError('Name is required')
+      return
+    }
+
+    if (totalChars > 8000) {
+      setError('Total voice profile content exceeds 8000 characters')
       return
     }
 
@@ -150,7 +159,7 @@ export function VoiceProfileModal({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g., Brand Voice, Casual Personal"
-                maxLength={100}
+                maxLength={60}
                 disabled={loading}
                 required
               />
@@ -163,7 +172,7 @@ export function VoiceProfileModal({
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Describe your brand voice and target audience..."
-                maxLength={1000}
+                maxLength={300}
                 disabled={loading}
                 rows={3}
               />
@@ -177,7 +186,7 @@ export function VoiceProfileModal({
                 value={doRules}
                 onChange={(e) => setDoRules(e.target.value)}
                 placeholder="Use active voice&#10;Include statistics when possible&#10;Start with a hook"
-                maxLength={2000}
+                maxLength={1500}
                 disabled={loading}
                 rows={4}
               />
@@ -191,7 +200,7 @@ export function VoiceProfileModal({
                 value={dontRules}
                 onChange={(e) => setDontRules(e.target.value)}
                 placeholder="Don't use jargon&#10;Avoid passive voice&#10;Never be condescending"
-                maxLength={2000}
+                maxLength={1500}
                 disabled={loading}
                 rows={4}
               />
@@ -205,7 +214,7 @@ export function VoiceProfileModal({
                 value={bannedWords}
                 onChange={(e) => setBannedWords(e.target.value)}
                 placeholder="synergy, leverage, game-changer, disrupt"
-                maxLength={1000}
+                maxLength={800}
                 disabled={loading}
                 rows={2}
               />
@@ -219,11 +228,16 @@ export function VoiceProfileModal({
                 value={examplePosts}
                 onChange={(e) => setExamplePosts(e.target.value)}
                 placeholder="Here's an example post that shows our voice...&#10;&#10;And here's another example with a different approach..."
-                maxLength={5000}
+                maxLength={4000}
                 disabled={loading}
                 rows={6}
               />
               <span className="field-hint">Separate examples with a blank line. AI will match this style.</span>
+            </div>
+
+            <div className="total-chars">
+              Total characters: {totalChars} / 8000
+              {totalChars > 8000 && <span className="error"> (exceeds limit)</span>}
             </div>
 
             <div className="voice-profile-modal-actions">
@@ -241,7 +255,7 @@ export function VoiceProfileModal({
               <button type="button" className="btn-cancel" onClick={onClose} disabled={loading}>
                 Cancel
               </button>
-              <button type="submit" className="btn-save" disabled={loading || !name.trim()}>
+              <button type="submit" className="btn-save" disabled={loading || !name.trim() || totalChars > 8000}>
                 {loading ? (
                   <>
                     <div className="voice-profile-spinner" style={{width: '12px', height: '12px', marginRight: '0.5rem'}}></div>

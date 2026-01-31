@@ -117,3 +117,33 @@ export interface ConnectedTarget {
   identifier: string // pageId or @handle
   pictureUrl?: string
 }
+
+// Validation limits
+export interface ValidationLimitsResponse {
+  voiceProfile: VoiceProfileLimits
+  post: PostLimits
+  media: MediaLimits
+}
+
+export interface VoiceProfileLimits {
+  nameMinLength: number
+  nameMaxLength: number
+  descriptionMaxLength: number
+  doRulesMaxLength: number
+  dontRulesMaxLength: number
+  bannedWordsMaxLength: number
+  examplePostsMaxLength: number
+  totalMaxLength: number
+}
+
+export interface PostLimits {
+  textMaxLength: number
+  titleMaxLength: number
+  maxHashtags: number
+  maxMediaFiles: number
+}
+
+export interface MediaLimits {
+  imageMaxBytes: number
+  videoMaxBytes: number
+}

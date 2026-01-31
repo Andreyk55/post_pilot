@@ -16,11 +16,11 @@ public class AiVoiceProfileController : ControllerBase
     // TODO: Replace with real user authentication
     private static readonly Guid CurrentUserId = Guid.Parse("00000000-0000-0000-0000-000000000001");
 
-    private const int MaxNameLength = 100;
-    private const int MaxDescriptionLength = 1000;
-    private const int MaxRulesLength = 2000;
-    private const int MaxBannedWordsLength = 1000;
-    private const int MaxExamplePostsLength = 5000;
+    private const int MaxNameLength = ValidationLimits.VoiceProfileNameMaxLength;
+    private const int MaxDescriptionLength = ValidationLimits.VoiceProfileDescriptionMaxLength;
+    private const int MaxRulesLength = ValidationLimits.VoiceProfileDoRulesMaxLength; // Same for Do and Don't
+    private const int MaxBannedWordsLength = ValidationLimits.VoiceProfileBannedWordsMaxLength;
+    private const int MaxExamplePostsLength = ValidationLimits.VoiceProfileExamplePostsMaxLength;
 
     public AiVoiceProfileController(AppDbContext db, ILogger<AiVoiceProfileController> logger)
     {
@@ -223,34 +223,51 @@ public class AiVoiceProfileController : ControllerBase
         {
             errors["name"] = ["Name is required."];
         }
-        else if (name.Length > MaxNameLength)
+        else if (name.Length < ValidationLimits.VoiceProfileNameMinLength)
         {
-            errors["name"] = [$"Name must not exceed {MaxNameLength} characters."];
+            errors["name"] = [$"Name must be at least {ValidationLimits.VoiceProfileNameMinLength} characters."];
+        }
+        else if (name.Length > ValidationLimits.VoiceProfileNameMaxLength)
+        {
+            errors["name"] = [$"Name must not exceed {ValidationLimits.VoiceProfileNameMaxLength} characters."];
         }
 
-        if (description?.Length > MaxDescriptionLength)
+        if (description?.Length > ValidationLimits.VoiceProfileDescriptionMaxLength)
         {
-            errors["description"] = [$"Description must not exceed {MaxDescriptionLength} characters."];
+            errors["description"] = [$"Description must not exceed {ValidationLimits.VoiceProfileDescriptionMaxLength} characters."];
         }
 
-        if (doRules?.Length > MaxRulesLength)
+        if (doRules?.Length > ValidationLimits.VoiceProfileDoRulesMaxLength)
         {
-            errors["doRules"] = [$"Do rules must not exceed {MaxRulesLength} characters."];
+            errors["doRules"] = [$"Do rules must not exceed {ValidationLimits.VoiceProfileDoRulesMaxLength} characters."];
         }
 
-        if (dontRules?.Length > MaxRulesLength)
+        if (dontRules?.Length > ValidationLimits.VoiceProfileDontRulesMaxLength)
         {
-            errors["dontRules"] = [$"Don't rules must not exceed {MaxRulesLength} characters."];
+            errors["dontRules"] = [$"Don't rules must not exceed {ValidationLimits.VoiceProfileDontRulesMaxLength} characters."];
         }
 
-        if (bannedWords?.Length > MaxBannedWordsLength)
+        if (bannedWords?.Length > ValidationLimits.VoiceProfileBannedWordsMaxLength)
         {
-            errors["bannedWords"] = [$"Banned words must not exceed {MaxBannedWordsLength} characters."];
+            errors["bannedWords"] = [$"Banned words must not exceed {ValidationLimits.VoiceProfileBannedWordsMaxLength} characters."];
         }
 
-        if (examplePosts?.Length > MaxExamplePostsLength)
+        if (examplePosts?.Length > ValidationLimits.VoiceProfileExamplePostsMaxLength)
         {
-            errors["examplePosts"] = [$"Example posts must not exceed {MaxExamplePostsLength} characters."];
+            errors["examplePosts"] = [$"Example posts must not exceed {ValidationLimits.VoiceProfileExamplePostsMaxLength} characters."];
+        }
+
+        // Check total combined length
+        var totalLength = (name?.Length ?? 0) +
+                          (description?.Length ?? 0) +
+                          (doRules?.Length ?? 0) +
+                          (dontRules?.Length ?? 0) +
+                          (bannedWords?.Length ?? 0) +
+                          (examplePosts?.Length ?? 0);
+
+        if (totalLength > ValidationLimits.VoiceProfileTotalMaxLength)
+        {
+            errors["total"] = [$"Total voice profile content must not exceed {ValidationLimits.VoiceProfileTotalMaxLength} characters."];
         }
 
         return errors;

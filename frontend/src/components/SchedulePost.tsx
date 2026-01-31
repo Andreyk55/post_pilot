@@ -154,6 +154,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder="What do you want to share?"
+            maxLength={5000}
             rows={4}
           />
           <span className="char-count">{content.length} characters</span>
