@@ -234,10 +234,33 @@ public class Startup
 
         services.AddSingleton(geminiSettings);
 
+        // AI Provider settings
+        var aiProviderSettings = new AiProviderSettings
+        {
+            LanguageDetectorProvider = Environment.GetEnvironmentVariable("AI_LANGUAGE_DETECTOR_PROVIDER") ?? "gemini",
+            CaptionGeneratorProvider = Environment.GetEnvironmentVariable("AI_CAPTION_GENERATOR_PROVIDER") ?? "gemini"
+        };
+        services.AddSingleton(aiProviderSettings);
+
         // Google AI client with typed HttpClient
         // GoogleAiClientRouter automatically routes to GeminiTextClient or GemmaTextClient
         // based on the model name (gemma-* uses Gemma client, others use Gemini client)
         services.AddHttpClient<IGeminiClient, GoogleAiClientRouter>();
+
+        // Register multilingual caption providers via factories (config-driven)
+        services.AddSingleton<ILanguageDetector>(sp =>
+            LanguageDetectorFactory.Create(
+                sp.GetRequiredService<AiProviderSettings>().LanguageDetectorProvider,
+                sp));
+
+        services.AddSingleton<ICaptionGenerator>(sp =>
+            CaptionGeneratorFactory.Create(
+                sp.GetRequiredService<AiProviderSettings>().CaptionGeneratorProvider,
+                sp));
+
+        // Register application services
+        services.AddScoped<LanguageService>();
+        services.AddScoped<CaptionAssistService>();
 
         // Rate limiter (in-memory for MVP)
         services.AddSingleton<IAiRateLimiter, InMemoryAiRateLimiter>();

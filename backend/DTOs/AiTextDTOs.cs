@@ -158,3 +158,46 @@ public record AiPreFlightResponse(
     int Score,
     List<AiPreFlightIssue> Issues
 );
+
+// ===== Multilingual Caption Assistance =====
+
+/// <summary>
+/// Request for language detection.
+/// </summary>
+public record LanguageDetectRequest(
+    string Text
+);
+
+/// <summary>
+/// Response containing detected language information.
+/// </summary>
+public record LanguageDetectResponse(
+    string LanguageCode,
+    double Confidence,
+    bool IsReliable
+);
+
+/// <summary>
+/// Request for multilingual caption generation.
+/// </summary>
+public record CaptionGenerateRequest(
+    string Text,
+    AiPlatform Platform,
+    string? OutputLanguage = null,
+    int Variants = 1,
+    bool KeepBrandVoice = true,
+    bool StrictMeaning = true,
+    Guid? VoiceProfileId = null
+);
+
+/// <summary>
+/// Response containing generated multilingual captions.
+/// </summary>
+public record CaptionGenerateResponse(
+    string SourceLanguage,
+    double SourceConfidence,
+    bool SourceIsReliable,
+    string OutputLanguage,
+    List<string> Captions,
+    List<string> Warnings
+);

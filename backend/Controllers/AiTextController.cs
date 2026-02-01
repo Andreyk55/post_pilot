@@ -14,6 +14,8 @@ public class AiTextController : ControllerBase
     private readonly IGeminiClient _geminiClient;
     private readonly IAiRateLimiter _rateLimiter;
     private readonly AppDbContext _db;
+    private readonly LanguageService _languageService;
+    private readonly CaptionAssistService _captionAssistService;
     private readonly ILogger<AiTextController> _logger;
 
     // TODO: Replace with real user authentication
@@ -26,11 +28,15 @@ public class AiTextController : ControllerBase
         IGeminiClient geminiClient,
         IAiRateLimiter rateLimiter,
         AppDbContext db,
+        LanguageService languageService,
+        CaptionAssistService captionAssistService,
         ILogger<AiTextController> logger)
     {
         _geminiClient = geminiClient;
         _rateLimiter = rateLimiter;
         _db = db;
+        _languageService = languageService;
+        _captionAssistService = captionAssistService;
         _logger = logger;
     }
 
@@ -315,6 +321,176 @@ public class AiTextController : ControllerBase
         if (!Enum.IsDefined(request.Platform))
         {
             errors["platform"] = new[] { "Invalid platform value." };
+        }
+
+        return errors;
+    }
+
+    /// <summary>
+    /// Detect the language of the given text.
+    /// </summary>
+    [HttpPost("language/detect")]
+    [ProducesResponseType(typeof(LanguageDetectResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> DetectLanguage(
+        [FromBody] LanguageDetectRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Text))
+        {
+            return ValidationProblem(new ValidationProblemDetails
+            {
+                Errors = { ["text"] = new[] { "Text is required." } }
+            });
+        }
+
+        if (request.Text.Length > MaxTextLength)
+        {
+            return ValidationProblem(new ValidationProblemDetails
+            {
+                Errors = { ["text"] = new[] { $"Text must not exceed {MaxTextLength} characters." } }
+            });
+        }
+
+        try
+        {
+            var result = await _languageService.DetectLanguageAsync(request.Text, cancellationToken);
+            return Ok(new LanguageDetectResponse(result.LanguageCode, result.Confidence, result.IsReliable));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error detecting language");
+            return Problem(
+                title: "Language detection failed",
+                detail: "An error occurred while detecting the language.",
+                statusCode: StatusCodes.Status500InternalServerError);
+        }
+    }
+
+    /// <summary>
+    /// Generate multilingual captions with translation or rewriting support.
+    /// </summary>
+    [HttpPost("captions/generate")]
+    [ProducesResponseType(typeof(CaptionGenerateResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> GenerateCaptions(
+        [FromBody] DTOs.CaptionGenerateRequest request,
+        CancellationToken cancellationToken)
+    {
+        // Validate request
+        var errors = ValidateCaptionRequest(request);
+        if (errors.Count > 0)
+        {
+            return ValidationProblem(new ValidationProblemDetails(errors));
+        }
+
+        // Check rate limit
+        var canProceed = await _rateLimiter.TryAcquireAsync(CurrentUserId, cancellationToken);
+        if (!canProceed)
+        {
+            _logger.LogWarning("Rate limit exceeded for user {UserId}", CurrentUserId);
+            return Problem(
+                title: "Rate limit exceeded",
+                detail: "You've reached the maximum number of AI requests for today. Please try again tomorrow.",
+                statusCode: StatusCodes.Status429TooManyRequests);
+        }
+
+        try
+        {
+            // Load voice profile if provided
+            AiVoiceProfile? voiceProfile = null;
+            if (request.VoiceProfileId.HasValue)
+            {
+                voiceProfile = await _db.AiVoiceProfiles
+                    .FirstOrDefaultAsync(p => p.Id == request.VoiceProfileId.Value && p.UserId == CurrentUserId, cancellationToken);
+
+                if (voiceProfile == null)
+                {
+                    _logger.LogWarning("Voice profile {ProfileId} not found for user {UserId}", request.VoiceProfileId, CurrentUserId);
+                    // Continue without voice profile
+                }
+            }
+
+            // Generate captions
+            var (detection, captions, warnings) = await _captionAssistService.GenerateCaptionsAsync(
+                request.Text,
+                request.Platform,
+                request.OutputLanguage,
+                request.Variants,
+                request.StrictMeaning,
+                request.KeepBrandVoice,
+                voiceProfile,
+                cancellationToken);
+
+            return Ok(new CaptionGenerateResponse(
+                detection.LanguageCode,
+                detection.Confidence,
+                detection.IsReliable,
+                string.IsNullOrWhiteSpace(request.OutputLanguage) || request.OutputLanguage == "auto"
+                    ? detection.LanguageCode
+                    : request.OutputLanguage,
+                captions.ToList(),
+                warnings.ToList()));
+        }
+        catch (GeminiApiException ex) when (ex.StatusCode == 429)
+        {
+            return Problem(
+                title: "AI service quota exceeded",
+                detail: ex.Message,
+                statusCode: StatusCodes.Status429TooManyRequests);
+        }
+        catch (GeminiApiException ex) when (ex.StatusCode == 504)
+        {
+            return Problem(
+                title: "Request timed out",
+                detail: "The AI service took too long to respond. Please try again.",
+                statusCode: StatusCodes.Status504GatewayTimeout);
+        }
+        catch (GeminiApiException ex)
+        {
+            _logger.LogError(ex, "Gemini API error: {Message}, Status: {StatusCode}", ex.Message, ex.StatusCode);
+            return Problem(
+                title: "AI service unavailable",
+                detail: "The AI service is temporarily unavailable. Please try again later.",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating captions");
+            return Problem(
+                title: "Caption generation failed",
+                detail: "An error occurred while generating captions.",
+                statusCode: StatusCodes.Status500InternalServerError);
+        }
+    }
+
+    private static Dictionary<string, string[]> ValidateCaptionRequest(DTOs.CaptionGenerateRequest request)
+    {
+        var errors = new Dictionary<string, string[]>();
+
+        if (string.IsNullOrWhiteSpace(request.Text))
+        {
+            errors["text"] = new[] { "Text is required." };
+        }
+        else if (request.Text.Length < MinTextLength)
+        {
+            errors["text"] = new[] { $"Text must be at least {MinTextLength} character(s)." };
+        }
+        else if (request.Text.Length > MaxTextLength)
+        {
+            errors["text"] = new[] { $"Text must not exceed {MaxTextLength} characters." };
+        }
+
+        if (!Enum.IsDefined(request.Platform))
+        {
+            errors["platform"] = new[] { "Invalid platform value." };
+        }
+
+        if (request.Variants < 1 || request.Variants > 3)
+        {
+            errors["variants"] = new[] { "Number of variants must be between 1 and 3." };
         }
 
         return errors;

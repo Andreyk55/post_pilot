@@ -15,13 +15,15 @@ import {
   type AiVideoFrame,
   type AiGeneratedVariant,
   type AiGenerateVariantsRequest,
+  type LanguageDetectResponse,
+  type CaptionGenerateResponse,
 } from '../api/ai'
 import { type VoiceProfileSummary } from '../api/voiceProfiles'
 import { getMediaUrl, type MediaType } from '../api/media'
 import { extractVideoFrames, extractSingleFrame } from '../utils/videoFrameExtractor'
 import './AiAssistPanel.css'
 
-type TabType = 'text' | 'media'
+type TabType = 'text' | 'media' | 'translate'
 
 interface AiAssistPanelProps {
   text: string
@@ -58,7 +60,17 @@ interface GeneratedVariantsResult {
   variants: AiGeneratedVariant[]
 }
 
-type TextResult = VariantsResult | HashtagsResult | PreFlightResult | GeneratedVariantsResult
+interface CaptionsResult {
+  type: 'captions'
+  sourceLanguage: string
+  sourceConfidence: number
+  sourceIsReliable: boolean
+  outputLanguage: string
+  captions: string[]
+  warnings: string[]
+}
+
+type TextResult = VariantsResult | HashtagsResult | PreFlightResult | GeneratedVariantsResult | CaptionsResult
 
 // Media Results
 interface CaptionsResult {
@@ -116,6 +128,19 @@ const lengthOptions: { value: AiLength; label: string }[] = [
   { value: 'Long', label: 'Long' },
 ]
 
+const languageOptions: { value: string; label: string }[] = [
+  { value: 'auto', label: 'Same as detected' },
+  { value: 'en', label: 'English' },
+  { value: 'he', label: 'Hebrew' },
+  { value: 'ru', label: 'Russian' },
+  { value: 'ar', label: 'Arabic' },
+  { value: 'es', label: 'Spanish' },
+  { value: 'fr', label: 'French' },
+  { value: 'de', label: 'German' },
+]
+
+const RTL_LANGUAGES = ['he', 'ar']
+
 export function AiAssistPanel({
   text,
   onApplyText,
@@ -149,9 +174,34 @@ export function AiAssistPanel({
   const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null)
   const [selectedHashtags, setSelectedHashtags] = useState<Set<string>>(new Set())
 
+  // Translate tab state
+  const [detectedLanguage, setDetectedLanguage] = useState<LanguageDetectResponse | null>(null)
+  const [outputLanguage, setOutputLanguage] = useState<string>('auto')
+  const [captionVariants, setCaptionVariants] = useState<number>(1)
+  const [strictMeaning, setStrictMeaning] = useState<boolean>(true)
+  const [keepBrandVoice, setKeepBrandVoice] = useState<boolean>(true)
+
   // Media tab state
   const [mediaResult, setMediaResult] = useState<MediaResult | null>(null)
   const [altTextCopied, setAltTextCopied] = useState(false)
+
+  // Detect language when text changes (for translate tab)
+  useEffect(() => {
+    if (activeTab === 'translate' && text && text.length >= 3) {
+      const detectLanguage = async () => {
+        try {
+          const result = await aiApi.detectLanguage(text)
+          setDetectedLanguage(result)
+        } catch (err) {
+          // Silent fail for language detection
+          console.error('Language detection failed:', err)
+        }
+      }
+      // Debounce
+      const timer = setTimeout(detectLanguage, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [text, activeTab])
 
   // Clear selected voice profile if it's no longer available (e.g., deleted)
   useEffect(() => {
@@ -334,6 +384,29 @@ export function AiAssistPanel({
     }
   }
 
+  // Translate/Caption generation handler
+  const handleGenerateCaptions = () =>
+    handleTextAction(async () => {
+      const response = await aiApi.generateCaptions({
+        text,
+        platform,
+        outputLanguage: outputLanguage === 'auto' ? null : outputLanguage,
+        variants: captionVariants,
+        keepBrandVoice,
+        strictMeaning,
+        voiceProfileId: selectedVoiceProfileId,
+      })
+      setTextResult({
+        type: 'captions',
+        sourceLanguage: response.sourceLanguage,
+        sourceConfidence: response.sourceConfidence,
+        sourceIsReliable: response.sourceIsReliable,
+        outputLanguage: response.outputLanguage,
+        captions: response.captions,
+        warnings: response.warnings,
+      })
+    })
+
   // Media actions
   const handleImageCaptionIdeas = () =>
     handleMediaAction(async () => {
@@ -481,6 +554,16 @@ export function AiAssistPanel({
             }}
           >
             Text
+          </button>
+          <button
+            type="button"
+            className={`ai-tab ${activeTab === 'translate' ? 'active' : ''}`}
+            onClick={() => {
+              setActiveTab('translate')
+              setError(null)
+            }}
+          >
+            Translate
           </button>
           <button
             type="button"
@@ -674,6 +757,92 @@ export function AiAssistPanel({
         </>
       )}
 
+      {/* Translate Tab Content */}
+      {activeTab === 'translate' && (
+        <>
+          {isTextEmpty && <div className="ai-empty-state">Enter text to enable translation</div>}
+
+          {!isTextEmpty && (
+            <>
+              {/* Language Detection Display */}
+              {detectedLanguage && (
+                <div className="ai-language-detection">
+                  <strong>Detected:</strong>{' '}
+                  {languageOptions.find((l) => l.value === detectedLanguage.languageCode)?.label || detectedLanguage.languageCode}{' '}
+                  ({Math.round(detectedLanguage.confidence * 100)}%)
+                  {!detectedLanguage.isReliable && <span className="language-warning"> (low confidence)</span>}
+                </div>
+              )}
+
+              {/* Output Language Selection */}
+              <div className="ai-control-group">
+                <label htmlFor="ai-output-language">Output Language</label>
+                <select
+                  id="ai-output-language"
+                  value={outputLanguage}
+                  onChange={(e) => setOutputLanguage(e.target.value)}
+                  disabled={loading}
+                >
+                  {languageOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Caption Variants */}
+              <div className="ai-control-group">
+                <label htmlFor="ai-caption-variants">Variants</label>
+                <select
+                  id="ai-caption-variants"
+                  value={captionVariants}
+                  onChange={(e) => setCaptionVariants(Number(e.target.value))}
+                  disabled={loading}
+                >
+                  <option value={1}>1</option>
+                  <option value={3}>3</option>
+                </select>
+              </div>
+
+              {/* Toggles */}
+              <div className="ai-toggle-group">
+                <label className="ai-toggle">
+                  <input
+                    type="checkbox"
+                    checked={strictMeaning}
+                    onChange={(e) => setStrictMeaning(e.target.checked)}
+                    disabled={loading}
+                  />
+                  <span>Keep original meaning (strict)</span>
+                </label>
+                <label className="ai-toggle">
+                  <input
+                    type="checkbox"
+                    checked={keepBrandVoice}
+                    onChange={(e) => setKeepBrandVoice(e.target.checked)}
+                    disabled={loading || !selectedVoiceProfileId}
+                  />
+                  <span>Keep brand voice{!selectedVoiceProfileId && ' (select profile)'}</span>
+                </label>
+              </div>
+
+              {/* Generate Button */}
+              <div className="ai-actions">
+                <button
+                  type="button"
+                  className="ai-action-btn primary"
+                  onClick={handleGenerateCaptions}
+                  disabled={loading}
+                >
+                  {loading ? 'Generating...' : 'Generate'}
+                </button>
+              </div>
+            </>
+          )}
+        </>
+      )}
+
       {/* Media Tab Content */}
       {activeTab === 'media' && (
         <>
@@ -849,6 +1018,61 @@ export function AiAssistPanel({
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Caption Results (Translate Tab) */}
+      {activeTab === 'translate' && textResult?.type === 'captions' && (
+        <div className="ai-results">
+          <h4>Generated Captions</h4>
+          <div className="caption-meta">
+            <span>
+              {textResult.sourceLanguage} → {textResult.outputLanguage}
+            </span>
+            {textResult.warnings.length > 0 && (
+              <div className="caption-warnings">
+                {textResult.warnings.map((warning, index) => (
+                  <div key={index} className="warning-item">
+                    ⚠️ {warning}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="ai-variants">
+            {textResult.captions.map((caption, index) => {
+              const isRTL = RTL_LANGUAGES.includes(textResult.outputLanguage)
+              return (
+                <div key={index} className="ai-variant-card">
+                  <div className="variant-header">
+                    <span className="variant-number">Caption {index + 1}</span>
+                  </div>
+                  <div className={`variant-text ${isRTL ? 'rtl' : ''}`} dir={isRTL ? 'rtl' : 'ltr'}>
+                    {caption}
+                  </div>
+                  <div className="variant-meta">
+                    <span className="char-count">{caption.length} chars</span>
+                  </div>
+                  <div className="variant-actions">
+                    <button
+                      type="button"
+                      className="variant-btn variant-btn-apply"
+                      onClick={() => handleApply(caption)}
+                    >
+                      Apply
+                    </button>
+                    <button
+                      type="button"
+                      className="variant-btn variant-btn-copy"
+                      onClick={() => handleCopy(caption, index)}
+                    >
+                      {copiedIndex === index ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

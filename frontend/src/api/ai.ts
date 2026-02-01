@@ -71,6 +71,36 @@ export interface AiGenerateVariantsResponse {
   variants: AiGeneratedVariant[]
 }
 
+// Multilingual Caption Assistance Types
+export interface LanguageDetectRequest {
+  text: string
+}
+
+export interface LanguageDetectResponse {
+  languageCode: string
+  confidence: number
+  isReliable: boolean
+}
+
+export interface CaptionGenerateRequest {
+  text: string
+  platform: AiPlatform
+  outputLanguage?: string | null
+  variants?: number
+  keepBrandVoice?: boolean
+  strictMeaning?: boolean
+  voiceProfileId?: string | null
+}
+
+export interface CaptionGenerateResponse {
+  sourceLanguage: string
+  sourceConfidence: number
+  sourceIsReliable: boolean
+  outputLanguage: string
+  captions: string[]
+  warnings: string[]
+}
+
 export interface AiApiError {
   title: string
   detail: string
@@ -163,6 +193,50 @@ export const aiApi = {
    */
   async generateVariants(request: AiGenerateVariantsRequest): Promise<AiGenerateVariantsResponse> {
     const response = await fetch(`${API_URL}/ai/text/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    })
+
+    if (!response.ok) {
+      const error: AiApiError = await response.json().catch(() => ({
+        title: 'Error',
+        detail: 'An unexpected error occurred',
+        status: response.status,
+      }))
+      throw new AiError(error.detail, response.status, error.title)
+    }
+
+    return response.json()
+  },
+
+  /**
+   * Detect the language of the given text.
+   */
+  async detectLanguage(text: string): Promise<LanguageDetectResponse> {
+    const response = await fetch(`${API_URL}/ai/language/detect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    })
+
+    if (!response.ok) {
+      const error: AiApiError = await response.json().catch(() => ({
+        title: 'Error',
+        detail: 'An unexpected error occurred',
+        status: response.status,
+      }))
+      throw new AiError(error.detail, response.status, error.title)
+    }
+
+    return response.json()
+  },
+
+  /**
+   * Generate multilingual captions with translation or rewriting support.
+   */
+  async generateCaptions(request: CaptionGenerateRequest): Promise<CaptionGenerateResponse> {
+    const response = await fetch(`${API_URL}/ai/captions/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
