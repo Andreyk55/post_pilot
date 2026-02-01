@@ -19,6 +19,7 @@ import {
 import { type VoiceProfileSummary } from '../api/voiceProfiles'
 import { getMediaUrl, type MediaType } from '../api/media'
 import { extractVideoFrames, extractSingleFrame } from '../utils/videoFrameExtractor'
+import { stripHashtags } from '../utils/textUtils'
 import './AiAssistPanel.css'
 
 type TabType = 'text' | 'media' | 'translate'
@@ -398,8 +399,12 @@ export function AiAssistPanel({
       // Get sticky language (detects if unknown, uses cached if known)
       const langState = await ensureLanguageDetected()
 
+      // Strip hashtags before translating - they will be removed on Apply
+      // User can regenerate hashtags in target language after applying translation
+      const { cleanedText } = stripHashtags(text)
+
       const response = await aiApi.generateCaptions({
-        text,
+        text: cleanedText, // Send text without hashtags
         platform,
         outputLanguage: outputLanguage, // Use selected target language
         variants: captionVariants,
@@ -484,7 +489,10 @@ export function AiAssistPanel({
 
   // Result handlers
   const handleApply = (variantText: string, outputLang?: string) => {
-    // Pass the output language so parent can update sticky language
+    // When applying a translation (outputLang is provided), the variant text
+    // is the translated caption WITHOUT hashtags. Just apply it directly.
+    // The old hashtags from the source content are intentionally not preserved
+    // since they would be in the wrong language. User can generate new hashtags manually.
     onApplyText(variantText, outputLang)
     setTextResult(null)
     setMediaResult(null)
