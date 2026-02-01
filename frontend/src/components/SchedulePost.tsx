@@ -71,13 +71,11 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
 
     // If language is already known (sticky), reuse it - NO API call
     if (current.languageCode !== 'unknown') {
-      console.log('LANG DETECT CACHE HIT (sticky)', 'lang:', current.languageCode)
       return current
     }
 
     // Language unknown - detect it now
     const currentContent = contentRef.current
-    console.log('LANG DETECT API CALL', 'text length:', currentContent.length)
 
     try {
       const result = await aiApi.detectLanguage(currentContent)
@@ -103,7 +101,6 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
 
   // Reset language to unknown (for explicit re-detect)
   const resetLanguage = useCallback(() => {
-    console.log('LANG DETECT RESET - will re-detect on next Generate')
     setStickyLanguage({
       languageCode: 'unknown',
       confidence: 0,
@@ -113,7 +110,6 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
 
   // Set language directly (used when applying translation)
   const setLanguage = useCallback((languageCode: string) => {
-    console.log('LANG SET TO', languageCode, '(from translation apply)')
     setStickyLanguage({
       languageCode,
       confidence: 1.0, // Translation output language is known
