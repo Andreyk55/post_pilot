@@ -327,7 +327,7 @@ Rules:
         return $@"You are a social media hashtag expert. Suggest relevant hashtags for this post.
 
 Platform: {platform}
-Language: {language}
+Target Language: {language}
 Max hashtags: {maxHashtags}
 
 Post text:
@@ -342,7 +342,11 @@ Rules:
 - Suggest 5-{maxHashtags} relevant hashtags
 - Include mix of popular and niche hashtags
 - All hashtags must start with #
-- Use {language} language hashtags primarily
+- IMPORTANT: Generate hashtags in {language} language (e.g., if {language}=he, use Hebrew words like #מבצע, #חדש)
+- Do NOT translate to English unless the target language is 'en'
+- No spaces in hashtags (use underscores if needed)
+- Avoid punctuation and emojis inside hashtags
+- Keep tags short and relevant
 - Consider {platform} best practices
 - Output ONLY the JSON, no other text";
     }

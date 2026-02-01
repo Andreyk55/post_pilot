@@ -291,7 +291,9 @@ export function AiAssistPanel({
   // Text actions
   const handleHashtags = () =>
     handleTextAction(async () => {
-      const response = await aiApi.hashtags(platform, text, selectedVoiceProfileId)
+      // Get sticky language (detects if unknown, uses cached if known)
+      const langState = await ensureLanguageDetected()
+      const response = await aiApi.hashtags(platform, text, langState.languageCode, selectedVoiceProfileId)
       setTextResult({ type: 'hashtags', hashtags: response.hashtags })
       // Select all hashtags by default
       setSelectedHashtags(new Set(response.hashtags))

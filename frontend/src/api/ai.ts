@@ -170,11 +170,12 @@ export const aiApi = {
     return response as AiTextVariantsResponse
   },
 
-  async hashtags(platform: AiPlatform, text: string, voiceProfileId?: string | null): Promise<AiHashtagsResponse> {
+  async hashtags(platform: AiPlatform, text: string, language: string, voiceProfileId?: string | null): Promise<AiHashtagsResponse> {
     const response = await this.processText({
       action: 'Hashtags',
       platform,
       text,
+      language,
       voiceProfileId,
     })
     return response as AiHashtagsResponse
