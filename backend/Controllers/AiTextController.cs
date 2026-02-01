@@ -422,6 +422,7 @@ public class AiTextController : ControllerBase
                 request.StrictMeaning,
                 request.KeepBrandVoice,
                 voiceProfile,
+                request.SourceLanguage,
                 cancellationToken);
 
             return Ok(new CaptionGenerateResponse(

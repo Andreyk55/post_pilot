@@ -9,6 +9,7 @@ import type {
   MetaConnectionResponse,
   MetaUpdatePagesRequest,
   FacebookPage,
+  ValidationLimitsResponse,
 } from '../types/meta'
 
 const API_URL = 'http://localhost:5122/api'

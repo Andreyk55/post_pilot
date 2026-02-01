@@ -47,10 +47,22 @@ public class CaptionAssistService
         bool strictMeaning,
         bool keepBrandVoice,
         AiVoiceProfile? voiceProfile,
+        string? sourceLanguage = null,
         CancellationToken cancellationToken = default)
     {
-        // Detect source language
-        var detection = await _languageService.DetectLanguageAsync(text, cancellationToken);
+        // Use provided source language or detect it
+        LanguageDetectResult detection;
+        if (!string.IsNullOrWhiteSpace(sourceLanguage) && sourceLanguage != "auto")
+        {
+            // Frontend already detected this - skip detection API call
+            _logger.LogDebug("Using provided source language: {SourceLanguage}", sourceLanguage);
+            detection = new LanguageDetectResult(sourceLanguage, 1.0, true);
+        }
+        else
+        {
+            // Detect source language
+            detection = await _languageService.DetectLanguageAsync(text, cancellationToken);
+        }
 
         // Determine output language (default to source language)
         var targetLanguage = string.IsNullOrWhiteSpace(outputLanguage) || outputLanguage == "auto"

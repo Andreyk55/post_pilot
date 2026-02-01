@@ -959,6 +959,34 @@
   font-size: 0.8rem;
 }
 
+.language-pending {
+  color: rgba(255, 255, 255, 0.5);
+  font-style: italic;
+}
+
+.ai-redetect-btn {
+  margin-left: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.7rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ai-redetect-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.ai-redetect-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .ai-toggle-group {
   display: flex;
   flex-direction: column;

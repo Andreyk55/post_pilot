@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { metaApi } from '../api/meta'
+import { aiApi } from '../api/ai'
 import type { MediaType } from '../api/media'
 import type { ConnectedPage } from '../types/meta'
 import { MediaUpload } from './MediaUpload'
-import { AiAssistPanel } from './AiAssistPanel'
+import { AiAssistPanel, type StickyLanguageState } from './AiAssistPanel'
 import { type VoiceProfileSummary } from '../api/voiceProfiles'
 import './SchedulePost.css'
 
@@ -44,6 +45,81 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
   const [isUploading, setIsUploading] = useState(false)
   const [aiPanelKey, setAiPanelKey] = useState(0)
   const [selectedThumbnailUrl, setSelectedThumbnailUrl] = useState<string | null>(null)
+
+  // Sticky language state - persists across content edits until explicitly changed
+  // Language is "unknown" initially, set once on first Generate, and only changes on:
+  // 1. Apply translation (set to target language)
+  // 2. Explicit re-detect action
+  // 3. Form reset
+  const [stickyLanguage, setStickyLanguage] = useState<StickyLanguageState>({
+    languageCode: 'unknown',
+    confidence: 0,
+    isReliable: false,
+  })
+
+  // Use ref to hold latest language to avoid stale closures
+  const languageRef = useRef<StickyLanguageState>(stickyLanguage)
+  languageRef.current = stickyLanguage
+
+  // Use ref to hold latest content to avoid stale closures
+  const contentRef = useRef<string>(content)
+  contentRef.current = content
+
+  // Ensure we have a detected language - only calls API if language is unknown
+  const ensureLanguageDetected = useCallback(async (): Promise<StickyLanguageState> => {
+    const current = languageRef.current
+
+    // If language is already known (sticky), reuse it - NO API call
+    if (current.languageCode !== 'unknown') {
+      console.log('LANG DETECT CACHE HIT (sticky)', 'lang:', current.languageCode)
+      return current
+    }
+
+    // Language unknown - detect it now
+    const currentContent = contentRef.current
+    console.log('LANG DETECT API CALL', 'text length:', currentContent.length)
+
+    try {
+      const result = await aiApi.detectLanguage(currentContent)
+      const newLanguage: StickyLanguageState = {
+        languageCode: result.languageCode,
+        confidence: result.confidence,
+        isReliable: result.isReliable,
+      }
+      setStickyLanguage(newLanguage)
+      return newLanguage
+    } catch (err) {
+      console.error('Language detection failed:', err)
+      // Fallback to English if detection fails
+      const fallback: StickyLanguageState = {
+        languageCode: 'en',
+        confidence: 0,
+        isReliable: false,
+      }
+      setStickyLanguage(fallback)
+      return fallback
+    }
+  }, []) // No dependencies - uses refs for latest values
+
+  // Reset language to unknown (for explicit re-detect)
+  const resetLanguage = useCallback(() => {
+    console.log('LANG DETECT RESET - will re-detect on next Generate')
+    setStickyLanguage({
+      languageCode: 'unknown',
+      confidence: 0,
+      isReliable: false,
+    })
+  }, [])
+
+  // Set language directly (used when applying translation)
+  const setLanguage = useCallback((languageCode: string) => {
+    console.log('LANG SET TO', languageCode, '(from translation apply)')
+    setStickyLanguage({
+      languageCode,
+      confidence: 1.0, // Translation output language is known
+      isReliable: true,
+    })
+  }, [])
 
   // Load connected Facebook Pages on mount
   useEffect(() => {
@@ -106,7 +182,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
       selectedThumbnailUrl: selectedThumbnailUrl || undefined,
     })
 
-    // Reset form
+    // Reset form including language
     setContent('')
     setScheduledDate('')
     setScheduledTime('')
@@ -117,6 +193,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
     setUploadError(null)
     setUploadKey(k => k + 1)
     setSelectedThumbnailUrl(null)
+    setStickyLanguage({ languageCode: 'unknown', confidence: 0, isReliable: false })
   }
 
   // Form is valid if there's content OR media, plus date/time/platform, and not uploading
@@ -140,6 +217,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
     setUploadKey(k => k + 1)
     setAiPanelKey(k => k + 1)
     setSelectedThumbnailUrl(null)
+    setStickyLanguage({ languageCode: 'unknown', confidence: 0, isReliable: false })
   }
 
   return (
@@ -162,7 +240,19 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
           <AiAssistPanel
             key={aiPanelKey}
             text={content}
-            onApplyText={(text) => setContent(text)}
+            stickyLanguage={stickyLanguage}
+            ensureLanguageDetected={ensureLanguageDetected}
+            resetLanguage={resetLanguage}
+            onApplyText={(newText, newLanguageCode) => {
+              // Only update if content actually changes
+              if (content !== newText) {
+                setContent(newText)
+              }
+              // If a new language was provided (from translation), set it
+              if (newLanguageCode) {
+                setLanguage(newLanguageCode)
+              }
+            }}
             onAppendText={(text) => setContent((prev) => prev + text)}
             mediaUrl={mediaUrl}
             mediaType={mediaType}

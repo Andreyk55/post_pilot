@@ -15,8 +15,6 @@ import {
   type AiVideoFrame,
   type AiGeneratedVariant,
   type AiGenerateVariantsRequest,
-  type LanguageDetectResponse,
-  type CaptionGenerateResponse,
 } from '../api/ai'
 import { type VoiceProfileSummary } from '../api/voiceProfiles'
 import { getMediaUrl, type MediaType } from '../api/media'
@@ -25,10 +23,23 @@ import './AiAssistPanel.css'
 
 type TabType = 'text' | 'media' | 'translate'
 
+// Sticky language state - persists across content edits until explicitly changed
+export interface StickyLanguageState {
+  languageCode: string // 'unknown' if not yet detected
+  confidence: number
+  isReliable: boolean
+}
+
 interface AiAssistPanelProps {
   text: string
-  onApplyText: (text: string) => void
+  onApplyText: (text: string, newLanguage?: string) => void
   onAppendText: (text: string) => void
+  // Sticky language state (managed by parent)
+  stickyLanguage: StickyLanguageState
+  // Function to ensure language is detected (returns cached if known, else detects)
+  ensureLanguageDetected: () => Promise<StickyLanguageState>
+  // Function to reset language to unknown (triggers re-detect on next Generate)
+  resetLanguage: () => void
   // Media props
   mediaUrl?: string | null
   mediaType?: MediaType | null
@@ -73,7 +84,7 @@ interface CaptionsResult {
 type TextResult = VariantsResult | HashtagsResult | PreFlightResult | GeneratedVariantsResult | CaptionsResult
 
 // Media Results
-interface CaptionsResult {
+interface MediaCaptionsResult {
   type: 'captions'
   variants: AiMediaCaptionVariant[]
 }
@@ -95,7 +106,7 @@ interface ThumbnailsResult {
   selectedIndex: number | null
 }
 
-type MediaResult = CaptionsResult | QualityResult | AltTextResult | ThumbnailsResult
+type MediaResult = MediaCaptionsResult | QualityResult | AltTextResult | ThumbnailsResult
 
 const platformOptions: { value: AiPlatform; label: string }[] = [
   { value: 'Facebook', label: 'Facebook' },
@@ -145,6 +156,9 @@ export function AiAssistPanel({
   text,
   onApplyText,
   onAppendText,
+  stickyLanguage,
+  ensureLanguageDetected,
+  resetLanguage,
   mediaUrl,
   mediaType,
   onSelectThumbnail,
@@ -174,9 +188,8 @@ export function AiAssistPanel({
   const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null)
   const [selectedHashtags, setSelectedHashtags] = useState<Set<string>>(new Set())
 
-  // Translate tab state
-  const [detectedLanguage, setDetectedLanguage] = useState<LanguageDetectResponse | null>(null)
-  const [outputLanguage, setOutputLanguage] = useState<string>('auto')
+  // Translate tab state - only output language selection lives here
+  const [outputLanguage, setOutputLanguage] = useState<string>('en')
   const [captionVariants, setCaptionVariants] = useState<number>(1)
   const [strictMeaning, setStrictMeaning] = useState<boolean>(true)
   const [keepBrandVoice, setKeepBrandVoice] = useState<boolean>(true)
@@ -185,23 +198,8 @@ export function AiAssistPanel({
   const [mediaResult, setMediaResult] = useState<MediaResult | null>(null)
   const [altTextCopied, setAltTextCopied] = useState(false)
 
-  // Detect language when text changes (for translate tab)
-  useEffect(() => {
-    if (activeTab === 'translate' && text && text.length >= 3) {
-      const detectLanguage = async () => {
-        try {
-          const result = await aiApi.detectLanguage(text)
-          setDetectedLanguage(result)
-        } catch (err) {
-          // Silent fail for language detection
-          console.error('Language detection failed:', err)
-        }
-      }
-      // Debounce
-      const timer = setTimeout(detectLanguage, 500)
-      return () => clearTimeout(timer)
-    }
-  }, [text, activeTab])
+  // Computed: is language known (not 'unknown')?
+  const isLanguageKnown = stickyLanguage.languageCode !== 'unknown'
 
   // Clear selected voice profile if it's no longer available (e.g., deleted)
   useEffect(() => {
@@ -327,9 +325,12 @@ export function AiAssistPanel({
       setTextResult({ type: 'preflight', score: response.score, issues: response.issues })
     })
 
-  // New generate variants handler
+  // New generate variants handler - Text tab (same-language rewrite)
   const handleGenerateVariants = () =>
     handleTextAction(async () => {
+      // Get sticky language (detects if unknown, uses cached if known)
+      const langState = await ensureLanguageDetected()
+
       const request: AiGenerateVariantsRequest = {
         platform,
         inputText: text,
@@ -342,6 +343,7 @@ export function AiAssistPanel({
         includeQuestion,
         numVariants: 3,
         voiceProfileId: selectedVoiceProfileId,
+        language: langState.languageCode, // Always use sticky language for Text tab
       }
       const response = await aiApi.generateVariants(request)
       setTextResult({ type: 'generated', variants: response.variants })
@@ -355,6 +357,9 @@ export function AiAssistPanel({
     setError(null)
 
     try {
+      // Use current sticky language (should already be known from initial generate)
+      const langState = await ensureLanguageDetected()
+
       const request: AiGenerateVariantsRequest = {
         platform,
         inputText: text,
@@ -368,6 +373,7 @@ export function AiAssistPanel({
         numVariants: 1,
         regenerateIndex: index,
         voiceProfileId: selectedVoiceProfileId,
+        language: langState.languageCode,
       }
       const response = await aiApi.generateVariants(request)
 
@@ -384,17 +390,22 @@ export function AiAssistPanel({
     }
   }
 
-  // Translate/Caption generation handler
+  // Translate/Caption generation handler - Translate tab
   const handleGenerateCaptions = () =>
     handleTextAction(async () => {
+      // Get sticky language (detects if unknown, uses cached if known)
+      const langState = await ensureLanguageDetected()
+
       const response = await aiApi.generateCaptions({
         text,
         platform,
-        outputLanguage: outputLanguage === 'auto' ? null : outputLanguage,
+        outputLanguage: outputLanguage, // Use selected target language
         variants: captionVariants,
         keepBrandVoice,
         strictMeaning,
         voiceProfileId: selectedVoiceProfileId,
+        // Pass sticky language to backend so it skips detection
+        sourceLanguage: langState.languageCode,
       })
       setTextResult({
         type: 'captions',
@@ -470,8 +481,9 @@ export function AiAssistPanel({
     })
 
   // Result handlers
-  const handleApply = (variantText: string) => {
-    onApplyText(variantText)
+  const handleApply = (variantText: string, outputLang?: string) => {
+    // Pass the output language so parent can update sticky language
+    onApplyText(variantText, outputLang)
     setTextResult(null)
     setMediaResult(null)
   }
@@ -765,25 +777,38 @@ export function AiAssistPanel({
           {!isTextEmpty && (
             <>
               {/* Language Detection Display */}
-              {detectedLanguage && (
-                <div className="ai-language-detection">
-                  <strong>Detected:</strong>{' '}
-                  {languageOptions.find((l) => l.value === detectedLanguage.languageCode)?.label || detectedLanguage.languageCode}{' '}
-                  ({Math.round(detectedLanguage.confidence * 100)}%)
-                  {!detectedLanguage.isReliable && <span className="language-warning"> (low confidence)</span>}
-                </div>
-              )}
+              <div className="ai-language-detection">
+                <strong>Source language:</strong>{' '}
+                {isLanguageKnown ? (
+                  <>
+                    {languageOptions.find((l) => l.value === stickyLanguage.languageCode)?.label || stickyLanguage.languageCode}{' '}
+                    ({Math.round(stickyLanguage.confidence * 100)}%)
+                    {!stickyLanguage.isReliable && <span className="language-warning"> (low confidence)</span>}
+                    <button
+                      type="button"
+                      className="ai-redetect-btn"
+                      onClick={resetLanguage}
+                      disabled={loading}
+                      title="Re-detect language on next Generate"
+                    >
+                      Re-detect
+                    </button>
+                  </>
+                ) : (
+                  <span className="language-pending">unknown (will detect on Generate)</span>
+                )}
+              </div>
 
               {/* Output Language Selection */}
               <div className="ai-control-group">
-                <label htmlFor="ai-output-language">Output Language</label>
+                <label htmlFor="ai-output-language">Translate to</label>
                 <select
                   id="ai-output-language"
                   value={outputLanguage}
                   onChange={(e) => setOutputLanguage(e.target.value)}
                   disabled={loading}
                 >
-                  {languageOptions.map((opt) => (
+                  {languageOptions.filter(opt => opt.value !== 'auto').map((opt) => (
                     <option key={opt.value} value={opt.value}>
                       {opt.label}
                     </option>
@@ -1034,7 +1059,7 @@ export function AiAssistPanel({
               <div className="caption-warnings">
                 {textResult.warnings.map((warning, index) => (
                   <div key={index} className="warning-item">
-                    ⚠️ {warning}
+                    {warning}
                   </div>
                 ))}
               </div>
@@ -1058,7 +1083,7 @@ export function AiAssistPanel({
                     <button
                       type="button"
                       className="variant-btn variant-btn-apply"
-                      onClick={() => handleApply(caption)}
+                      onClick={() => handleApply(caption, textResult.outputLanguage)}
                     >
                       Apply
                     </button>

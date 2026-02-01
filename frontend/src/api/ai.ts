@@ -90,6 +90,8 @@ export interface CaptionGenerateRequest {
   keepBrandVoice?: boolean
   strictMeaning?: boolean
   voiceProfileId?: string | null
+  // If provided, backend will skip language detection and use this value
+  sourceLanguage?: string | null
 }
 
 export interface CaptionGenerateResponse {
