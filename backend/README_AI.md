@@ -13,7 +13,7 @@ Set the following environment variable to enable AI features:
 GEMINI_API_KEY=your-api-key-here
 
 # Optional: Model to use (default: gemini-2.0-flash)
-GEMINI_MODEL=gemini-2.0-flash
+GEMINI_MODEL=gemma-3-27b-it
 ```
 
 ### Getting a Gemini API Key
