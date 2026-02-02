@@ -57,8 +57,78 @@
 }
 
 .suggested-times-content {
-  padding: 0 1rem 1rem;
+  padding: 0.75rem 1rem 1rem;
   border-top: 1px solid var(--border-color, #ddd);
+}
+
+/* Controls section */
+.suggested-times-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.suggested-times-control-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.suggested-times-control-row label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary, #666);
+  min-width: 70px;
+}
+
+.suggested-times-control-row select {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color, #ddd);
+  border-radius: 6px;
+  background: var(--input-bg, #fff);
+  color: var(--text-primary, #333);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.suggested-times-control-row select:focus {
+  outline: none;
+  border-color: var(--primary-color, #4f46e5);
+  box-shadow: 0 0 0 2px var(--primary-bg-light, #eef2ff);
+}
+
+.suggested-times-control-row select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.suggested-times-fetch-btn {
+  padding: 0.6rem 1rem;
+  background: var(--primary-color, #4f46e5);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s, opacity 0.15s;
+}
+
+.suggested-times-fetch-btn:hover:not(:disabled) {
+  background: var(--primary-hover, #4338ca);
+}
+
+.suggested-times-fetch-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.suggested-times-hint {
+  font-size: 0.8rem;
+  color: var(--text-secondary, #888);
+  font-style: italic;
 }
 
 .suggested-times-error {
@@ -218,6 +288,8 @@
     --error-bg: #1f1f1f;
     --primary-color: #818cf8;
     --primary-bg-light: #1e1b4b;
+    --primary-hover: #6366f1;
+    --input-bg: #2a2a2a;
   }
 
   .suggested-time-card.alternative {
@@ -227,5 +299,11 @@
 
   .suggested-time-card.alternative:hover {
     border-color: #818cf8;
+  }
+
+  .suggested-times-control-row select {
+    background: var(--input-bg, #2a2a2a);
+    border-color: #444;
+    color: var(--text-primary, #e5e5e5);
   }
 }

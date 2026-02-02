@@ -89,7 +89,9 @@ public class PostTimeSuggestionService
         try
         {
             var prompt = BuildPrompt(request);
+            _logger.LogInformation("Post time suggestion prompt:\n{Prompt}", prompt);
             var responseText = await CallGeminiAsync(prompt, cancellationToken);
+            _logger.LogInformation("Post time suggestion response:\n{Response}", responseText);
             var result = ParseResponse(responseText);
 
             _cache.Set(cacheKey, result, CacheDuration);

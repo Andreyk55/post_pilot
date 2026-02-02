@@ -48,6 +48,9 @@ interface AiAssistPanelProps {
   // Voice Profile props
   voiceProfiles: VoiceProfileSummary[]
   onVoiceProfileModalOpen: (profileId?: string | null) => void
+  // Goal state (shared with time suggestions)
+  goal: AiGoal
+  onGoalChange: (goal: AiGoal) => void
 }
 
 // Text Results
@@ -165,6 +168,8 @@ export function AiAssistPanel({
   onSelectThumbnail,
   voiceProfiles,
   onVoiceProfileModalOpen,
+  goal,
+  onGoalChange,
 }: AiAssistPanelProps) {
   const [activeTab, setActiveTab] = useState<TabType>('text')
   const [platform, setPlatform] = useState<AiPlatform>('Facebook')
@@ -176,7 +181,6 @@ export function AiAssistPanel({
   const [selectedVoiceProfileId, setSelectedVoiceProfileId] = useState<string | null>(null)
 
   // Text tab state - new generator controls
-  const [goal, setGoal] = useState<AiGoal>('Engage')
   const [length, setLength] = useState<AiLength>('Medium')
   const [includeEmojis, setIncludeEmojis] = useState(false)
   const [includeHashtags, setIncludeHashtags] = useState(false)
@@ -662,7 +666,7 @@ export function AiAssistPanel({
                 <select
                   id="ai-goal"
                   value={goal}
-                  onChange={(e) => setGoal(e.target.value as AiGoal)}
+                  onChange={(e) => onGoalChange(e.target.value as AiGoal)}
                   disabled={loading}
                 >
                   {goalOptions.map((opt) => (

@@ -62,9 +62,10 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
   const [aiPanelKey, setAiPanelKey] = useState(0)
   const [selectedThumbnailUrl, setSelectedThumbnailUrl] = useState<string | null>(null)
 
-  // AI time suggestion state (default values for MVP, can be made configurable later)
-  const [suggestionGoal] = useState<AiGoal>('Engage')
-  const [audienceLocation] = useState<AudienceLocationMode>('MyLocation')
+  // AI state (shared between AiAssistPanel and time suggestions)
+  const [goal, setGoal] = useState<AiGoal>('Engage')
+  const [audienceLocation, setAudienceLocation] = useState<AudienceLocationMode>('MyLocation')
+  const [audienceCountry, setAudienceCountry] = useState<string>('')
 
   // Sticky language state - persists across content edits until explicitly changed
   // Language is "unknown" initially, set once on first Generate, and only changes on:
@@ -275,6 +276,8 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
             onSelectThumbnail={(url) => setSelectedThumbnailUrl(url)}
             voiceProfiles={voiceProfiles}
             onVoiceProfileModalOpen={onVoiceProfileModalOpen}
+            goal={goal}
+            onGoalChange={setGoal}
           />
         </div>
 
@@ -324,8 +327,11 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
           postText={content}
           selectedDate={scheduledDate}
           platform={getAiPlatform(selectedPlatforms)}
-          goal={suggestionGoal}
+          goal={goal}
           audienceLocation={audienceLocation}
+          country={audienceCountry || null}
+          onAudienceLocationChange={setAudienceLocation}
+          onCountryChange={setAudienceCountry}
           onSelectTime={(time) => setScheduledTime(time)}
           disabled={isUploading}
         />

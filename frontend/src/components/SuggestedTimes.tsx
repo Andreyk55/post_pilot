@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useCallback } from 'react'
 import { aiApi, type TimeSuggestion, type AiPlatform, type AiGoal, type AudienceLocationMode } from '../api/ai'
 import './SuggestedTimes.css'
 
@@ -9,6 +9,8 @@ interface SuggestedTimesProps {
   goal: AiGoal
   audienceLocation: AudienceLocationMode
   country?: string | null
+  onAudienceLocationChange: (location: AudienceLocationMode) => void
+  onCountryChange: (country: string) => void
   onSelectTime: (time: string) => void
   disabled?: boolean
 }
@@ -25,6 +27,32 @@ function getUserTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone
 }
 
+// Common countries list
+const countryOptions = [
+  { value: 'United States', label: 'United States' },
+  { value: 'United Kingdom', label: 'United Kingdom' },
+  { value: 'Canada', label: 'Canada' },
+  { value: 'Australia', label: 'Australia' },
+  { value: 'Germany', label: 'Germany' },
+  { value: 'France', label: 'France' },
+  { value: 'Spain', label: 'Spain' },
+  { value: 'Italy', label: 'Italy' },
+  { value: 'Netherlands', label: 'Netherlands' },
+  { value: 'Israel', label: 'Israel' },
+  { value: 'India', label: 'India' },
+  { value: 'Japan', label: 'Japan' },
+  { value: 'Brazil', label: 'Brazil' },
+  { value: 'Mexico', label: 'Mexico' },
+  { value: 'Singapore', label: 'Singapore' },
+  { value: 'UAE', label: 'United Arab Emirates' },
+]
+
+const audienceLocationOptions: { value: AudienceLocationMode; label: string }[] = [
+  { value: 'MyLocation', label: 'My location' },
+  { value: 'SpecificCountry', label: 'Specific country' },
+  { value: 'Worldwide', label: 'Worldwide' },
+]
+
 export function SuggestedTimes({
   postText,
   selectedDate,
@@ -32,6 +60,8 @@ export function SuggestedTimes({
   goal,
   audienceLocation,
   country,
+  onAudienceLocationChange,
+  onCountryChange,
   onSelectTime,
   disabled = false,
 }: SuggestedTimesProps) {
@@ -43,27 +73,22 @@ export function SuggestedTimes({
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
 
-  // Track the last request parameters to avoid duplicate calls
-  const lastRequestRef = useRef<string>('')
+  // Check if we can fetch suggestions
+  const canFetch = Boolean(
+    postText.trim().length >= 10 &&
+    selectedDate &&
+    platform &&
+    (audienceLocation !== 'SpecificCountry' || country)
+  )
 
   const fetchSuggestions = useCallback(async () => {
-    if (!postText.trim() || !selectedDate || !platform) {
-      setSuggestions(null)
-      return
-    }
+    if (!canFetch || !platform) return
 
     const weekday = getWeekdayFromDate(selectedDate)
     if (!weekday) return
 
     const timezone = getUserTimezone()
 
-    // Create a key for this request to avoid duplicates
-    const requestKey = `${platform}:${goal}:${weekday}:${audienceLocation}:${country || ''}:${postText.slice(0, 100)}`
-    if (requestKey === lastRequestRef.current && suggestions) {
-      return // Already have suggestions for this request
-    }
-
-    lastRequestRef.current = requestKey
     setLoading(true)
     setError(null)
 
@@ -75,7 +100,7 @@ export function SuggestedTimes({
         weekday,
         timezone,
         audienceLocation,
-        country,
+        country: audienceLocation === 'SpecificCountry' ? country : null,
       })
       setSuggestions(result)
     } catch (err) {
@@ -85,52 +110,87 @@ export function SuggestedTimes({
     } finally {
       setLoading(false)
     }
-  }, [postText, selectedDate, platform, goal, audienceLocation, country, suggestions])
-
-  // Auto-fetch when requirements are met and user has entered content
-  useEffect(() => {
-    // Only fetch if we have minimum requirements
-    if (postText.trim().length >= 10 && selectedDate && platform) {
-      // Debounce the fetch
-      const timer = setTimeout(() => {
-        fetchSuggestions()
-      }, 500)
-      return () => clearTimeout(timer)
-    }
-  }, [postText, selectedDate, platform, goal, audienceLocation, country, fetchSuggestions])
+  }, [canFetch, platform, selectedDate, goal, postText, audienceLocation, country])
 
   const handleSelectTime = (time: string) => {
     onSelectTime(time)
   }
 
-  // Don't render if missing required inputs
-  if (!platform || !selectedDate) {
-    return null
-  }
-
-  // Don't render if content is too short
-  if (postText.trim().length < 10) {
-    return null
-  }
-
+  // Always render the component (collapsible)
   return (
     <div className={`suggested-times ${disabled ? 'disabled' : ''}`}>
       <div className="suggested-times-header" onClick={() => setExpanded(!expanded)}>
         <span className="suggested-times-icon">⏰</span>
-        <span className="suggested-times-title">Suggested Times</span>
+        <span className="suggested-times-title">Suggest Best Time</span>
         {loading && <span className="suggested-times-loading">...</span>}
         <span className={`suggested-times-chevron ${expanded ? 'expanded' : ''}`}>▼</span>
       </div>
 
       {expanded && (
         <div className="suggested-times-content">
-          {error && <div className="suggested-times-error">{error}</div>}
-
-          {!suggestions && !loading && !error && (
-            <div className="suggested-times-empty">
-              Enter more content to get AI-powered time suggestions
+          {/* Audience Location Controls */}
+          <div className="suggested-times-controls">
+            <div className="suggested-times-control-row">
+              <label htmlFor="audience-location">Audience</label>
+              <select
+                id="audience-location"
+                value={audienceLocation}
+                onChange={(e) => onAudienceLocationChange(e.target.value as AudienceLocationMode)}
+                disabled={loading}
+              >
+                {audienceLocationOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </div>
-          )}
+
+            {audienceLocation === 'SpecificCountry' && (
+              <div className="suggested-times-control-row">
+                <label htmlFor="audience-country">Country</label>
+                <select
+                  id="audience-country"
+                  value={country || ''}
+                  onChange={(e) => onCountryChange(e.target.value)}
+                  disabled={loading}
+                >
+                  <option value="">Select country...</option>
+                  {countryOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Suggest Button */}
+            <button
+              type="button"
+              className="suggested-times-fetch-btn"
+              onClick={fetchSuggestions}
+              disabled={!canFetch || loading}
+            >
+              {loading ? 'Getting suggestions...' : 'Suggest Times'}
+            </button>
+
+            {!canFetch && (
+              <div className="suggested-times-hint">
+                {!postText.trim() || postText.trim().length < 10
+                  ? 'Enter at least 10 characters of content'
+                  : !selectedDate
+                  ? 'Select a date'
+                  : !platform
+                  ? 'Select a platform'
+                  : audienceLocation === 'SpecificCountry' && !country
+                  ? 'Select a country'
+                  : ''}
+              </div>
+            )}
+          </div>
+
+          {error && <div className="suggested-times-error">{error}</div>}
 
           {suggestions && (
             <>
