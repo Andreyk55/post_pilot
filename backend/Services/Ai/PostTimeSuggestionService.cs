@@ -193,10 +193,10 @@ public class PostTimeSuggestionService
     {
         var audienceContext = request.AudienceLocation switch
         {
-            AudienceLocationMode.MyLocation => $"The audience is primarily in the poster's timezone ({request.Timezone}).",
-            AudienceLocationMode.SpecificCountry => $"The audience is primarily in {request.Country ?? "an unspecified country"}.",
+            AudienceLocationMode.MyLocation => "The audience is primarily local (same timezone as the poster).",
+            AudienceLocationMode.SpecificCountry => $"The audience is primarily in {request.Country}.",
             AudienceLocationMode.Worldwide => "The audience is spread globally across multiple timezones.",
-            _ => $"The audience timezone context is: {request.Timezone}."
+            _ => "The audience location is unspecified."
         };
 
         var goalContext = request.Goal switch
@@ -214,14 +214,15 @@ public class PostTimeSuggestionService
 CONTEXT:
 - Platform: {request.Platform}
 - Day of week: {request.Weekday}
-- User timezone: {request.Timezone}
-- {audienceContext}
-- {goalContext}
+- Poster's timezone: {request.Timezone}
+- Audience: {audienceContext}
+- Goal: {goalContext}
 
 POST CONTENT (for context on what type of content is being posted):
 {request.PostText}
 
-Based on general social media best practices and the content/goal, suggest optimal posting times.
+Based on general social media best practices, audience location, and the content/goal, suggest optimal posting times.
+IMPORTANT: Return times in the POSTER'S timezone ({request.Timezone}), adjusted so the post reaches the audience at optimal times in THEIR timezone.
 
 Return ONLY valid JSON in this exact format:
 {{
@@ -248,7 +249,7 @@ Return ONLY valid JSON in this exact format:
 }}
 
 RULES:
-- Times must be in 24-hour format (HH:MM)
+- Times must be in 24-hour format (HH:MM) in the poster's timezone ({request.Timezone})
 - Confidence is 0-100 (primary should be highest)
 - Provide exactly 2 alternatives
 - Labels should be short and descriptive (e.g., ""Morning Peak"", ""Lunch Hour"", ""Evening Prime"")
