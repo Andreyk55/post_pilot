@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { metaApi } from '../api/meta'
-import { aiApi } from '../api/ai'
+import { aiApi, type AiPlatform, type AiGoal, type AudienceLocationMode } from '../api/ai'
 import type { MediaType } from '../api/media'
 import type { ConnectedPage } from '../types/meta'
 import { MediaUpload } from './MediaUpload'
 import { AiAssistPanel, type StickyLanguageState } from './AiAssistPanel'
+import { SuggestedTimes } from './SuggestedTimes'
 import { type VoiceProfileSummary } from '../api/voiceProfiles'
 import './SchedulePost.css'
 
@@ -30,6 +31,21 @@ const platforms = [
   { id: 'linkedin', name: 'LinkedIn', icon: 'in' },
 ]
 
+// Map platform IDs to AI platform types
+function getAiPlatform(platformIds: string[]): AiPlatform | null {
+  // Use the first selected platform for suggestions
+  const first = platformIds[0]
+  if (!first) return null
+
+  const mapping: Record<string, AiPlatform> = {
+    twitter: 'X',
+    instagram: 'Instagram',
+    facebook: 'Facebook',
+    linkedin: 'LinkedIn',
+  }
+  return mapping[first] || null
+}
+
 export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpen }: SchedulePostProps) {
   const [content, setContent] = useState('')
   const [scheduledDate, setScheduledDate] = useState('')
@@ -45,6 +61,10 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
   const [isUploading, setIsUploading] = useState(false)
   const [aiPanelKey, setAiPanelKey] = useState(0)
   const [selectedThumbnailUrl, setSelectedThumbnailUrl] = useState<string | null>(null)
+
+  // AI time suggestion state (default values for MVP, can be made configurable later)
+  const [suggestionGoal] = useState<AiGoal>('Engage')
+  const [audienceLocation] = useState<AudienceLocationMode>('MyLocation')
 
   // Sticky language state - persists across content edits until explicitly changed
   // Language is "unknown" initially, set once on first Generate, and only changes on:
@@ -298,6 +318,17 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
             />
           </div>
         </div>
+
+        {/* AI-powered time suggestions */}
+        <SuggestedTimes
+          postText={content}
+          selectedDate={scheduledDate}
+          platform={getAiPlatform(selectedPlatforms)}
+          goal={suggestionGoal}
+          audienceLocation={audienceLocation}
+          onSelectTime={(time) => setScheduledTime(time)}
+          disabled={isUploading}
+        />
 
         <div className="form-group">
           <label>Platforms</label>

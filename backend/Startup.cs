@@ -261,6 +261,7 @@ public class Startup
         // Register application services
         services.AddScoped<LanguageService>();
         services.AddScoped<CaptionAssistService>();
+        services.AddHttpClient<PostTimeSuggestionService>();
 
         // Rate limiter (in-memory for MVP)
         services.AddSingleton<IAiRateLimiter, InMemoryAiRateLimiter>();

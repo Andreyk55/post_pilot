@@ -206,3 +206,49 @@ public record CaptionGenerateResponse(
     List<string> Captions,
     List<string> Warnings
 );
+
+// ===== Post Time Suggestion =====
+
+/// <summary>
+/// Audience location mode for post time suggestions.
+/// </summary>
+public enum AudienceLocationMode
+{
+    /// <summary>Audience mainly in user's timezone</summary>
+    MyLocation,
+    /// <summary>Audience mainly in a specific country's timezone</summary>
+    SpecificCountry,
+    /// <summary>Audience is spread globally / not sure</summary>
+    Worldwide
+}
+
+/// <summary>
+/// Request for AI-powered post time suggestions.
+/// </summary>
+public record PostTimeSuggestionRequest(
+    AiPlatform Platform,
+    AiGoal Goal,
+    string PostText,
+    string Weekday,
+    string Timezone,
+    AudienceLocationMode AudienceLocation = AudienceLocationMode.MyLocation,
+    string? Country = null
+);
+
+/// <summary>
+/// A single time suggestion with confidence and reason.
+/// </summary>
+public record TimeSuggestion(
+    string Time,
+    string Label,
+    int Confidence,
+    string Reason
+);
+
+/// <summary>
+/// Response containing AI-suggested posting times.
+/// </summary>
+public record PostTimeSuggestionResponse(
+    TimeSuggestion Primary,
+    List<TimeSuggestion> Alternatives
+);

@@ -1,0 +1,231 @@
+.suggested-times {
+  margin-top: 0.5rem;
+  border: 1px solid var(--border-color, #ddd);
+  border-radius: 8px;
+  background: var(--card-bg, #fafafa);
+  overflow: hidden;
+}
+
+.suggested-times.disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.suggested-times-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s;
+}
+
+.suggested-times-header:hover {
+  background: var(--hover-bg, #f0f0f0);
+}
+
+.suggested-times-icon {
+  font-size: 1rem;
+}
+
+.suggested-times-title {
+  flex: 1;
+  font-weight: 500;
+  font-size: 0.9rem;
+  color: var(--text-primary, #333);
+}
+
+.suggested-times-loading {
+  color: var(--text-secondary, #666);
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.suggested-times-chevron {
+  font-size: 0.7rem;
+  color: var(--text-secondary, #666);
+  transition: transform 0.2s;
+}
+
+.suggested-times-chevron.expanded {
+  transform: rotate(180deg);
+}
+
+.suggested-times-content {
+  padding: 0 1rem 1rem;
+  border-top: 1px solid var(--border-color, #ddd);
+}
+
+.suggested-times-error {
+  padding: 0.75rem;
+  margin-top: 0.75rem;
+  color: var(--error-color, #dc3545);
+  background: var(--error-bg, #fff5f5);
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.suggested-times-empty {
+  padding: 1rem;
+  text-align: center;
+  color: var(--text-secondary, #666);
+  font-size: 0.85rem;
+}
+
+/* Time cards */
+.suggested-time-card {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.suggested-time-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.suggested-time-card.primary {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  color: white;
+}
+
+.suggested-time-card.alternative {
+  background: var(--card-alt-bg, #fff);
+  border: 1px solid var(--border-color, #ddd);
+}
+
+.suggested-time-card.alternative:hover {
+  border-color: var(--primary-color, #4f46e5);
+}
+
+.suggested-time-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.suggested-time-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+}
+
+.suggested-time-confidence {
+  font-size: 0.75rem;
+  opacity: 0.9;
+}
+
+.suggested-time-main {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.suggested-time-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.suggested-time-card.alternative .suggested-time-value {
+  font-size: 1.1rem;
+  color: var(--text-primary, #333);
+}
+
+.suggested-time-label {
+  font-size: 0.9rem;
+  opacity: 0.9;
+}
+
+.suggested-time-card.alternative .suggested-time-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary, #666);
+}
+
+.suggested-time-reason {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  opacity: 0.9;
+  line-height: 1.4;
+}
+
+.suggested-time-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+.suggested-time-confidence-small {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--primary-color, #4f46e5);
+  background: var(--primary-bg-light, #eef2ff);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+}
+
+.suggested-time-reason-short {
+  font-size: 0.8rem;
+  color: var(--text-secondary, #666);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Alternatives section */
+.suggested-times-alternatives {
+  margin-top: 0.75rem;
+}
+
+.suggested-times-alt-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary, #666);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.25rem;
+}
+
+.suggested-times-alt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .suggested-times {
+    --border-color: #333;
+    --card-bg: #1a1a1a;
+    --hover-bg: #252525;
+    --text-primary: #e5e5e5;
+    --text-secondary: #999;
+    --card-alt-bg: #222;
+    --error-color: #f87171;
+    --error-bg: #1f1f1f;
+    --primary-color: #818cf8;
+    --primary-bg-light: #1e1b4b;
+  }
+
+  .suggested-time-card.alternative {
+    background: #222;
+    border-color: #333;
+  }
+
+  .suggested-time-card.alternative:hover {
+    border-color: #818cf8;
+  }
+}

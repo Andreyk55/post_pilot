@@ -16,6 +16,7 @@ public class AiTextController : ControllerBase
     private readonly AppDbContext _db;
     private readonly LanguageService _languageService;
     private readonly CaptionAssistService _captionAssistService;
+    private readonly PostTimeSuggestionService _postTimeSuggestionService;
     private readonly ILogger<AiTextController> _logger;
 
     // TODO: Replace with real user authentication
@@ -30,6 +31,7 @@ public class AiTextController : ControllerBase
         AppDbContext db,
         LanguageService languageService,
         CaptionAssistService captionAssistService,
+        PostTimeSuggestionService postTimeSuggestionService,
         ILogger<AiTextController> logger)
     {
         _geminiClient = geminiClient;
@@ -37,6 +39,7 @@ public class AiTextController : ControllerBase
         _db = db;
         _languageService = languageService;
         _captionAssistService = captionAssistService;
+        _postTimeSuggestionService = postTimeSuggestionService;
         _logger = logger;
     }
 
@@ -492,6 +495,103 @@ public class AiTextController : ControllerBase
         if (request.Variants < 1 || request.Variants > 3)
         {
             errors["variants"] = new[] { "Number of variants must be between 1 and 3." };
+        }
+
+        return errors;
+    }
+
+    /// <summary>
+    /// Get AI-powered suggestions for optimal posting times.
+    /// </summary>
+    [HttpPost("suggest-post-time")]
+    [ProducesResponseType(typeof(PostTimeSuggestionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> SuggestPostTime(
+        [FromBody] PostTimeSuggestionRequest request,
+        CancellationToken cancellationToken)
+    {
+        // Validate request
+        var errors = ValidatePostTimeRequest(request);
+        if (errors.Count > 0)
+        {
+            return ValidationProblem(new ValidationProblemDetails(errors));
+        }
+
+        // Check rate limit
+        var canProceed = await _rateLimiter.TryAcquireAsync(CurrentUserId, cancellationToken);
+        if (!canProceed)
+        {
+            _logger.LogWarning("Rate limit exceeded for user {UserId}", CurrentUserId);
+            return Problem(
+                title: "Rate limit exceeded",
+                detail: "You've reached the maximum number of AI requests for today. Please try again tomorrow.",
+                statusCode: StatusCodes.Status429TooManyRequests);
+        }
+
+        try
+        {
+            var result = await _postTimeSuggestionService.SuggestPostTimeAsync(request, cancellationToken);
+            return Ok(result);
+        }
+        catch (GeminiApiException ex) when (ex.StatusCode == 429)
+        {
+            return Problem(
+                title: "AI service quota exceeded",
+                detail: ex.Message,
+                statusCode: StatusCodes.Status429TooManyRequests);
+        }
+        catch (Exception ex)
+        {
+            // Log but don't fail - service has fallback
+            _logger.LogWarning(ex, "Error getting AI time suggestion, returning fallback");
+            var result = await _postTimeSuggestionService.SuggestPostTimeAsync(request, cancellationToken);
+            return Ok(result);
+        }
+    }
+
+    private static Dictionary<string, string[]> ValidatePostTimeRequest(PostTimeSuggestionRequest request)
+    {
+        var errors = new Dictionary<string, string[]>();
+
+        if (string.IsNullOrWhiteSpace(request.PostText))
+        {
+            errors["postText"] = new[] { "Post text is required." };
+        }
+        else if (request.PostText.Length > MaxTextLength)
+        {
+            errors["postText"] = new[] { $"Post text must not exceed {MaxTextLength} characters." };
+        }
+
+        if (!Enum.IsDefined(request.Platform))
+        {
+            errors["platform"] = new[] { "Invalid platform value." };
+        }
+
+        if (!Enum.IsDefined(request.Goal))
+        {
+            errors["goal"] = new[] { "Invalid goal value." };
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Weekday))
+        {
+            errors["weekday"] = new[] { "Weekday is required." };
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Timezone))
+        {
+            errors["timezone"] = new[] { "Timezone is required." };
+        }
+
+        if (!Enum.IsDefined(request.AudienceLocation))
+        {
+            errors["audienceLocation"] = new[] { "Invalid audience location value." };
+        }
+
+        if (request.AudienceLocation == AudienceLocationMode.SpecificCountry &&
+            string.IsNullOrWhiteSpace(request.Country))
+        {
+            errors["country"] = new[] { "Country is required when audience location is SpecificCountry." };
         }
 
         return errors;

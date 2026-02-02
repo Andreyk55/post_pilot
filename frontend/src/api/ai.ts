@@ -103,6 +103,31 @@ export interface CaptionGenerateResponse {
   warnings: string[]
 }
 
+// Post Time Suggestion Types
+export type AudienceLocationMode = 'MyLocation' | 'SpecificCountry' | 'Worldwide'
+
+export interface PostTimeSuggestionRequest {
+  platform: AiPlatform
+  goal: AiGoal
+  postText: string
+  weekday: string
+  timezone: string
+  audienceLocation?: AudienceLocationMode
+  country?: string | null
+}
+
+export interface TimeSuggestion {
+  time: string
+  label: string
+  confidence: number
+  reason: string
+}
+
+export interface PostTimeSuggestionResponse {
+  primary: TimeSuggestion
+  alternatives: TimeSuggestion[]
+}
+
 export interface AiApiError {
   title: string
   detail: string
@@ -240,6 +265,28 @@ export const aiApi = {
    */
   async generateCaptions(request: CaptionGenerateRequest): Promise<CaptionGenerateResponse> {
     const response = await fetch(`${API_URL}/ai/captions/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    })
+
+    if (!response.ok) {
+      const error: AiApiError = await response.json().catch(() => ({
+        title: 'Error',
+        detail: 'An unexpected error occurred',
+        status: response.status,
+      }))
+      throw new AiError(error.detail, response.status, error.title)
+    }
+
+    return response.json()
+  },
+
+  /**
+   * Get AI-powered suggestions for optimal posting times.
+   */
+  async suggestPostTime(request: PostTimeSuggestionRequest): Promise<PostTimeSuggestionResponse> {
+    const response = await fetch(`${API_URL}/ai/suggest-post-time`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
