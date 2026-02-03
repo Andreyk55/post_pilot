@@ -193,7 +193,7 @@ public class PostTimeSuggestionService
     {
         var audienceContext = request.AudienceLocation switch
         {
-            AudienceLocationMode.MyLocation => "The audience is primarily local (same timezone as the poster).",
+            AudienceLocationMode.MyLocation => $"The audience is primarily local, in the poster's timezone ({request.Timezone}).",
             AudienceLocationMode.SpecificCountry => $"The audience is primarily in {request.Country}.",
             AudienceLocationMode.Worldwide => "The audience is spread globally across multiple timezones.",
             _ => "The audience location is unspecified."
