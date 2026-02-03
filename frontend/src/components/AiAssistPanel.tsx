@@ -168,7 +168,7 @@ export function AiAssistPanel({
   onGoalChange,
 }: AiAssistPanelProps) {
   const noPlatform = !platformProp
-  const platform: AiPlatform = platformProp ?? 'Facebook'
+  const platform = platformProp
   const [activeTab, setActiveTab] = useState<TabType>('text')
   const [tone, setTone] = useState<AiTone>('Professional')
   const [loading, setLoading] = useState(false)
