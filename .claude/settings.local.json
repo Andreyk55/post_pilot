@@ -28,7 +28,8 @@
       "Read(//d/**)",
       "Bash(dotnet test:*)",
       "Bash(dotnet msbuild:*)",
-      "Bash(dotnet ef migrations:*)"
+      "Bash(dotnet ef migrations:*)",
+      "Bash(cd:*)"
     ]
   }
 }

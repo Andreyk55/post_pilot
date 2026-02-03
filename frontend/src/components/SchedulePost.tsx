@@ -243,6 +243,53 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
 
       <form onSubmit={handleSubmit}>
         <div className="form-group">
+          <label>Platforms</label>
+          <div className="platforms">
+            {platforms.map(platform => (
+              <button
+                key={platform.id}
+                type="button"
+                className={'platform-btn ' + (selectedPlatforms.includes(platform.id) ? 'selected' : '')}
+                onClick={() => togglePlatform(platform.id)}
+                title={platform.name}
+              >
+                <span className="platform-icon">{platform.icon}</span>
+                <span className="platform-name">{platform.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Facebook Page Selector - shown when Facebook is selected */}
+        {isFacebookSelected && (
+          <div className="form-group">
+            <label htmlFor="facebookPage">Facebook Page</label>
+            {loadingPages ? (
+              <div className="loading-pages">Loading pages...</div>
+            ) : connectedPages.length === 0 ? (
+              <div className="no-pages-warning">
+                No Facebook Pages connected. Please connect a page in{' '}
+                <a href="#connected-accounts">Connected Accounts</a>.
+              </div>
+            ) : (
+              <select
+                id="facebookPage"
+                value={selectedPageId}
+                onChange={(e) => setSelectedPageId(e.target.value)}
+                className="page-select"
+              >
+                <option value="">Select a page...</option>
+                {connectedPages.map(page => (
+                  <option key={page.id} value={page.id}>
+                    {page.name} {page.category && `(${page.category})`}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        )}
+
+        <div className="form-group">
           <label htmlFor="content">Post Content</label>
           <textarea
             id="content"
@@ -260,6 +307,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
             stickyLanguage={stickyLanguage}
             ensureLanguageDetected={ensureLanguageDetected}
             resetLanguage={resetLanguage}
+            platform={getAiPlatform(selectedPlatforms)}
             onApplyText={(newText, newLanguageCode) => {
               // Only update if content actually changes
               if (content !== newText) {
@@ -335,53 +383,6 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
           onSelectTime={(time) => setScheduledTime(time)}
           disabled={isUploading}
         />
-
-        <div className="form-group">
-          <label>Platforms</label>
-          <div className="platforms">
-            {platforms.map(platform => (
-              <button
-                key={platform.id}
-                type="button"
-                className={'platform-btn ' + (selectedPlatforms.includes(platform.id) ? 'selected' : '')}
-                onClick={() => togglePlatform(platform.id)}
-                title={platform.name}
-              >
-                <span className="platform-icon">{platform.icon}</span>
-                <span className="platform-name">{platform.name}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Facebook Page Selector - shown when Facebook is selected */}
-        {isFacebookSelected && (
-          <div className="form-group">
-            <label htmlFor="facebookPage">Facebook Page</label>
-            {loadingPages ? (
-              <div className="loading-pages">Loading pages...</div>
-            ) : connectedPages.length === 0 ? (
-              <div className="no-pages-warning">
-                No Facebook Pages connected. Please connect a page in{' '}
-                <a href="#connected-accounts">Connected Accounts</a>.
-              </div>
-            ) : (
-              <select
-                id="facebookPage"
-                value={selectedPageId}
-                onChange={(e) => setSelectedPageId(e.target.value)}
-                className="page-select"
-              >
-                <option value="">Select a page...</option>
-                {connectedPages.map(page => (
-                  <option key={page.id} value={page.id}>
-                    {page.name} {page.category && `(${page.category})`}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-        )}
 
         <div className="form-actions">
           <button

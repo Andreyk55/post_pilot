@@ -41,6 +41,8 @@ interface AiAssistPanelProps {
   ensureLanguageDetected: () => Promise<StickyLanguageState>
   // Function to reset language to unknown (triggers re-detect on next Generate)
   resetLanguage: () => void
+  // Platform (from main form platform selection)
+  platform: AiPlatform | null
   // Media props
   mediaUrl?: string | null
   mediaType?: MediaType | null
@@ -112,13 +114,6 @@ interface ThumbnailsResult {
 
 type MediaResult = MediaCaptionsResult | QualityResult | AltTextResult | ThumbnailsResult
 
-const platformOptions: { value: AiPlatform; label: string }[] = [
-  { value: 'Facebook', label: 'Facebook' },
-  { value: 'Instagram', label: 'Instagram' },
-  { value: 'LinkedIn', label: 'LinkedIn' },
-  { value: 'X', label: 'X (Twitter)' },
-]
-
 const toneOptions: { value: AiTone; label: string }[] = [
   { value: 'Professional', label: 'Professional' },
   { value: 'Casual', label: 'Casual' },
@@ -163,6 +158,7 @@ export function AiAssistPanel({
   stickyLanguage,
   ensureLanguageDetected,
   resetLanguage,
+  platform: platformProp,
   mediaUrl,
   mediaType,
   onSelectThumbnail,
@@ -171,8 +167,9 @@ export function AiAssistPanel({
   goal,
   onGoalChange,
 }: AiAssistPanelProps) {
+  const noPlatform = !platformProp
+  const platform: AiPlatform = platformProp ?? 'Facebook'
   const [activeTab, setActiveTab] = useState<TabType>('text')
-  const [platform, setPlatform] = useState<AiPlatform>('Facebook')
   const [tone, setTone] = useState<AiTone>('Professional')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -605,22 +602,6 @@ export function AiAssistPanel({
       </div>
 
       <div className="ai-controls">
-        <div className="ai-control-group">
-          <label htmlFor="ai-platform">Platform</label>
-          <select
-            id="ai-platform"
-            value={platform}
-            onChange={(e) => setPlatform(e.target.value as AiPlatform)}
-            disabled={loading}
-          >
-            {platformOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
         <div className="ai-control-group ai-voice-profile-control">
           <label htmlFor="ai-voice-profile">Voice Profile</label>
           <div className="voice-profile-selector">
@@ -656,7 +637,8 @@ export function AiAssistPanel({
       {/* Text Tab Content */}
       {activeTab === 'text' && (
         <>
-          {isTextEmpty && <div className="ai-empty-state">Enter text to enable AI features</div>}
+          {noPlatform && <div className="ai-empty-state">Select a platform to enable AI features</div>}
+          {!noPlatform && isTextEmpty && <div className="ai-empty-state">Enter text to enable AI features</div>}
 
           {/* Generator Controls */}
           <div className="ai-generator-controls">
@@ -753,7 +735,7 @@ export function AiAssistPanel({
               type="button"
               className="ai-generate-btn"
               onClick={handleGenerateVariants}
-              disabled={isTextEmpty || loading}
+              disabled={noPlatform || isTextEmpty || loading}
             >
               {loading && !regeneratingIndex ? 'Generating...' : 'Generate'}
             </button>
@@ -765,7 +747,7 @@ export function AiAssistPanel({
               type="button"
               className="ai-quick-btn"
               onClick={handleHashtags}
-              disabled={isTextEmpty || loading}
+              disabled={noPlatform || isTextEmpty || loading}
               title="Suggest relevant hashtags"
             >
               # Hashtags
@@ -774,7 +756,7 @@ export function AiAssistPanel({
               type="button"
               className="ai-quick-btn"
               onClick={handlePreFlight}
-              disabled={isTextEmpty || loading}
+              disabled={noPlatform || isTextEmpty || loading}
               title="Check post quality before publishing"
             >
               Pre-flight
@@ -786,9 +768,10 @@ export function AiAssistPanel({
       {/* Translate Tab Content */}
       {activeTab === 'translate' && (
         <>
-          {isTextEmpty && <div className="ai-empty-state">Enter text to enable translation</div>}
+          {noPlatform && <div className="ai-empty-state">Select a platform to enable translation</div>}
+          {!noPlatform && isTextEmpty && <div className="ai-empty-state">Enter text to enable translation</div>}
 
-          {!isTextEmpty && (
+          {!noPlatform && !isTextEmpty && (
             <>
               {/* Language Detection Display */}
               <div className="ai-language-detection">
@@ -885,7 +868,8 @@ export function AiAssistPanel({
       {/* Media Tab Content */}
       {activeTab === 'media' && (
         <>
-          {hasMedia && (
+          {noPlatform && <div className="ai-empty-state">Select a platform to enable media AI features</div>}
+          {!noPlatform && hasMedia && (
             <div className="ai-media-info">
               <span className={`media-type-indicator ${isImage ? 'image' : 'video'}`}>
                 {isImage ? 'Image' : 'Video'}
@@ -895,7 +879,7 @@ export function AiAssistPanel({
           )}
 
           {/* Image Features */}
-          {isImage && (
+          {!noPlatform && isImage && (
             <div className="ai-actions">
               <button
                 type="button"
@@ -928,7 +912,7 @@ export function AiAssistPanel({
           )}
 
           {/* Video Features - always show, disabled until video uploaded */}
-          {(!hasMedia || isVideo) && (
+          {!noPlatform && (!hasMedia || isVideo) && (
             <>
               {!isVideo && (
                 <div className="ai-empty-state">Upload a video to enable video AI features</div>
