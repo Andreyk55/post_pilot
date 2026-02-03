@@ -229,20 +229,20 @@ Return ONLY valid JSON in this exact format:
   ""primary"": {{
     ""time"": ""HH:MM"",
     ""label"": ""Short descriptive label (2-4 words)"",
-    ""confidence"": 85,
+    ""confidence"": <0-100>,
     ""reason"": ""Brief explanation why this time is recommended (1 sentence)""
   }},
   ""alternatives"": [
     {{
       ""time"": ""HH:MM"",
       ""label"": ""Short label"",
-      ""confidence"": 75,
+      ""confidence"": <0-100>,
       ""reason"": ""Brief reason""
     }},
     {{
       ""time"": ""HH:MM"",
       ""label"": ""Short label"",
-      ""confidence"": 65,
+      ""confidence"": <0-100>,
       ""reason"": ""Brief reason""
     }}
   ]
@@ -250,7 +250,7 @@ Return ONLY valid JSON in this exact format:
 
 RULES:
 - Times must be in 24-hour format (HH:MM) in the poster's timezone ({request.Timezone})
-- Confidence is 0-100 (primary should be highest)
+- Confidence is 0-100. Do NOT default to values like 85/75/65. Provide a genuine estimate based on how strong the evidence is for each time slot given the platform, day, audience, and goal. Primary should be highest
 - Provide exactly 2 alternatives
 - Labels should be short and descriptive (e.g., ""Morning Peak"", ""Lunch Hour"", ""Evening Prime"")
 - Reasons should be brief but informative
