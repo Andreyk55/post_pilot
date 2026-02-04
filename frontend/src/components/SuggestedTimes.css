@@ -231,22 +231,23 @@
 
 .suggested-time-meta {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.5rem;
-  margin-top: 0.4rem;
+  margin-top: 0.5rem;
 }
 
 .suggested-time-confidence-small {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: #a5b4fc;
-  min-width: 36px;
+  background: rgba(102, 126, 234, 0.15);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  flex-shrink: 0;
 }
 
 .suggested-time-reason-short {
   font-size: 0.85rem;
   color: rgba(255, 255, 255, 0.6);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.4;
 }
