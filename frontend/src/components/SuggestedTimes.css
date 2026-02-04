@@ -197,15 +197,15 @@
 }
 
 .suggested-time-value {
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: rgba(255, 255, 255, 0.9);
+  color: #ffffff;
 }
 
 .suggested-time-label {
-  font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.7);
 }
 
 /* Best confidence badge */
@@ -237,15 +237,15 @@
 }
 
 .suggested-time-confidence-small {
-  font-size: 0.7rem;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.5);
-  min-width: 28px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #a5b4fc;
+  min-width: 36px;
 }
 
 .suggested-time-reason-short {
-  font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

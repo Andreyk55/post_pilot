@@ -60,6 +60,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
   const [uploadKey, setUploadKey] = useState(0)
   const [isUploading, setIsUploading] = useState(false)
   const [aiPanelKey, setAiPanelKey] = useState(0)
+  const [suggestedTimesKey, setSuggestedTimesKey] = useState(0)
   const [selectedThumbnailUrl, setSelectedThumbnailUrl] = useState<string | null>(null)
 
   // AI state (shared between AiAssistPanel and time suggestions)
@@ -233,6 +234,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
     setUploadError(null)
     setUploadKey(k => k + 1)
     setAiPanelKey(k => k + 1)
+    setSuggestedTimesKey(k => k + 1)
     setSelectedThumbnailUrl(null)
     setStickyLanguage({ languageCode: 'unknown', confidence: 0, isReliable: false })
   }
@@ -372,6 +374,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
 
         {/* AI-powered time suggestions */}
         <SuggestedTimes
+          key={suggestedTimesKey}
           postText={content}
           selectedDate={scheduledDate}
           platform={getAiPlatform(selectedPlatforms)}
