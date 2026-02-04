@@ -1,8 +1,9 @@
 .suggested-times {
-  margin-top: 0.5rem;
-  border: 1px solid var(--border-color, #ddd);
+  margin-top: 0.25rem;
+  margin-bottom: 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
-  background: var(--card-bg, #fafafa);
+  background: rgba(255, 255, 255, 0.05);
   overflow: hidden;
 }
 
@@ -22,7 +23,7 @@
 }
 
 .suggested-times-header:hover {
-  background: var(--hover-bg, #f0f0f0);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .suggested-times-icon {
@@ -32,23 +33,23 @@
 .suggested-times-title {
   flex: 1;
   font-weight: 500;
-  font-size: 0.9rem;
-  color: var(--text-primary, #333);
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .suggested-times-loading {
-  color: var(--text-secondary, #666);
-  animation: pulse 1s infinite;
+  color: rgba(255, 255, 255, 0.5);
+  animation: suggested-times-pulse 1s infinite;
 }
 
-@keyframes pulse {
+@keyframes suggested-times-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }
 
 .suggested-times-chevron {
   font-size: 0.7rem;
-  color: var(--text-secondary, #666);
+  color: rgba(255, 255, 255, 0.5);
   transition: transform 0.2s;
 }
 
@@ -58,7 +59,7 @@
 
 .suggested-times-content {
   padding: 0.75rem 1rem 1rem;
-  border-top: 1px solid var(--border-color, #ddd);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* Controls section */
@@ -78,64 +79,73 @@
 .suggested-times-control-row label {
   font-size: 0.85rem;
   font-weight: 500;
-  color: var(--text-secondary, #666);
+  color: rgba(255, 255, 255, 0.5);
   min-width: 70px;
 }
 
 .suggested-times-control-row select {
   flex: 1;
   padding: 0.5rem 0.75rem;
-  border: 1px solid var(--border-color, #ddd);
-  border-radius: 6px;
-  background: var(--input-bg, #fff);
-  color: var(--text-primary, #333);
-  font-size: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font-size: 0.875rem;
   cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
 }
 
 .suggested-times-control-row select:focus {
   outline: none;
-  border-color: var(--primary-color, #4f46e5);
-  box-shadow: 0 0 0 2px var(--primary-bg-light, #eef2ff);
+  border-color: #667eea;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .suggested-times-control-row select:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
+}
+
+.suggested-times-control-row select option {
+  background: #1a1a2e;
+  color: #ffffff;
 }
 
 .suggested-times-fetch-btn {
   padding: 0.6rem 1rem;
-  background: var(--primary-color, #4f46e5);
-  color: white;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #ffffff;
   border: none;
-  border-radius: 6px;
-  font-size: 0.9rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
-  transition: background-color 0.15s, opacity 0.15s;
+  font-family: inherit;
+  transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
 }
 
 .suggested-times-fetch-btn:hover:not(:disabled) {
-  background: var(--primary-hover, #4338ca);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.35);
 }
 
 .suggested-times-fetch-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 .suggested-times-hint {
   font-size: 0.8rem;
-  color: var(--text-secondary, #888);
+  color: rgba(255, 255, 255, 0.4);
   font-style: italic;
 }
 
 .suggested-times-error {
   padding: 0.75rem;
   margin-top: 0.75rem;
-  color: var(--error-color, #dc3545);
-  background: var(--error-bg, #fff5f5);
+  color: #ff6b6b;
+  background: rgba(255, 59, 48, 0.1);
+  border: 1px solid rgba(255, 59, 48, 0.3);
   border-radius: 6px;
   font-size: 0.85rem;
 }
@@ -143,92 +153,80 @@
 .suggested-times-empty {
   padding: 1rem;
   text-align: center;
-  color: var(--text-secondary, #666);
+  color: rgba(255, 255, 255, 0.5);
   font-size: 0.85rem;
 }
 
-/* Time cards */
-.suggested-time-card {
+/* Suggestions list */
+.suggested-times-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
   margin-top: 0.75rem;
+}
+
+/* Time cards - uniform styling */
+.suggested-time-card {
   padding: 0.75rem;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.15s;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .suggested-time-card:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
-.suggested-time-card.primary {
-  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-  color: white;
+/* Selected state */
+.suggested-time-card.selected {
+  background: rgba(102, 126, 234, 0.15);
+  border-color: #667eea;
 }
 
-.suggested-time-card.alternative {
-  background: var(--card-alt-bg, #fff);
-  border: 1px solid var(--border-color, #ddd);
-}
-
-.suggested-time-card.alternative:hover {
-  border-color: var(--primary-color, #4f46e5);
-}
-
-.suggested-time-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.5rem;
-}
-
-.suggested-time-badge {
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  background: rgba(255, 255, 255, 0.2);
-  padding: 0.2rem 0.5rem;
-  border-radius: 4px;
-}
-
-.suggested-time-confidence {
-  font-size: 0.75rem;
-  opacity: 0.9;
+.suggested-time-card.selected:hover {
+  background: rgba(102, 126, 234, 0.2);
 }
 
 .suggested-time-main {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.75rem;
 }
 
 .suggested-time-value {
-  font-size: 1.5rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.suggested-time-card.alternative .suggested-time-value {
   font-size: 1.1rem;
-  color: var(--text-primary, #333);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .suggested-time-label {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Best confidence badge */
+.suggested-time-best-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: rgba(102, 126, 234, 0.2);
+  color: #a5b4fc;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  margin-left: auto;
+}
+
+/* Selected checkmark */
+.suggested-time-selected-check {
   font-size: 0.9rem;
-  opacity: 0.9;
-}
-
-.suggested-time-card.alternative .suggested-time-label {
-  font-size: 0.85rem;
-  color: var(--text-secondary, #666);
-}
-
-.suggested-time-reason {
-  margin-top: 0.5rem;
-  font-size: 0.85rem;
-  opacity: 0.9;
-  line-height: 1.4;
+  color: #667eea;
+  font-weight: 600;
+  margin-left: 0.25rem;
 }
 
 .suggested-time-meta {
@@ -239,71 +237,16 @@
 }
 
 .suggested-time-confidence-small {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 500;
-  color: var(--primary-color, #4f46e5);
-  background: var(--primary-bg-light, #eef2ff);
-  padding: 0.15rem 0.4rem;
-  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.5);
+  min-width: 28px;
 }
 
 .suggested-time-reason-short {
   font-size: 0.8rem;
-  color: var(--text-secondary, #666);
+  color: rgba(255, 255, 255, 0.4);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-/* Alternatives section */
-.suggested-times-alternatives {
-  margin-top: 0.75rem;
-}
-
-.suggested-times-alt-label {
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--text-secondary, #666);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 0.25rem;
-}
-
-.suggested-times-alt-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-  .suggested-times {
-    --border-color: #333;
-    --card-bg: #1a1a1a;
-    --hover-bg: #252525;
-    --text-primary: #e5e5e5;
-    --text-secondary: #999;
-    --card-alt-bg: #222;
-    --error-color: #f87171;
-    --error-bg: #1f1f1f;
-    --primary-color: #818cf8;
-    --primary-bg-light: #1e1b4b;
-    --primary-hover: #6366f1;
-    --input-bg: #2a2a2a;
-  }
-
-  .suggested-time-card.alternative {
-    background: #222;
-    border-color: #333;
-  }
-
-  .suggested-time-card.alternative:hover {
-    border-color: #818cf8;
-  }
-
-  .suggested-times-control-row select {
-    background: var(--input-bg, #2a2a2a);
-    border-color: #444;
-    color: var(--text-primary, #e5e5e5);
-  }
 }

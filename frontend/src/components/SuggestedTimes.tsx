@@ -72,6 +72,7 @@ export function SuggestedTimes({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
+  const [selectedTime, setSelectedTime] = useState<string | null>(null)
 
   // Check if we can fetch suggestions
   const canFetch = Boolean(
@@ -113,8 +114,19 @@ export function SuggestedTimes({
   }, [canFetch, platform, selectedDate, goal, postText, audienceLocation, country])
 
   const handleSelectTime = (time: string) => {
+    setSelectedTime(time)
     onSelectTime(time)
   }
+
+  // Get all suggestions as a flat list for uniform rendering
+  const allSuggestions = suggestions
+    ? [suggestions.primary, ...suggestions.alternatives]
+    : []
+
+  // Find the highest confidence score
+  const maxConfidence = allSuggestions.length > 0
+    ? Math.max(...allSuggestions.map(s => s.confidence))
+    : 0
 
   // Always render the component (collapsible)
   return (
@@ -192,53 +204,37 @@ export function SuggestedTimes({
 
           {error && <div className="suggested-times-error">{error}</div>}
 
-          {suggestions && (
-            <>
-              {/* Primary recommendation */}
-              <div
-                className="suggested-time-card primary"
-                onClick={() => !disabled && handleSelectTime(suggestions.primary.time)}
-              >
-                <div className="suggested-time-header">
-                  <span className="suggested-time-badge">Recommended</span>
-                  <span className="suggested-time-confidence">
-                    {suggestions.primary.confidence}% confidence
-                  </span>
-                </div>
-                <div className="suggested-time-main">
-                  <span className="suggested-time-value">{suggestions.primary.time}</span>
-                  <span className="suggested-time-label">{suggestions.primary.label}</span>
-                </div>
-                <div className="suggested-time-reason">{suggestions.primary.reason}</div>
-              </div>
-
-              {/* Alternatives */}
-              {suggestions.alternatives.length > 0 && (
-                <div className="suggested-times-alternatives">
-                  <div className="suggested-times-alt-label">Alternatives</div>
-                  <div className="suggested-times-alt-list">
-                    {suggestions.alternatives.map((alt, index) => (
-                      <div
-                        key={index}
-                        className="suggested-time-card alternative"
-                        onClick={() => !disabled && handleSelectTime(alt.time)}
-                      >
-                        <div className="suggested-time-main">
-                          <span className="suggested-time-value">{alt.time}</span>
-                          <span className="suggested-time-label">{alt.label}</span>
-                        </div>
-                        <div className="suggested-time-meta">
-                          <span className="suggested-time-confidence-small">
-                            {alt.confidence}%
-                          </span>
-                          <span className="suggested-time-reason-short">{alt.reason}</span>
-                        </div>
-                      </div>
-                    ))}
+          {allSuggestions.length > 0 && (
+            <div className="suggested-times-list">
+              {allSuggestions.map((suggestion, index) => {
+                const isSelected = selectedTime === suggestion.time
+                const isBestConfidence = suggestion.confidence === maxConfidence
+                return (
+                  <div
+                    key={index}
+                    className={`suggested-time-card${isSelected ? ' selected' : ''}`}
+                    onClick={() => !disabled && handleSelectTime(suggestion.time)}
+                  >
+                    <div className="suggested-time-main">
+                      <span className="suggested-time-value">{suggestion.time}</span>
+                      <span className="suggested-time-label">{suggestion.label}</span>
+                      {isBestConfidence && (
+                        <span className="suggested-time-best-badge">Best</span>
+                      )}
+                      {isSelected && (
+                        <span className="suggested-time-selected-check">✓</span>
+                      )}
+                    </div>
+                    <div className="suggested-time-meta">
+                      <span className="suggested-time-confidence-small">
+                        {suggestion.confidence}%
+                      </span>
+                      <span className="suggested-time-reason-short">{suggestion.reason}</span>
+                    </div>
                   </div>
-                </div>
-              )}
-            </>
+                )
+              })}
+            </div>
           )}
         </div>
       )}
