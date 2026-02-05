@@ -6,6 +6,14 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <!-- Exclude test project from compilation -->
+  <ItemGroup>
+    <Compile Remove="PostPilot.Api.Tests\**" />
+    <Content Remove="PostPilot.Api.Tests\**" />
+    <EmbeddedResource Remove="PostPilot.Api.Tests\**" />
+    <None Remove="PostPilot.Api.Tests\**" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Amazon.Lambda.AspNetCoreServer" Version="9.2.1" />
     <PackageReference Include="Amazon.Lambda.CloudWatchEvents" Version="4.1.0" />
@@ -19,6 +27,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.7" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.0" />
   </ItemGroup>
 

@@ -1,5 +1,7 @@
-import { useState, useRef } from 'react'
-import { mediaApi, type MediaType } from '../api/media'
+import { useState, useRef, useEffect } from 'react'
+import { mediaApi, type MediaType, type ValidationStatus, type MediaValidationError, type MediaValidationWarning, type Platform, type Placement } from '../api/media'
+import { preValidateFile, preValidateImageDimensions, getImageDimensions, getClientValidationRule } from '../constants/mediaValidationRules'
+import type { PlatformId } from '../constants/validationLimits'
 import './MediaUpload.css'
 
 interface MediaUploadProps {
@@ -7,44 +9,117 @@ interface MediaUploadProps {
   onUploadError: (error: string) => void
   onClear: () => void
   onUploadingChange?: (isUploading: boolean) => void
+  onValidationChange?: (status: ValidationStatus, errors: MediaValidationError[], warnings: MediaValidationWarning[]) => void
+  selectedPlatform?: PlatformId | null
+  placement?: Placement
 }
 
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif']
-const ALLOWED_VIDEO_TYPES = ['video/mp4']
-const ALLOWED_TYPES = [...ALLOWED_IMAGE_TYPES, ...ALLOWED_VIDEO_TYPES]
+// Default generic limits (used when no platform-specific rules exist)
+const DEFAULT_MAX_IMAGE_SIZE_MB = 20
+const DEFAULT_MAX_VIDEO_SIZE_MB = 200
 
-const MAX_IMAGE_SIZE_MB = 20
-const MAX_VIDEO_SIZE_MB = 200
-const MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_MB * 1024 * 1024
-const MAX_VIDEO_SIZE_BYTES = MAX_VIDEO_SIZE_MB * 1024 * 1024
-
-export function MediaUpload({ onUploadComplete, onUploadError, onClear, onUploadingChange }: MediaUploadProps) {
+export function MediaUpload({
+  onUploadComplete,
+  onUploadError,
+  onClear,
+  onUploadingChange,
+  onValidationChange,
+  selectedPlatform,
+  placement = 'Feed'
+}: MediaUploadProps) {
   const [uploading, setUploading] = useState(false)
   const [preview, setPreview] = useState<string | null>(null)
   const [progress, setProgress] = useState(0)
   const [fileName, setFileName] = useState<string | null>(null)
   const [mediaType, setMediaType] = useState<'image' | 'video' | null>(null)
+  const [uploadedStorageKey, setUploadedStorageKey] = useState<string | null>(null)
+  const [uploadedMimeType, setUploadedMimeType] = useState<string | null>(null)
+  const [validationStatus, setValidationStatus] = useState<ValidationStatus>('Pending')
+  const [validationErrors, setValidationErrors] = useState<MediaValidationError[]>([])
+  const [validationWarnings, setValidationWarnings] = useState<MediaValidationWarning[]>([])
+  const [validating, setValidating] = useState(false)
+
   const fileInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
 
-  const getMediaType = (type: string): 'image' | 'video' | null => {
-    if (ALLOWED_IMAGE_TYPES.includes(type)) return 'image'
-    if (ALLOWED_VIDEO_TYPES.includes(type)) return 'video'
+  // Validate/re-validate when platform changes (including first selection after upload)
+  useEffect(() => {
+    if (uploadedStorageKey && uploadedMimeType && selectedPlatform) {
+      revalidateMedia()
+    }
+  }, [selectedPlatform])
+
+  const revalidateMedia = async () => {
+    if (!uploadedStorageKey || !uploadedMimeType || !selectedPlatform) return
+
+    try {
+      setValidating(true)
+      setValidationStatus('Pending')
+
+      const platformMap: Record<string, Platform> = {
+        facebook: 'Facebook',
+        instagram: 'Instagram',
+        twitter: 'Twitter',
+        linkedin: 'LinkedIn',
+      }
+
+      const result = await mediaApi.validateMedia({
+        storageKey: uploadedStorageKey,
+        mimeType: uploadedMimeType,
+        platform: platformMap[selectedPlatform] as Platform,
+        placement: placement,
+      })
+
+      setValidationStatus(result.status)
+      setValidationErrors(result.errors)
+      setValidationWarnings(result.warnings)
+      onValidationChange?.(result.status, result.errors, result.warnings)
+    } catch (err) {
+      console.error('Re-validation failed:', err)
+    } finally {
+      setValidating(false)
+    }
+  }
+
+  const getMediaTypeFromMime = (type: string): 'image' | 'video' | null => {
+    if (type.startsWith('image/')) return 'image'
+    if (type.startsWith('video/')) return 'video'
     return null
   }
 
-  const validateFile = (file: File): string | null => {
-    const type = getMediaType(file.type)
-    if (!type) {
-      return 'Invalid file type. Please upload an image (JPG, PNG, GIF) or video (MP4).'
-    }
+  const validateFile = async (file: File): Promise<string | null> => {
+    // Platform-specific pre-validation if platform is selected
+    if (selectedPlatform) {
+      const errors = preValidateFile(file, selectedPlatform, placement)
+      if (errors.length > 0) {
+        return errors[0]
+      }
 
-    if (type === 'image' && file.size > MAX_IMAGE_SIZE_BYTES) {
-      return `Image too large. Maximum size is ${MAX_IMAGE_SIZE_MB}MB.`
-    }
+      // For images, also check dimensions
+      if (file.type.startsWith('image/')) {
+        const dims = await getImageDimensions(file)
+        if (dims) {
+          const dimErrors = preValidateImageDimensions(dims.width, dims.height, selectedPlatform, placement)
+          if (dimErrors.length > 0) {
+            return dimErrors[0]
+          }
+        }
+      }
+    } else {
+      // Fallback to generic validation
+      const type = getMediaTypeFromMime(file.type)
+      if (!type) {
+        return 'Invalid file type. Please upload an image or video.'
+      }
 
-    if (type === 'video' && file.size > MAX_VIDEO_SIZE_BYTES) {
-      return `Video too large. Maximum size is ${MAX_VIDEO_SIZE_MB}MB.`
+      const maxBytes = type === 'image'
+        ? DEFAULT_MAX_IMAGE_SIZE_MB * 1024 * 1024
+        : DEFAULT_MAX_VIDEO_SIZE_MB * 1024 * 1024
+
+      if (file.size > maxBytes) {
+        const maxMB = type === 'image' ? DEFAULT_MAX_IMAGE_SIZE_MB : DEFAULT_MAX_VIDEO_SIZE_MB
+        return `File too large. Maximum size is ${maxMB}MB.`
+      }
     }
 
     return null
@@ -54,13 +129,20 @@ export function MediaUpload({ onUploadComplete, onUploadError, onClear, onUpload
     const file = e.target.files?.[0]
     if (!file) return
 
-    const error = validateFile(file)
+    // Reset validation state
+    setValidationStatus('Pending')
+    setValidationErrors([])
+    setValidationWarnings([])
+    setUploadedStorageKey(null)
+    setUploadedMimeType(null)
+
+    const error = await validateFile(file)
     if (error) {
       onUploadError(error)
       return
     }
 
-    const type = getMediaType(file.type)!
+    const type = getMediaTypeFromMime(file.type)!
     setMediaType(type)
     setFileName(file.name)
 
@@ -70,7 +152,6 @@ export function MediaUpload({ onUploadComplete, onUploadError, onClear, onUpload
       reader.onload = (e) => setPreview(e.target?.result as string)
       reader.readAsDataURL(file)
     } else {
-      // For video, create object URL for preview
       const objectUrl = URL.createObjectURL(file)
       setPreview(objectUrl)
     }
@@ -89,11 +170,44 @@ export function MediaUpload({ onUploadComplete, onUploadError, onClear, onUpload
 
       // Upload directly to S3 (or local endpoint in dev)
       await mediaApi.uploadFile(uploadUrl, file, (progressPercent) => {
-        // Scale progress from 30% to 90% during upload
-        setProgress(30 + Math.round(progressPercent * 0.6))
+        setProgress(30 + Math.round(progressPercent * 0.5))
       })
-      setProgress(100)
+      setProgress(80)
 
+      // Store upload info for validation
+      setUploadedStorageKey(s3Key)
+      setUploadedMimeType(file.type)
+
+      // If platform was selected, trigger validation
+      if (selectedPlatform) {
+        setValidating(true)
+        try {
+          const platformMap: Record<string, Platform> = {
+            facebook: 'Facebook',
+            instagram: 'Instagram',
+            twitter: 'Twitter',
+            linkedin: 'LinkedIn',
+          }
+
+          const validationResult = await mediaApi.validateMedia({
+            storageKey: s3Key,
+            mimeType: file.type,
+            platform: platformMap[selectedPlatform] as Platform,
+            placement: placement,
+          })
+          setValidationStatus(validationResult.status)
+          setValidationErrors(validationResult.errors)
+          setValidationWarnings(validationResult.warnings)
+          onValidationChange?.(validationResult.status, validationResult.errors, validationResult.warnings)
+        } catch (err) {
+          console.error('Validation failed:', err)
+          // Keep upload but show as pending
+        } finally {
+          setValidating(false)
+        }
+      }
+
+      setProgress(100)
       onUploadComplete(s3Key, returnedMediaType as MediaType)
     } catch (err) {
       console.error('Upload failed:', err)
@@ -108,7 +222,6 @@ export function MediaUpload({ onUploadComplete, onUploadError, onClear, onUpload
   }
 
   const handleClear = () => {
-    // Clean up video object URL if needed
     if (mediaType === 'video' && preview) {
       URL.revokeObjectURL(preview)
     }
@@ -116,6 +229,11 @@ export function MediaUpload({ onUploadComplete, onUploadError, onClear, onUpload
     setFileName(null)
     setMediaType(null)
     setProgress(0)
+    setUploadedStorageKey(null)
+    setUploadedMimeType(null)
+    setValidationStatus('Pending')
+    setValidationErrors([])
+    setValidationWarnings([])
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
@@ -128,47 +246,115 @@ export function MediaUpload({ onUploadComplete, onUploadError, onClear, onUpload
     }
   }
 
+  const getValidationBadge = () => {
+    if (validating) {
+      return <span className="validation-badge validating">Validating...</span>
+    }
+
+    switch (validationStatus) {
+      case 'Valid':
+        return <span className="validation-badge valid">Valid</span>
+      case 'Invalid':
+        return <span className="validation-badge invalid">Invalid</span>
+      case 'Warning':
+        return <span className="validation-badge warning">Warning</span>
+      case 'Pending':
+      default:
+        return selectedPlatform ? <span className="validation-badge pending">Pending</span> : null
+    }
+  }
+
+  // Get dynamic hints based on selected platform
+  const getUploadHints = () => {
+    if (selectedPlatform) {
+      const imageRule = getClientValidationRule(selectedPlatform, placement, 'Image')
+      const videoRule = getClientValidationRule(selectedPlatform, placement, 'Video')
+
+      const imageMaxMB = imageRule ? Math.round(imageRule.maxBytes / (1024 * 1024)) : DEFAULT_MAX_IMAGE_SIZE_MB
+      const videoMaxMB = videoRule ? Math.round(videoRule.maxBytes / (1024 * 1024)) : DEFAULT_MAX_VIDEO_SIZE_MB
+
+      return (
+        <>
+          <span className="upload-hint">Images: max {imageMaxMB}MB</span>
+          <span className="upload-hint">Videos: max {videoMaxMB}MB</span>
+        </>
+      )
+    }
+
+    return (
+      <>
+        <span className="upload-hint">Images: JPG, PNG, GIF (max {DEFAULT_MAX_IMAGE_SIZE_MB}MB)</span>
+        <span className="upload-hint">Videos: MP4 (max {DEFAULT_MAX_VIDEO_SIZE_MB}MB)</span>
+      </>
+    )
+  }
+
   return (
     <div className="media-upload">
       <input
         ref={fileInputRef}
         type="file"
-        accept={ALLOWED_TYPES.join(',')}
+        accept="image/*,video/*"
         onChange={handleFileSelect}
         disabled={uploading}
         className="file-input-hidden"
       />
 
       {preview ? (
-        <div className={`media-preview ${mediaType === 'video' ? 'video-preview' : 'image-preview'}`}>
-          {mediaType === 'image' ? (
-            <img src={preview} alt="Upload preview" />
-          ) : (
-            <video
-              ref={videoRef}
-              src={preview}
-              controls
-              muted
-              playsInline
-            />
-          )}
-          <div className="preview-overlay">
-            <div className="preview-info">
-              <span className={`media-type-badge ${mediaType}`}>
-                {mediaType === 'image' ? 'Image' : 'Video'}
-              </span>
-              <span className="preview-filename">{fileName}</span>
+        <>
+          <div className={`media-preview ${mediaType === 'video' ? 'video-preview' : 'image-preview'}`}>
+            {mediaType === 'image' ? (
+              <img src={preview} alt="Upload preview" />
+            ) : (
+              <video
+                ref={videoRef}
+                src={preview}
+                controls
+                muted
+                playsInline
+              />
+            )}
+            <div className="preview-overlay">
+              <div className="preview-info">
+                <span className={`media-type-badge ${mediaType}`}>
+                  {mediaType === 'image' ? 'Image' : 'Video'}
+                </span>
+                {getValidationBadge()}
+                <span className="preview-filename">{fileName}</span>
+              </div>
+              <button
+                type="button"
+                className="clear-btn"
+                onClick={handleClear}
+                disabled={uploading}
+              >
+                Remove
+              </button>
             </div>
-            <button
-              type="button"
-              className="clear-btn"
-              onClick={handleClear}
-              disabled={uploading}
-            >
-              Remove
-            </button>
           </div>
-        </div>
+
+          {/* Validation errors - outside preview for proper display */}
+          {validationErrors.length > 0 && (
+            <div className="validation-errors">
+              {validationErrors.map((err, i) => (
+                <div key={i} className="validation-error">
+                  {err.message}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Validation warnings - outside preview for proper display */}
+          {validationWarnings.length > 0 && validationErrors.length === 0 && (
+            <div className="validation-warnings">
+              {validationWarnings.map((warn, i) => (
+                <div key={i} className="validation-warning">
+                  {warn.message}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       ) : (
         <div
           className={`upload-area ${uploading ? 'uploading' : ''}`}
@@ -182,12 +368,7 @@ export function MediaUpload({ onUploadComplete, onUploadError, onClear, onUpload
             <span className="upload-text">
               {uploading ? 'Uploading...' : 'Add Media'}
             </span>
-            <span className="upload-hint">
-              Images: JPG, PNG, GIF (max {MAX_IMAGE_SIZE_MB}MB)
-            </span>
-            <span className="upload-hint">
-              Videos: MP4 (max {MAX_VIDEO_SIZE_MB}MB)
-            </span>
+            {getUploadHints()}
           </div>
         </div>
       )}

@@ -199,6 +199,9 @@ public class PostsController : ControllerBase
             return ValidationProblem(new ValidationProblemDetails(validationErrors));
         }
 
+        // Note: Media validation is done client-side via POST /api/media/validate before submission.
+        // The frontend blocks submission if media is invalid.
+
         var post = new Post
         {
             Id = Guid.NewGuid(),
@@ -341,7 +344,8 @@ public record CreatePostRequest(
     Platform Platform,
     DateTime ScheduledAt,
     Guid? TargetPageId = null,
-    string? SelectedThumbnailUrl = null
+    string? SelectedThumbnailUrl = null,
+    List<Guid>? MediaAssetIds = null
 );
 
 public record UpdatePostRequest(

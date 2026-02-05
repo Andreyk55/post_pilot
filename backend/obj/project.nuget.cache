@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "U0FKEudPJoY=",
+  "dgSpecHash": "l1jcnSoAZUM=",
   "success": true,
   "projectFilePath": "D:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj",
   "expectedPackageFiles": [
@@ -12,10 +12,10 @@
     "C:\\Users\\KTZ\\.nuget\\packages\\amazon.lambda.logging.aspnetcore\\4.1.1\\amazon.lambda.logging.aspnetcore.4.1.1.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\amazon.lambda.serialization.systemtextjson\\2.4.4\\amazon.lambda.serialization.systemtextjson.2.4.4.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\amazon.lambda.sqsevents\\2.2.0\\amazon.lambda.sqsevents.2.2.0.nupkg.sha512",
-    "C:\\Users\\KTZ\\.nuget\\packages\\awssdk.core\\3.7.500.71\\awssdk.core.3.7.500.71.nupkg.sha512",
-    "C:\\Users\\KTZ\\.nuget\\packages\\awssdk.s3\\3.7.509.12\\awssdk.s3.3.7.509.12.nupkg.sha512",
-    "C:\\Users\\KTZ\\.nuget\\packages\\awssdk.scheduler\\3.7.502.33\\awssdk.scheduler.3.7.502.33.nupkg.sha512",
-    "C:\\Users\\KTZ\\.nuget\\packages\\awssdk.sqs\\3.7.502.32\\awssdk.sqs.3.7.502.32.nupkg.sha512",
+    "C:\\Users\\KTZ\\.nuget\\packages\\awssdk.core\\3.7.500.75\\awssdk.core.3.7.500.75.nupkg.sha512",
+    "C:\\Users\\KTZ\\.nuget\\packages\\awssdk.s3\\3.7.510.3\\awssdk.s3.3.7.510.3.nupkg.sha512",
+    "C:\\Users\\KTZ\\.nuget\\packages\\awssdk.scheduler\\3.7.502.37\\awssdk.scheduler.3.7.502.37.nupkg.sha512",
+    "C:\\Users\\KTZ\\.nuget\\packages\\awssdk.sqs\\3.7.502.36\\awssdk.sqs.3.7.502.36.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\humanizer.core\\2.14.1\\humanizer.core.2.14.1.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\microsoft.aspnetcore.openapi\\10.0.1\\microsoft.aspnetcore.openapi.10.0.1.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\microsoft.build\\17.7.2\\microsoft.build.17.7.2.nupkg.sha512",
@@ -41,6 +41,7 @@
     "C:\\Users\\KTZ\\.nuget\\packages\\newtonsoft.json\\13.0.3\\newtonsoft.json.13.0.3.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\npgsql\\10.0.0\\npgsql.10.0.0.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\npgsql.entityframeworkcore.postgresql\\10.0.0\\npgsql.entityframeworkcore.postgresql.10.0.0.nupkg.sha512",
+    "C:\\Users\\KTZ\\.nuget\\packages\\sixlabors.imagesharp\\3.1.7\\sixlabors.imagesharp.3.1.7.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\swashbuckle.aspnetcore\\10.1.0\\swashbuckle.aspnetcore.10.1.0.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\swashbuckle.aspnetcore.swagger\\10.1.0\\swashbuckle.aspnetcore.swagger.10.1.0.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\swashbuckle.aspnetcore.swaggergen\\10.1.0\\swashbuckle.aspnetcore.swaggergen.10.1.0.nupkg.sha512",
@@ -61,5 +62,18 @@
     "C:\\Users\\KTZ\\.nuget\\packages\\system.security.permissions\\9.0.0\\system.security.permissions.9.0.0.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\system.windows.extensions\\9.0.0\\system.windows.extensions.9.0.0.nupkg.sha512"
   ],
-  "logs": []
+  "logs": [
+    {
+      "code": "NU1902",
+      "level": "Warning",
+      "message": "Package 'SixLabors.ImageSharp' 3.1.7 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-rxmq-m78w-7wmc",
+      "projectPath": "D:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj",
+      "warningLevel": 1,
+      "filePath": "D:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj",
+      "libraryId": "SixLabors.ImageSharp",
+      "targetGraphs": [
+        "net10.0"
+      ]
+    }
+  ]
 }

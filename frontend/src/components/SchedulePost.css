@@ -256,6 +256,32 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   font-size: 0.85rem;
 }
 
+/* Media validation summary */
+.media-validation-summary {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 6px;
+  color: #fca5a5;
+  font-size: 0.85rem;
+}
+
+.media-validation-summary strong {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: #f87171;
+}
+
+.media-validation-summary ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.media-validation-summary li {
+  margin-bottom: 0.25rem;
+}
+
 @media (max-width: 480px) {
   .form-row {
     grid-template-columns: 1fr;

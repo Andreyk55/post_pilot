@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
+using PostPilot.Api.DTOs;
 using PostPilot.Api.Enums;
 using PostPilot.Api.Services.Media;
+using PostPilot.Api.Services.Validation;
 
 namespace PostPilot.Api.Controllers;
 
@@ -9,13 +11,16 @@ namespace PostPilot.Api.Controllers;
 public class MediaController : ControllerBase
 {
     private readonly IMediaService _mediaService;
+    private readonly IMediaValidationService _validationService;
     private readonly ILogger<MediaController> _logger;
 
     public MediaController(
         IMediaService mediaService,
+        IMediaValidationService validationService,
         ILogger<MediaController> logger)
     {
         _mediaService = mediaService;
+        _validationService = validationService;
         _logger = logger;
     }
 
@@ -171,6 +176,131 @@ public class MediaController : ControllerBase
         var stream = new FileStream(framePath, FileMode.Open, FileAccess.Read);
         return File(stream, "image/jpeg");
     }
+
+    // ============================================
+    // STATELESS MEDIA VALIDATION ENDPOINTS
+    // ============================================
+
+    /// <summary>
+    /// Validates a media file by its storage key for a specific platform and placement.
+    /// This is a stateless operation - no database record is created.
+    /// </summary>
+    [HttpPost("validate")]
+    public async Task<ActionResult<MediaValidationResult>> ValidateMedia(
+        [FromBody] ValidateMediaByKeyRequest request)
+    {
+        _logger.LogInformation("=== VALIDATE ENDPOINT HIT === StorageKey: {Key}, MimeType: {Mime}, Platform: {Platform}, Placement: {Placement}",
+            request.StorageKey, request.MimeType, request.Platform, request.Placement);
+
+        if (string.IsNullOrWhiteSpace(request.StorageKey))
+        {
+            return BadRequest(new { error = "Storage key is required" });
+        }
+
+        // Determine media type from MIME type
+        var mediaType = _mediaService.GetMediaType(request.MimeType);
+        if (mediaType == MediaType.None)
+        {
+            return BadRequest(new { error = $"Invalid MIME type: {request.MimeType}" });
+        }
+
+        // Get file path from storage key
+        var filePath = _mediaService.GetLocalFilePath(request.StorageKey);
+        if (string.IsNullOrEmpty(filePath) || !System.IO.File.Exists(filePath))
+        {
+            return NotFound(new { error = "Media file not found" });
+        }
+
+        // Get file size
+        var fileInfo = new FileInfo(filePath);
+        var sizeBytes = fileInfo.Length;
+
+        _logger.LogInformation(
+            "Starting validation for {MediaType} file: {StorageKey}, Platform: {Platform}, Placement: {Placement}",
+            mediaType, request.StorageKey, request.Platform, request.Placement);
+
+        // Validate the file
+        var result = await _validationService.ValidateFileAsync(
+            filePath,
+            request.MimeType,
+            sizeBytes,
+            mediaType,
+            request.Platform,
+            request.Placement);
+
+        _logger.LogInformation(
+            "Validation completed for {StorageKey}: Status={Status}, Errors={ErrorCount}, Warnings={WarningCount}",
+            request.StorageKey, result.Status, result.Errors.Length, result.Warnings.Length);
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Extracts metadata from a media file by its storage key.
+    /// This is a stateless operation - no database record is created.
+    /// </summary>
+    [HttpPost("extract-metadata")]
+    public async Task<ActionResult<ExtractedMediaMetadata>> ExtractMetadata(
+        [FromBody] ExtractMetadataRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.StorageKey))
+        {
+            return BadRequest(new { error = "Storage key is required" });
+        }
+
+        // Determine media type from MIME type
+        var mediaType = _mediaService.GetMediaType(request.MimeType);
+        if (mediaType == MediaType.None)
+        {
+            return BadRequest(new { error = $"Invalid MIME type: {request.MimeType}" });
+        }
+
+        // Get file path from storage key
+        var filePath = _mediaService.GetLocalFilePath(request.StorageKey);
+        if (string.IsNullOrEmpty(filePath) || !System.IO.File.Exists(filePath))
+        {
+            return NotFound(new { error = "Media file not found" });
+        }
+
+        var metadata = await _validationService.ExtractMetadataFromFileAsync(filePath, mediaType);
+        if (metadata == null)
+        {
+            return BadRequest(new { error = "Failed to extract metadata" });
+        }
+
+        return Ok(metadata);
+    }
+
+    /// <summary>
+    /// Gets the validation rules for a specific platform, placement, and media type.
+    /// Useful for frontend pre-validation.
+    /// </summary>
+    [HttpGet("validation-rules")]
+    public ActionResult<MediaValidationRuleDto> GetValidationRules(
+        [FromQuery] Platform platform,
+        [FromQuery] Placement placement,
+        [FromQuery] MediaType mediaType)
+    {
+        var rules = MediaValidationRules.GetRules(platform, placement, mediaType);
+        if (rules == null)
+        {
+            return NotFound(new { error = $"No rules defined for {platform}/{placement}/{mediaType}" });
+        }
+
+        return Ok(new MediaValidationRuleDto(
+            rules.AllowedMimeTypes,
+            rules.MaxBytes,
+            rules.MinWidth,
+            rules.MinHeight,
+            rules.MaxWidth,
+            rules.MaxHeight,
+            rules.AspectRatioMin,
+            rules.AspectRatioMax,
+            rules.DurationMinSeconds,
+            rules.DurationMaxSeconds,
+            rules.RecommendedWidth,
+            rules.RecommendedHeight));
+    }
 }
 
 public record GenerateUploadUrlRequest(
@@ -193,4 +323,22 @@ public record MediaConstraintsResponse(
     string[] AllowedVideoTypes,
     long MaxImageFileSizeBytes,
     long MaxVideoFileSizeBytes
+);
+
+/// <summary>
+/// Request to validate media by storage key (stateless).
+/// </summary>
+public record ValidateMediaByKeyRequest(
+    string StorageKey,
+    string MimeType,
+    Platform Platform,
+    Placement Placement
+);
+
+/// <summary>
+/// Request to extract metadata from a media file by storage key.
+/// </summary>
+public record ExtractMetadataRequest(
+    string StorageKey,
+    string MimeType
 );

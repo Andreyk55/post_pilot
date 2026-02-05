@@ -145,4 +145,20 @@ public class S3MediaService : IMediaService
             return MaxVideoFileSizeBytes;
         return MaxImageFileSizeBytes;
     }
+
+    /// <summary>
+    /// Gets the local file path for a storage key.
+    /// For S3, this downloads the file to a temp location and returns that path.
+    /// TODO: Implement S3 download for production use.
+    /// </summary>
+    public string? GetLocalFilePath(string storageKey)
+    {
+        // For S3, we need to download the file first
+        // This is a placeholder - in production, implement async download to temp file
+        _logger.LogWarning(
+            "GetLocalFilePath called for S3 key {StorageKey}. " +
+            "S3 file download for validation not yet implemented.",
+            storageKey);
+        return null;
+    }
 }

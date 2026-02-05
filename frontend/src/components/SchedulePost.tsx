@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { metaApi } from '../api/meta'
 import { aiApi, type AiPlatform, type AiGoal, type AudienceLocationMode } from '../api/ai'
-import type { MediaType } from '../api/media'
+import type { MediaType, ValidationStatus, MediaValidationError, MediaValidationWarning } from '../api/media'
 import type { ConnectedPage } from '../types/meta'
 import { MediaUpload } from './MediaUpload'
 import { AiAssistPanel, type StickyLanguageState } from './AiAssistPanel'
@@ -68,6 +68,8 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
   const [aiPanelKey, setAiPanelKey] = useState(0)
   const [suggestedTimesKey, setSuggestedTimesKey] = useState(0)
   const [selectedThumbnailUrl, setSelectedThumbnailUrl] = useState<string | null>(null)
+  const [mediaValidationStatus, setMediaValidationStatus] = useState<ValidationStatus | null>(null)
+  const [mediaValidationErrors, setMediaValidationErrors] = useState<MediaValidationError[]>([])
 
   // AI state (shared between AiAssistPanel and time suggestions)
   const [goal, setGoal] = useState<AiGoal>('Engage')
@@ -236,6 +238,8 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
     setUploadError(null)
     setUploadKey(k => k + 1)
     setSelectedThumbnailUrl(null)
+    setMediaValidationStatus(null)
+    setMediaValidationErrors([])
     setStickyLanguage({ languageCode: 'unknown', confidence: 0, isReliable: false })
   }
 
@@ -245,12 +249,16 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
   const isTextTooLong = content.length > maxChars
   const platformDisplayName = selectedPlatformId ? getPlatformDisplayName(selectedPlatformId) : ''
 
-  // Form is valid if there's content OR media, plus date/time/platform, not uploading, and text within limits
+  // Media validation status check - invalid media blocks submission
+  const hasInvalidMedia = mediaUrl && mediaValidationStatus === 'Invalid'
+
+  // Form is valid if there's content OR media, plus date/time/platform, not uploading, text within limits, and no invalid media
   const isFormValid = (content || mediaUrl) && scheduledDate && scheduledTime &&
     selectedPlatforms.length > 0 &&
     (!isFacebookSelected || selectedPageId) &&
     !isUploading &&
-    !isTextTooLong
+    !isTextTooLong &&
+    !hasInvalidMedia
 
   // Check if there's any data in the form to show reset button
   const hasFormData = content || mediaUrl || scheduledDate || scheduledTime || selectedPlatforms.length > 0
@@ -268,7 +276,19 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
     setAiPanelKey(k => k + 1)
     setSuggestedTimesKey(k => k + 1)
     setSelectedThumbnailUrl(null)
+    setMediaValidationStatus(null)
+    setMediaValidationErrors([])
     setStickyLanguage({ languageCode: 'unknown', confidence: 0, isReliable: false })
+  }
+
+  // Handle media validation changes from MediaUpload
+  const handleMediaValidationChange = (
+    status: ValidationStatus,
+    errors: MediaValidationError[],
+    _warnings: MediaValidationWarning[]
+  ) => {
+    setMediaValidationStatus(status)
+    setMediaValidationErrors(errors)
   }
 
   return (
@@ -388,10 +408,25 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
             onClear={() => {
               setMediaUrl(null)
               setMediaType(null)
+              setMediaValidationStatus(null)
+              setMediaValidationErrors([])
             }}
             onUploadingChange={setIsUploading}
+            onValidationChange={handleMediaValidationChange}
+            selectedPlatform={selectedPlatformId}
           />
           {uploadError && <div className="upload-error">{uploadError}</div>}
+          {/* Show validation error summary near submit button */}
+          {hasInvalidMedia && mediaValidationErrors.length > 0 && (
+            <div className="media-validation-summary">
+              <strong>Media cannot be published:</strong>
+              <ul>
+                {mediaValidationErrors.map((err, i) => (
+                  <li key={i}>{err.message}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
         <div className="form-row">

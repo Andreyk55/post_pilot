@@ -9,6 +9,7 @@ using PostPilot.Api.Services.Ai;
 using PostPilot.Api.Services.Media;
 using PostPilot.Api.Services.Publishing;
 using PostPilot.Api.Services.Scheduling;
+using PostPilot.Api.Services.Validation;
 using PostPilot.Api.Settings;
 
 namespace PostPilot.Api;
@@ -79,6 +80,9 @@ public class Startup
 
         // Configure media service based on environment
         ConfigureMediaService(services);
+
+        // Configure media validation services
+        ConfigureMediaValidationServices(services);
 
         // Configure publishers
         // Use AddHttpClient to register FacebookPagePublisher with a typed HttpClient
@@ -204,6 +208,20 @@ public class Startup
             services.AddSingleton<IMediaService>(sp =>
                 new LocalMediaService(sp.GetRequiredService<ILogger<LocalMediaService>>()));
         }
+    }
+
+    private static void ConfigureMediaValidationServices(IServiceCollection services)
+    {
+        // Image metadata extractor (using ImageSharp)
+        services.AddSingleton<IImageMetadataExtractor, ImageMetadataExtractor>();
+
+        // Video metadata extractor (using ffprobe)
+        // For Lambda: ffprobe should be included in Lambda Layer or container image
+        // For local development: ffprobe should be available on PATH
+        services.AddSingleton<IVideoMetadataExtractor, FfprobeVideoMetadataExtractor>();
+
+        // Media validation service
+        services.AddScoped<IMediaValidationService, MediaValidationService>();
     }
 
     private static void ConfigureInsightsService(IServiceCollection services, FeatureSettings featureSettings)

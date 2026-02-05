@@ -78,6 +78,14 @@ public interface IMediaService
     /// Gets the maximum allowed file size for a given content type.
     /// </summary>
     long GetMaxFileSizeBytes(string contentType);
+
+    /// <summary>
+    /// Gets the local file path for a given storage key.
+    /// For local development, this returns the actual file path.
+    /// For S3, this may download the file to a temp location and return that path.
+    /// Returns null if the file cannot be accessed locally.
+    /// </summary>
+    string? GetLocalFilePath(string storageKey);
 }
 
 /// <summary>

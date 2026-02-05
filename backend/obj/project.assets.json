@@ -122,7 +122,7 @@
           }
         }
       },
-      "AWSSDK.Core/3.7.500.71": {
+      "AWSSDK.Core/3.7.500.75": {
         "type": "package",
         "compile": {
           "lib/net8.0/AWSSDK.Core.dll": {
@@ -135,10 +135,10 @@
           }
         }
       },
-      "AWSSDK.S3/3.7.509.12": {
+      "AWSSDK.S3/3.7.510.3": {
         "type": "package",
         "dependencies": {
-          "AWSSDK.Core": "[3.7.500.71, 4.0.0)"
+          "AWSSDK.Core": "[3.7.500.75, 4.0.0)"
         },
         "compile": {
           "lib/net8.0/AWSSDK.S3.dll": {
@@ -151,10 +151,10 @@
           }
         }
       },
-      "AWSSDK.Scheduler/3.7.502.33": {
+      "AWSSDK.Scheduler/3.7.502.37": {
         "type": "package",
         "dependencies": {
-          "AWSSDK.Core": "[3.7.500.71, 4.0.0)"
+          "AWSSDK.Core": "[3.7.500.75, 4.0.0)"
         },
         "compile": {
           "lib/net8.0/AWSSDK.Scheduler.dll": {
@@ -167,10 +167,10 @@
           }
         }
       },
-      "AWSSDK.SQS/3.7.502.32": {
+      "AWSSDK.SQS/3.7.502.36": {
         "type": "package",
         "dependencies": {
-          "AWSSDK.Core": "[3.7.500.71, 4.0.0)"
+          "AWSSDK.Core": "[3.7.500.75, 4.0.0)"
         },
         "compile": {
           "lib/net8.0/AWSSDK.SQS.dll": {
@@ -1080,6 +1080,22 @@
           }
         }
       },
+      "SixLabors.ImageSharp/3.1.7": {
+        "type": "package",
+        "compile": {
+          "lib/net6.0/SixLabors.ImageSharp.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net6.0/SixLabors.ImageSharp.dll": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "build/SixLabors.ImageSharp.props": {}
+        }
+      },
       "Swashbuckle.AspNetCore/10.1.0": {
         "type": "package",
         "dependencies": {
@@ -1555,15 +1571,15 @@
         "lib/netstandard2.0/Amazon.Lambda.SQSEvents.xml"
       ]
     },
-    "AWSSDK.Core/3.7.500.71": {
-      "sha512": "p7dM/rLGytlyDHlcy20lzlnY5yt2u521Nv2q1yGBJdc7QTb18k5gKR3bGxsJ6nFCDso0zC2YqbF9IT+kxDCHLQ==",
+    "AWSSDK.Core/3.7.500.75": {
+      "sha512": "9m9HXXDhiMagoT0VP1cYUx4n+3Ie4sIB88S5ozgv16GGk+SqRnYuzTGdy8F9UCL0u4JxzEIdzmnFItiJCG//ww==",
       "type": "package",
-      "path": "awssdk.core/3.7.500.71",
+      "path": "awssdk.core/3.7.500.75",
       "hasTools": true,
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
-        "awssdk.core.3.7.500.71.nupkg.sha512",
+        "awssdk.core.3.7.500.75.nupkg.sha512",
         "awssdk.core.nuspec",
         "images/AWSLogo.png",
         "lib/net35/AWSSDK.Core.dll",
@@ -1584,17 +1600,17 @@
         "tools/account-management.ps1"
       ]
     },
-    "AWSSDK.S3/3.7.509.12": {
-      "sha512": "M5w9dqLfSUEvPnpABv0R5bURjYcSHSaKge+bYto4YeDKdnqg4/pnPMa1O5gmU4Mdm1WGasJXWW1XwWQIVf9nSQ==",
+    "AWSSDK.S3/3.7.510.3": {
+      "sha512": "9FxKDx0XPx14j/d9zrGEh3C4966uZ1p/7v+iqDHMqBLTS259B1iVP3sEvj4x6QxYtwCj3EtUFGzYwmOgqhqCjw==",
       "type": "package",
-      "path": "awssdk.s3/3.7.509.12",
+      "path": "awssdk.s3/3.7.510.3",
       "hasTools": true,
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
         "analyzers/dotnet/cs/AWSSDK.S3.CodeAnalysis.dll",
         "analyzers/dotnet/cs/SharedAnalysisCode.dll",
-        "awssdk.s3.3.7.509.12.nupkg.sha512",
+        "awssdk.s3.3.7.510.3.nupkg.sha512",
         "awssdk.s3.nuspec",
         "images/AWSLogo.png",
         "lib/net35/AWSSDK.S3.dll",
@@ -1616,17 +1632,17 @@
         "tools/uninstall.ps1"
       ]
     },
-    "AWSSDK.Scheduler/3.7.502.33": {
-      "sha512": "I2iYUbBfez22anIdObAtOlkYcXErowVKlu4avDoeSPGjcJyX2Ii+4VuQPhSETYoSnN5z7e6juCAofBTMB/ri7w==",
+    "AWSSDK.Scheduler/3.7.502.37": {
+      "sha512": "xdJB1o9iyIhJEBroAS7yr3TGU8STLp+mtB36Hs7V7kj5esIJYbA6b6p0M8N0iVkEk5gC28X3oxmgeJGnHo3KiQ==",
       "type": "package",
-      "path": "awssdk.scheduler/3.7.502.33",
+      "path": "awssdk.scheduler/3.7.502.37",
       "hasTools": true,
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
         "analyzers/dotnet/cs/AWSSDK.Scheduler.CodeAnalysis.dll",
         "analyzers/dotnet/cs/SharedAnalysisCode.dll",
-        "awssdk.scheduler.3.7.502.33.nupkg.sha512",
+        "awssdk.scheduler.3.7.502.37.nupkg.sha512",
         "awssdk.scheduler.nuspec",
         "images/AWSLogo.png",
         "lib/net35/AWSSDK.Scheduler.dll",
@@ -1648,17 +1664,17 @@
         "tools/uninstall.ps1"
       ]
     },
-    "AWSSDK.SQS/3.7.502.32": {
-      "sha512": "oNw/KTDLNV8Ga0xdmN3mlI0Nn9+kdQYnyzg4MSTmfsUpDOYGyhzMHPk1ssceASYmSrLztVbIYQI8Yu9c7NWluw==",
+    "AWSSDK.SQS/3.7.502.36": {
+      "sha512": "2Yrkmd5Aj3rCY62mXJ7kwLTxKLudLFu8fkQnrKH0cktHhriB1blEp8FJvTRIr9JFKQXu3O0RV+fMo9+tRxAgMw==",
       "type": "package",
-      "path": "awssdk.sqs/3.7.502.32",
+      "path": "awssdk.sqs/3.7.502.36",
       "hasTools": true,
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
         "analyzers/dotnet/cs/AWSSDK.SQS.CodeAnalysis.dll",
         "analyzers/dotnet/cs/SharedAnalysisCode.dll",
-        "awssdk.sqs.3.7.502.32.nupkg.sha512",
+        "awssdk.sqs.3.7.502.36.nupkg.sha512",
         "awssdk.sqs.nuspec",
         "images/AWSLogo.png",
         "lib/net35/AWSSDK.SQS.dll",
@@ -3367,6 +3383,22 @@
         "postgresql.png"
       ]
     },
+    "SixLabors.ImageSharp/3.1.7": {
+      "sha512": "9fIOOAsyLFid6qKypM2Iy0Z3Q9yoanV8VoYAHtI2sYGMNKzhvRTjgFDHonIiVe+ANtxIxM6SuqUzj0r91nItpA==",
+      "type": "package",
+      "path": "sixlabors.imagesharp/3.1.7",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "LICENSE",
+        "build/SixLabors.ImageSharp.props",
+        "lib/net6.0/SixLabors.ImageSharp.dll",
+        "lib/net6.0/SixLabors.ImageSharp.xml",
+        "sixlabors.imagesharp.128.png",
+        "sixlabors.imagesharp.3.1.7.nupkg.sha512",
+        "sixlabors.imagesharp.nuspec"
+      ]
+    },
     "Swashbuckle.AspNetCore/10.1.0": {
       "sha512": "CvOffaJKStoP0hdfCIX4V/9wuwRkSOJd+PehGo/Y5ALh0WYliLwuMlyh1BbgG7uQtJNe1k5P7QIhIaFfZ/aJAw==",
       "type": "package",
@@ -3876,6 +3908,7 @@
       "Microsoft.AspNetCore.OpenApi >= 10.0.1",
       "Microsoft.EntityFrameworkCore.Design >= 10.0.1",
       "Npgsql.EntityFrameworkCore.PostgreSQL >= 10.0.0",
+      "SixLabors.ImageSharp >= 3.1.7",
       "Swashbuckle.AspNetCore >= 10.1.0"
     ]
   },
@@ -3959,6 +3992,10 @@
           "Npgsql.EntityFrameworkCore.PostgreSQL": {
             "target": "Package",
             "version": "[10.0.0, )"
+          },
+          "SixLabors.ImageSharp": {
+            "target": "Package",
+            "version": "[3.1.7, )"
           },
           "Swashbuckle.AspNetCore": {
             "target": "Package",
@@ -4401,5 +4438,17 @@
         }
       }
     }
-  }
+  },
+  "logs": [
+    {
+      "code": "NU1902",
+      "level": "Warning",
+      "warningLevel": 1,
+      "message": "Package 'SixLabors.ImageSharp' 3.1.7 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-rxmq-m78w-7wmc",
+      "libraryId": "SixLabors.ImageSharp",
+      "targetGraphs": [
+        "net10.0"
+      ]
+    }
+  ]
 }

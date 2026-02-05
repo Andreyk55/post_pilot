@@ -151,6 +151,15 @@ public class LocalMediaService : IMediaService
     }
 
     /// <summary>
+    /// Gets the local file path for a storage key (IMediaService implementation).
+    /// </summary>
+    public string? GetLocalFilePath(string storageKey)
+    {
+        var path = GetLocalPath(storageKey);
+        return File.Exists(path) ? path : null;
+    }
+
+    /// <summary>
     /// Saves a file to local storage.
     /// </summary>
     public async Task SaveFileAsync(string s3Key, Stream content)

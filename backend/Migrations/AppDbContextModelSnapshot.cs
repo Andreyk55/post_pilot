@@ -155,6 +155,72 @@ namespace PostPilot.Api.Migrations
                     b.ToTable("ConnectedPages");
                 });
 
+            modelBuilder.Entity("PostPilot.Api.Entities.MediaAsset", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<double?>("DurationSeconds")
+                        .HasColumnType("double precision");
+
+                    b.Property<int?>("Height")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MediaType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("MetadataJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("MimeType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ValidatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ValidationErrorsJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ValidationPlacement")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ValidationPlatform")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ValidationStatus")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("Width")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StorageKey")
+                        .IsUnique();
+
+                    b.HasIndex("ValidationStatus");
+
+                    b.ToTable("MediaAssets");
+                });
+
             modelBuilder.Entity("PostPilot.Api.Entities.MetaConnection", b =>
                 {
                     b.Property<Guid>("Id")

@@ -90,5 +90,6 @@ public class AppDbContext : DbContext
             entity.Property(e => e.BannedWords).HasMaxLength(1000);
             entity.Property(e => e.ExamplePosts).HasMaxLength(5000);
         });
+
     }
 }

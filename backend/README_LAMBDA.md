@@ -142,6 +142,37 @@ ffmpeg -version
 
 If FFmpeg is not available, video AI features (thumbnail suggestions and video caption ideas) will return a 503 error with a message indicating FFmpeg is required.
 
+#### ffprobe for Media Validation
+
+The media validation system uses `ffprobe` (bundled with FFmpeg) to extract video metadata such as dimensions, duration, codec, and frame rate. This metadata is validated against platform-specific rules before allowing posts to be scheduled or published.
+
+**Verify ffprobe installation:**
+```bash
+ffprobe -version
+```
+
+If you installed FFmpeg using the methods above, `ffprobe` is automatically included.
+
+**How it's used:**
+- When a video is uploaded, the backend calls `ffprobe` to extract metadata
+- Metadata is validated against platform rules (e.g., Facebook feed videos must be 1-240 minutes)
+- Validation status (Valid/Invalid/Warning) is stored with the media asset
+
+**Lambda Deployment:**
+
+For AWS Lambda, ffprobe needs to be packaged with the function. Options:
+
+1. **Lambda Layer** (recommended for standard Lambda):
+   - Use a pre-built FFmpeg Lambda Layer (e.g., from AWS Serverless Application Repository)
+   - Or create a custom layer with the static ffprobe binary
+   - Layer ARN example: `arn:aws:lambda:{region}:aws-serverless-repo:layer:ffmpeg:1`
+
+2. **Container Image** (recommended for large dependencies):
+   - Create a Dockerfile based on `public.ecr.aws/lambda/dotnet:10`
+   - Install ffprobe in the container: `RUN yum install -y ffmpeg`
+
+**TODO:** Add Lambda Layer or container configuration to `template.yaml` for ffprobe support.
+
 ### Running Locally
 
 ```bash
