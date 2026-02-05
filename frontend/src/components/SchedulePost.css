@@ -56,12 +56,34 @@
   color: rgba(255, 255, 255, 0.4);
 }
 
+.char-counter-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.5rem;
+  gap: 1rem;
+}
+
 .char-count {
-  display: block;
-  text-align: right;
   font-size: 0.75rem;
   color: rgba(255, 255, 255, 0.4);
-  margin-top: 0.5rem;
+  white-space: nowrap;
+}
+
+.char-count.error {
+  color: #ff6b6b;
+  font-weight: 500;
+}
+
+.char-error {
+  font-size: 0.75rem;
+  color: #ff6b6b;
+  text-align: right;
+}
+
+.form-group textarea.error {
+  border-color: #ff6b6b;
+  background: rgba(255, 59, 48, 0.05);
 }
 
 .form-row {

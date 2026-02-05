@@ -7,6 +7,11 @@ import { MediaUpload } from './MediaUpload'
 import { AiAssistPanel, type StickyLanguageState } from './AiAssistPanel'
 import { SuggestedTimes } from './SuggestedTimes'
 import { type VoiceProfileSummary } from '../api/voiceProfiles'
+import {
+  getPostTextMaxChars,
+  getPlatformDisplayName,
+  type PlatformId,
+} from '../constants/validationLimits'
 import './SchedulePost.css'
 
 interface SchedulePostProps {
@@ -214,11 +219,18 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
     setStickyLanguage({ languageCode: 'unknown', confidence: 0, isReliable: false })
   }
 
-  // Form is valid if there's content OR media, plus date/time/platform, and not uploading
+  // Get the max character limit for the first selected platform
+  const selectedPlatformId = selectedPlatforms[0] as PlatformId | undefined
+  const maxChars = getPostTextMaxChars(selectedPlatformId ?? null)
+  const isTextTooLong = content.length > maxChars
+  const platformDisplayName = selectedPlatformId ? getPlatformDisplayName(selectedPlatformId) : ''
+
+  // Form is valid if there's content OR media, plus date/time/platform, not uploading, and text within limits
   const isFormValid = (content || mediaUrl) && scheduledDate && scheduledTime &&
     selectedPlatforms.length > 0 &&
     (!isFacebookSelected || selectedPageId) &&
-    !isUploading
+    !isUploading &&
+    !isTextTooLong
 
   // Check if there's any data in the form to show reset button
   const hasFormData = content || mediaUrl || scheduledDate || scheduledTime || selectedPlatforms.length > 0
@@ -298,10 +310,19 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder="What do you want to share?"
-            maxLength={5000}
             rows={4}
+            className={isTextTooLong ? 'error' : ''}
           />
-          <span className="char-count">{content.length} characters</span>
+          <div className="char-counter-row">
+            <span className={`char-count ${isTextTooLong ? 'error' : ''}`}>
+              {content.length}/{maxChars}
+            </span>
+            {isTextTooLong && (
+              <span className="char-error">
+                Text is too long for {platformDisplayName}. Max {maxChars} characters.
+              </span>
+            )}
+          </div>
 
           <AiAssistPanel
             key={aiPanelKey}

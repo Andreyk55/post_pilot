@@ -307,9 +307,10 @@ public class PostsController : ControllerBase
     {
         var errors = new Dictionary<string, string[]>();
 
-        if (request.Content?.Length > ValidationLimits.PostTextMaxLength)
+        var maxChars = ValidationLimits.GetPostTextMaxChars(request.Platform);
+        if (request.Content?.Length > maxChars)
         {
-            errors["content"] = [$"Post content must not exceed {ValidationLimits.PostTextMaxLength} characters."];
+            errors["content"] = [$"Text is too long for {request.Platform}. Max {maxChars} characters."];
         }
 
         // Note: Media validation is handled in MediaController when generating upload URLs
@@ -323,9 +324,10 @@ public class PostsController : ControllerBase
     {
         var errors = new Dictionary<string, string[]>();
 
-        if (request.Content?.Length > ValidationLimits.PostTextMaxLength)
+        var maxChars = ValidationLimits.GetPostTextMaxChars(request.Platform);
+        if (request.Content?.Length > maxChars)
         {
-            errors["content"] = [$"Post content must not exceed {ValidationLimits.PostTextMaxLength} characters."];
+            errors["content"] = [$"Text is too long for {request.Platform}. Max {maxChars} characters."];
         }
 
         return errors;

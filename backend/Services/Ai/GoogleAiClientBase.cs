@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Caching.Memory;
+using PostPilot.Api;
 using PostPilot.Api.DTOs;
 using PostPilot.Api.Entities;
 
@@ -21,10 +22,6 @@ public abstract class GoogleAiClientBase
     protected readonly ILogger Logger;
 
     protected static readonly TimeSpan CacheDuration = TimeSpan.FromHours(1);
-
-    // Platform character limits
-    protected const int CharLimitX = 280;
-    protected const int CharLimitDefault = 2000;
 
     protected static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -281,7 +278,7 @@ public abstract class GoogleAiClientBase
 
     protected static string BuildVariantsPrompt(AiTextAction action, AiPlatform platform, string text, AiTone? tone, string language)
     {
-        var maxLength = platform == AiPlatform.X ? CharLimitX : CharLimitDefault;
+        var maxLength = ValidationLimits.GetPostTextMaxChars(platform);
         var toneStr = tone?.ToString().ToLower() ?? "professional";
         var actionInstruction = action switch
         {
@@ -357,7 +354,7 @@ Rules:
 
     protected static string BuildPreFlightPrompt(AiPlatform platform, string text, string language)
     {
-        var charLimit = platform == AiPlatform.X ? CharLimitX : CharLimitDefault;
+        var charLimit = ValidationLimits.GetPostTextMaxChars(platform);
 
         return $@"You are a social media content reviewer. Analyze this post and provide a quality score and issues.
 
@@ -399,7 +396,7 @@ Rules:
 
     protected static string BuildCreatorVariantsPrompt(AiGenerateVariantsRequest request, int numVariants)
     {
-        var maxLength = request.Platform == AiPlatform.X ? CharLimitX : CharLimitDefault;
+        var maxLength = ValidationLimits.GetPostTextMaxChars(request.Platform);
         var toneStr = request.Tone.ToString().ToLower();
 
         var lengthGuidance = request.Length switch
@@ -478,7 +475,7 @@ RULES:
 
     protected static string BuildImageCaptionPrompt(AiPlatform platform, string? existingText, string language)
     {
-        var maxLength = platform == AiPlatform.X ? CharLimitX : CharLimitDefault;
+        var maxLength = ValidationLimits.GetPostTextMaxChars(platform);
         var existingTextSection = string.IsNullOrWhiteSpace(existingText)
             ? ""
             : $@"
@@ -669,7 +666,7 @@ Rules:
 
     protected static string BuildPreFlightPromptWithVoice(AiPlatform platform, string text, string language, AiVoiceProfile? profile)
     {
-        var charLimit = platform == AiPlatform.X ? CharLimitX : CharLimitDefault;
+        var charLimit = ValidationLimits.GetPostTextMaxChars(platform);
 
         var voiceSection = "";
         var bannedWordsCheck = "";
@@ -737,7 +734,7 @@ Rules:
 
     protected static string BuildCreatorVariantsPromptWithVoice(AiGenerateVariantsRequest request, int numVariants, AiVoiceProfile? profile)
     {
-        var maxLength = request.Platform == AiPlatform.X ? CharLimitX : CharLimitDefault;
+        var maxLength = ValidationLimits.GetPostTextMaxChars(request.Platform);
         var toneStr = request.Tone.ToString().ToLower();
 
         var lengthGuidance = request.Length switch
