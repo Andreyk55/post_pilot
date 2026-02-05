@@ -26,6 +26,13 @@
   color: rgba(255, 255, 255, 0.7);
 }
 
+.hint-text {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.4);
+}
+
 .form-group textarea,
 .form-group input[type="date"],
 .form-group input[type="time"] {

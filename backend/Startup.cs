@@ -91,6 +91,10 @@ public class Startup
         var featureSettings = Configuration.GetSection("Features").Get<FeatureSettings>() ?? new FeatureSettings();
         services.AddSingleton(featureSettings);
 
+        // Configure platform selection options
+        services.Configure<PlatformSelectionOptions>(
+            Configuration.GetSection("Features:PlatformSelection"));
+
         // Configure Facebook insights service for fetching post engagement
         ConfigureInsightsService(services, featureSettings);
 

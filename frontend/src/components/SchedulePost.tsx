@@ -12,6 +12,7 @@ import {
   getPlatformDisplayName,
   type PlatformId,
 } from '../constants/validationLimits'
+import { MAX_PLATFORMS_PER_POST } from '../constants/features'
 import './SchedulePost.css'
 
 interface SchedulePostProps {
@@ -169,15 +170,34 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
 
   const isFacebookSelected = selectedPlatforms.includes('facebook')
 
-  const togglePlatform = (platformId: string) => {
-    setSelectedPlatforms(prev =>
-      prev.includes(platformId)
-        ? prev.filter(p => p !== platformId)
-        : [...prev, platformId]
-    )
-    // Clear page selection if Facebook is deselected
-    if (platformId === 'facebook' && selectedPlatforms.includes('facebook')) {
-      setSelectedPageId('')
+  const selectPlatform = (platformId: string) => {
+    if (MAX_PLATFORMS_PER_POST === 1) {
+      // Single selection mode: replace current selection
+      if (selectedPlatforms.includes(platformId)) {
+        // Clicking selected platform deselects it
+        setSelectedPlatforms([])
+        if (platformId === 'facebook') {
+          setSelectedPageId('')
+        }
+      } else {
+        // Select new platform, replacing any previous selection
+        setSelectedPlatforms([platformId])
+        // Clear page selection if Facebook is deselected
+        if (selectedPlatforms.includes('facebook') && platformId !== 'facebook') {
+          setSelectedPageId('')
+        }
+      }
+    } else {
+      // Multi-select mode: toggle selection
+      setSelectedPlatforms(prev =>
+        prev.includes(platformId)
+          ? prev.filter(p => p !== platformId)
+          : [...prev, platformId].slice(0, MAX_PLATFORMS_PER_POST)
+      )
+      // Clear page selection if Facebook is deselected
+      if (platformId === 'facebook' && selectedPlatforms.includes('facebook')) {
+        setSelectedPageId('')
+      }
     }
   }
 
@@ -257,14 +277,17 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
 
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label>Platforms</label>
+          <label>Platform</label>
+          {MAX_PLATFORMS_PER_POST === 1 && (
+            <span className="hint-text">Choose 1 platform</span>
+          )}
           <div className="platforms">
             {platforms.map(platform => (
               <button
                 key={platform.id}
                 type="button"
                 className={'platform-btn ' + (selectedPlatforms.includes(platform.id) ? 'selected' : '')}
-                onClick={() => togglePlatform(platform.id)}
+                onClick={() => selectPlatform(platform.id)}
                 title={platform.name}
               >
                 <span className="platform-icon">{platform.icon}</span>
