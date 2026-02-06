@@ -16,7 +16,12 @@ const platformMap: Record<string, Platform> = {
 
 const PAGE_SIZE = 10
 
-export function SchedulePostsPage() {
+interface SchedulePostsPageProps {
+  /** Optional callback for navigating to other pages */
+  onNavigate?: (page: string) => void
+}
+
+export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -157,10 +162,11 @@ export function SchedulePostsPage() {
       {error && <div className="error-message">{error}</div>}
 
       <div className="schedule-content">
-        <SchedulePost 
+        <SchedulePost
           onSchedule={handleSchedule}
           voiceProfiles={voiceProfiles}
           onVoiceProfileModalOpen={handleVoiceProfileModalOpen}
+          onNavigate={onNavigate}
         />
         {loading ? (
           <div className="loading">Loading posts...</div>

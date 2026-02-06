@@ -138,7 +138,33 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   color: #ffffff;
 }
 
+.platform-btn.coming-soon {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.platform-btn.coming-soon:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.coming-soon-badge {
+  font-size: 0.65rem;
+  padding: 0.15rem 0.4rem;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-left: 0.25rem;
+}
+
 .platform-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
   font-size: 1rem;
   font-weight: 700;
 }
@@ -282,6 +308,102 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   margin-bottom: 0.25rem;
 }
 
+/* Disabled Composer State */
+.schedule-post.composer-disabled {
+  position: relative;
+}
+
+/* Keep the form visible but dimmed - don't use pointer-events: none on form */
+.schedule-post.composer-disabled form {
+  opacity: 1;
+}
+
+/* Dim and disable the content area (everything except platform selection) */
+.schedule-post.composer-disabled .form-group:not(:first-child) {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Keep platform selector fully interactive */
+.schedule-post.composer-disabled .platforms {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.schedule-post.composer-disabled .platform-btn {
+  pointer-events: auto;
+}
+
+/* Keep page selector interactive (for Facebook page selection) */
+.schedule-post.composer-disabled .page-select {
+  pointer-events: auto;
+  opacity: 1;
+}
+
+/* Disable form actions (schedule button, reset) */
+.schedule-post.composer-disabled .form-actions {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Disabled Banner */
+.composer-disabled-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+  background: rgba(255, 193, 7, 0.1);
+  border: 1px solid rgba(255, 193, 7, 0.3);
+  border-radius: 10px;
+}
+
+.disabled-banner-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.disabled-banner-content {
+  flex: 1;
+}
+
+.disabled-banner-message {
+  margin: 0 0 0.75rem 0;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.disabled-banner-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 1rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  font-family: inherit;
+}
+
+.disabled-banner-link:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+/* Disabled input styles */
+.schedule-post.composer-disabled .form-group textarea:disabled,
+.schedule-post.composer-disabled .form-group input:disabled,
+.schedule-post.composer-disabled .page-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 @media (max-width: 480px) {
   .form-row {
     grid-template-columns: 1fr;
@@ -293,5 +415,11 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 
   .platform-btn {
     justify-content: center;
+  }
+
+  .composer-disabled-banner {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
   }
 }

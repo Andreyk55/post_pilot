@@ -13,6 +13,7 @@ import {
   type PlatformId,
 } from '../constants/validationLimits'
 import { MAX_PLATFORMS_PER_POST } from '../constants/features'
+import { useComposerEnabled } from '../hooks/useComposerEnabled'
 import './SchedulePost.css'
 
 interface SchedulePostProps {
@@ -28,6 +29,8 @@ interface SchedulePostProps {
   }) => void
   voiceProfiles: VoiceProfileSummary[]
   onVoiceProfileModalOpen: (profileId?: string | null) => void
+  /** Optional callback for navigating to other pages (e.g., Connected Accounts) */
+  onNavigate?: (page: string) => void
 }
 
 const platforms = [
@@ -52,12 +55,13 @@ function getAiPlatform(platformIds: string[]): AiPlatform | null {
   return mapping[first] || null
 }
 
-export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpen }: SchedulePostProps) {
+export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpen, onNavigate }: SchedulePostProps) {
   const [content, setContent] = useState('')
   const [scheduledDate, setScheduledDate] = useState('')
   const [scheduledTime, setScheduledTime] = useState('')
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([])
   const [connectedPages, setConnectedPages] = useState<ConnectedPage[]>([])
+  const [isAccountConnected, setIsAccountConnected] = useState(false)
   const [selectedPageId, setSelectedPageId] = useState<string>('')
   const [loadingPages, setLoadingPages] = useState(false)
   const [mediaUrl, setMediaUrl] = useState<string | null>(null)
@@ -156,6 +160,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
     try {
       setLoadingPages(true)
       const response = await metaApi.getConnection()
+      setIsAccountConnected(response.isConnected)
       if (response.isConnected && response.connection) {
         setConnectedPages(response.connection.pages)
         // Auto-select first page if only one exists
@@ -171,6 +176,25 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
   }
 
   const isFacebookSelected = selectedPlatforms.includes('facebook')
+
+  // Determine if composer should be enabled based on platform and connection state
+  const composerState = useComposerEnabled({
+    selectedPlatforms,
+    connectedPages,
+    isAccountConnected,
+    selectedPageId,
+    loadingPages,
+  })
+
+  // Clear selected page if it's no longer in the connected pages list
+  useEffect(() => {
+    if (selectedPageId && connectedPages.length > 0) {
+      const pageExists = connectedPages.some(page => page.id === selectedPageId)
+      if (!pageExists) {
+        setSelectedPageId('')
+      }
+    }
+  }, [connectedPages, selectedPageId])
 
   const selectPlatform = (platformId: string) => {
     if (MAX_PLATFORMS_PER_POST === 1) {
@@ -291,9 +315,37 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
     setMediaValidationErrors(errors)
   }
 
+  // Destructure for easier access
+  const { isEnabled: isComposerEnabled, disabledMessage, disabledReason } = composerState
+
+  // Determine if we should show the "Go to Connected Accounts" button
+  // Show when no account is connected or when a page was disconnected,
+  // but not when account is connected and user just needs to select/connect a page
+  const showConnectedAccountsLink = disabledReason === 'no_account_connected' ||
+    disabledReason === 'page_not_found'
+
   return (
-    <div className="schedule-post">
+    <div className={`schedule-post ${!isComposerEnabled ? 'composer-disabled' : ''}`}>
       <h2>Schedule a Post</h2>
+
+      {/* Disabled Composer Banner */}
+      {!isComposerEnabled && disabledMessage && (
+        <div className="composer-disabled-banner">
+          <div className="disabled-banner-icon">⚠️</div>
+          <div className="disabled-banner-content">
+            <p className="disabled-banner-message">{disabledMessage}</p>
+            {onNavigate && showConnectedAccountsLink && (
+              <button
+                type="button"
+                className="disabled-banner-link"
+                onClick={() => onNavigate('accounts')}
+              >
+                Go to Connected Accounts →
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit}>
         <div className="form-group">
@@ -302,18 +354,23 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
             <span className="hint-text">Choose 1 platform</span>
           )}
           <div className="platforms">
-            {platforms.map(platform => (
-              <button
-                key={platform.id}
-                type="button"
-                className={'platform-btn ' + (selectedPlatforms.includes(platform.id) ? 'selected' : '')}
-                onClick={() => selectPlatform(platform.id)}
-                title={platform.name}
-              >
-                <span className="platform-icon">{platform.icon}</span>
-                <span className="platform-name">{platform.name}</span>
-              </button>
-            ))}
+            {platforms.map(platform => {
+              const isNotImplemented = platform.id === 'instagram' || platform.id === 'twitter' || platform.id === 'linkedin'
+              return (
+                <button
+                  key={platform.id}
+                  type="button"
+                  className={'platform-btn ' + (selectedPlatforms.includes(platform.id) ? 'selected' : '') + (isNotImplemented ? ' coming-soon' : '')}
+                  onClick={() => !isNotImplemented && selectPlatform(platform.id)}
+                  title={isNotImplemented ? `${platform.name} - Coming Soon` : platform.name}
+                  disabled={isNotImplemented}
+                >
+                  <span className="platform-icon">{platform.icon}</span>
+                  <span className="platform-name">{platform.name}</span>
+                  {isNotImplemented && <span className="coming-soon-badge">Coming Soon</span>}
+                </button>
+              )
+            })}
           </div>
         </div>
 
@@ -334,6 +391,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
                 value={selectedPageId}
                 onChange={(e) => setSelectedPageId(e.target.value)}
                 className="page-select"
+                disabled={!isComposerEnabled && connectedPages.length > 0}
               >
                 <option value="">Select a page...</option>
                 {connectedPages.map(page => (
@@ -355,6 +413,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
             placeholder="What do you want to share?"
             rows={4}
             className={isTextTooLong ? 'error' : ''}
+            disabled={!isComposerEnabled}
           />
           <div className="char-counter-row">
             <span className={`char-count ${isTextTooLong ? 'error' : ''}`}>
@@ -392,6 +451,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
             onVoiceProfileModalOpen={onVoiceProfileModalOpen}
             goal={goal}
             onGoalChange={setGoal}
+            disabled={!isComposerEnabled}
           />
         </div>
 
@@ -414,6 +474,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
             onUploadingChange={setIsUploading}
             onValidationChange={handleMediaValidationChange}
             selectedPlatform={selectedPlatformId}
+            disabled={!isComposerEnabled}
           />
           {uploadError && <div className="upload-error">{uploadError}</div>}
           {/* Show validation error summary near submit button */}
@@ -437,6 +498,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
               id="date"
               value={scheduledDate}
               onChange={(e) => setScheduledDate(e.target.value)}
+              disabled={!isComposerEnabled}
             />
           </div>
 
@@ -447,6 +509,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
               id="time"
               value={scheduledTime}
               onChange={(e) => setScheduledTime(e.target.value)}
+              disabled={!isComposerEnabled}
             />
           </div>
         </div>
@@ -463,7 +526,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
           onAudienceLocationChange={setAudienceLocation}
           onCountryChange={setAudienceCountry}
           onSelectTime={(time) => setScheduledTime(time)}
-          disabled={isUploading}
+          disabled={!isComposerEnabled || isUploading}
         />
 
         <div className="form-actions">

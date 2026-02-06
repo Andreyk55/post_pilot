@@ -53,6 +53,8 @@ interface AiAssistPanelProps {
   // Goal state (shared with time suggestions)
   goal: AiGoal
   onGoalChange: (goal: AiGoal) => void
+  // Disabled state - when true, all AI features are disabled (no connected account/page)
+  disabled?: boolean
 }
 
 // Text Results
@@ -166,9 +168,13 @@ export function AiAssistPanel({
   onVoiceProfileModalOpen,
   goal,
   onGoalChange,
+  disabled = false,
 }: AiAssistPanelProps) {
   const noPlatform = !platformProp
   const platform = platformProp
+
+  // When disabled (no connected account/page), all AI features should be blocked
+  const isDisabled = disabled || noPlatform
   const [activeTab, setActiveTab] = useState<TabType>('text')
   const [tone, setTone] = useState<AiTone>('Professional')
   const [loading, setLoading] = useState(false)
@@ -233,7 +239,8 @@ export function AiAssistPanel({
 
   // Text tab handlers
   const handleTextAction = async (action: () => Promise<void>) => {
-    if (isTextEmpty) return
+    // Block all AI actions when disabled (no connected account/page)
+    if (isDisabled || isTextEmpty) return
 
     setLoading(true)
     setError(null)
@@ -250,7 +257,8 @@ export function AiAssistPanel({
 
   // Media tab handlers
   const handleMediaAction = async (action: () => Promise<void>) => {
-    if (!hasMedia) return
+    // Block all AI actions when disabled (no connected account/page)
+    if (isDisabled || !hasMedia) return
 
     setLoading(true)
     setError(null)
@@ -293,6 +301,7 @@ export function AiAssistPanel({
   // Text actions
   const handleHashtags = () =>
     handleTextAction(async () => {
+      if (!platform) return // TypeScript guard - platform is required
       // Get sticky language (detects if unknown, uses cached if known)
       const langState = await ensureLanguageDetected()
       const response = await aiApi.hashtags(platform, text, langState.languageCode, selectedVoiceProfileId)
@@ -325,6 +334,7 @@ export function AiAssistPanel({
 
   const handlePreFlight = () =>
     handleTextAction(async () => {
+      if (!platform) return // TypeScript guard - platform is required
       const response = await aiApi.preFlight(platform, text, selectedVoiceProfileId)
       setTextResult({ type: 'preflight', score: response.score, issues: response.issues })
     })
@@ -332,6 +342,7 @@ export function AiAssistPanel({
   // New generate variants handler - Text tab (same-language rewrite)
   const handleGenerateVariants = () =>
     handleTextAction(async () => {
+      if (!platform) return // TypeScript guard - platform is required
       // Get sticky language (detects if unknown, uses cached if known)
       const langState = await ensureLanguageDetected()
 
@@ -355,7 +366,8 @@ export function AiAssistPanel({
 
   // Regenerate a single variant
   const handleRegenerateVariant = async (index: number) => {
-    if (isTextEmpty || loading) return
+    // Block when disabled (no connected account/page)
+    if (isDisabled || isTextEmpty || loading || !platform) return
 
     setRegeneratingIndex(index)
     setError(null)
@@ -397,6 +409,7 @@ export function AiAssistPanel({
   // Translate/Caption generation handler - Translate tab
   const handleGenerateCaptions = () =>
     handleTextAction(async () => {
+      if (!platform) return // TypeScript guard - platform is required
       // Get sticky language (detects if unknown, uses cached if known)
       const langState = await ensureLanguageDetected()
 
@@ -429,6 +442,7 @@ export function AiAssistPanel({
   // Media actions
   const handleImageCaptionIdeas = () =>
     handleMediaAction(async () => {
+      if (!platform) return // TypeScript guard - platform is required
       const response = await aiMediaApi.imageCaptionIdeas(platform, mediaUrl!, text || undefined)
       setMediaResult({ type: 'captions', variants: response.variants })
     })
@@ -447,6 +461,7 @@ export function AiAssistPanel({
 
   const handleVideoCaptionIdeas = () =>
     handleMediaAction(async () => {
+      if (!platform) return // TypeScript guard - platform is required
       // Convert S3 key to full URL for browser video element
       const videoUrl = getMediaUrl(mediaUrl)
       console.log('Video caption ideas - mediaUrl:', mediaUrl, 'videoUrl:', videoUrl)
@@ -609,7 +624,7 @@ export function AiAssistPanel({
               id="ai-voice-profile"
               value={selectedVoiceProfileId || 'none'}
               onChange={(e) => handleVoiceProfileChange(e.target.value)}
-              disabled={loading}
+              disabled={isDisabled || loading}
             >
               <option value="none">None (Default)</option>
               {voiceProfiles.map((profile) => (
@@ -624,7 +639,7 @@ export function AiAssistPanel({
                 type="button"
                 className="voice-profile-edit-btn"
                 onClick={handleEditProfile}
-                disabled={loading}
+                disabled={isDisabled || loading}
                 title="Edit voice profile"
               >
                 Edit
@@ -637,8 +652,9 @@ export function AiAssistPanel({
       {/* Text Tab Content */}
       {activeTab === 'text' && (
         <>
-          {noPlatform && <div className="ai-empty-state">Select a platform to enable AI features</div>}
-          {!noPlatform && isTextEmpty && <div className="ai-empty-state">Enter text to enable AI features</div>}
+          {disabled && <div className="ai-empty-state ai-disabled-state">Connect an account to enable AI features</div>}
+          {!disabled && noPlatform && <div className="ai-empty-state">Select a platform to enable AI features</div>}
+          {!disabled && !noPlatform && isTextEmpty && <div className="ai-empty-state">Enter text to enable AI features</div>}
 
           {/* Generator Controls */}
           <div className="ai-generator-controls">
@@ -649,7 +665,7 @@ export function AiAssistPanel({
                   id="ai-goal"
                   value={goal}
                   onChange={(e) => onGoalChange(e.target.value as AiGoal)}
-                  disabled={loading}
+                  disabled={isDisabled || loading}
                 >
                   {goalOptions.map((opt) => (
                     <option key={opt.value} value={opt.value} title={opt.description}>
@@ -665,7 +681,7 @@ export function AiAssistPanel({
                   id="ai-tone-gen"
                   value={tone}
                   onChange={(e) => setTone(e.target.value as AiTone)}
-                  disabled={loading}
+                  disabled={isDisabled || loading}
                 >
                   {toneOptions.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -681,7 +697,7 @@ export function AiAssistPanel({
                   id="ai-length"
                   value={length}
                   onChange={(e) => setLength(e.target.value as AiLength)}
-                  disabled={loading}
+                  disabled={isDisabled || loading}
                 >
                   {lengthOptions.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -698,7 +714,7 @@ export function AiAssistPanel({
                   type="checkbox"
                   checked={includeEmojis}
                   onChange={(e) => setIncludeEmojis(e.target.checked)}
-                  disabled={loading}
+                  disabled={isDisabled || loading}
                 />
                 <span>Emojis</span>
               </label>
@@ -707,7 +723,7 @@ export function AiAssistPanel({
                   type="checkbox"
                   checked={includeHashtags}
                   onChange={(e) => setIncludeHashtags(e.target.checked)}
-                  disabled={loading}
+                  disabled={isDisabled || loading}
                 />
                 <span>Hashtags</span>
               </label>
@@ -716,7 +732,7 @@ export function AiAssistPanel({
                   type="checkbox"
                   checked={includeCta}
                   onChange={(e) => setIncludeCta(e.target.checked)}
-                  disabled={loading}
+                  disabled={isDisabled || loading}
                 />
                 <span>CTA</span>
               </label>
@@ -725,7 +741,7 @@ export function AiAssistPanel({
                   type="checkbox"
                   checked={includeQuestion}
                   onChange={(e) => setIncludeQuestion(e.target.checked)}
-                  disabled={loading}
+                  disabled={isDisabled || loading}
                 />
                 <span>Question</span>
               </label>
@@ -735,7 +751,7 @@ export function AiAssistPanel({
               type="button"
               className="ai-generate-btn"
               onClick={handleGenerateVariants}
-              disabled={noPlatform || isTextEmpty || loading}
+              disabled={isDisabled || isTextEmpty || loading}
             >
               {loading && !regeneratingIndex ? 'Generating...' : 'Generate'}
             </button>
@@ -747,7 +763,7 @@ export function AiAssistPanel({
               type="button"
               className="ai-quick-btn"
               onClick={handleHashtags}
-              disabled={noPlatform || isTextEmpty || loading}
+              disabled={isDisabled || isTextEmpty || loading}
               title="Suggest relevant hashtags"
             >
               # Hashtags
@@ -756,7 +772,7 @@ export function AiAssistPanel({
               type="button"
               className="ai-quick-btn"
               onClick={handlePreFlight}
-              disabled={noPlatform || isTextEmpty || loading}
+              disabled={isDisabled || isTextEmpty || loading}
               title="Check post quality before publishing"
             >
               Pre-flight
@@ -768,10 +784,11 @@ export function AiAssistPanel({
       {/* Translate Tab Content */}
       {activeTab === 'translate' && (
         <>
-          {noPlatform && <div className="ai-empty-state">Select a platform to enable translation</div>}
-          {!noPlatform && isTextEmpty && <div className="ai-empty-state">Enter text to enable translation</div>}
+          {disabled && <div className="ai-empty-state ai-disabled-state">Connect an account to enable translation</div>}
+          {!disabled && noPlatform && <div className="ai-empty-state">Select a platform to enable translation</div>}
+          {!disabled && !noPlatform && isTextEmpty && <div className="ai-empty-state">Enter text to enable translation</div>}
 
-          {!noPlatform && !isTextEmpty && (
+          {!isDisabled && !isTextEmpty && (
             <>
               {/* Language Detection Display */}
               <div className="ai-language-detection">
@@ -868,8 +885,9 @@ export function AiAssistPanel({
       {/* Media Tab Content */}
       {activeTab === 'media' && (
         <>
-          {noPlatform && <div className="ai-empty-state">Select a platform to enable media AI features</div>}
-          {!noPlatform && hasMedia && (
+          {disabled && <div className="ai-empty-state ai-disabled-state">Connect an account to enable media AI features</div>}
+          {!disabled && noPlatform && <div className="ai-empty-state">Select a platform to enable media AI features</div>}
+          {!isDisabled && hasMedia && (
             <div className="ai-media-info">
               <span className={`media-type-indicator ${isImage ? 'image' : 'video'}`}>
                 {isImage ? 'Image' : 'Video'}
@@ -879,13 +897,13 @@ export function AiAssistPanel({
           )}
 
           {/* Image Features */}
-          {!noPlatform && isImage && (
+          {!isDisabled && isImage && (
             <div className="ai-actions">
               <button
                 type="button"
                 className="ai-action-btn"
                 onClick={handleImageCaptionIdeas}
-                disabled={!hasMedia || loading}
+                disabled={isDisabled || !hasMedia || loading}
                 title="Generate caption ideas based on image"
               >
                 Caption ideas
@@ -894,7 +912,7 @@ export function AiAssistPanel({
                 type="button"
                 className="ai-action-btn"
                 onClick={handleImageQualityCheck}
-                disabled={!hasMedia || loading}
+                disabled={isDisabled || !hasMedia || loading}
                 title="Check image quality for social media"
               >
                 Quality check
@@ -903,7 +921,7 @@ export function AiAssistPanel({
                 type="button"
                 className="ai-action-btn"
                 onClick={handleAltText}
-                disabled={!hasMedia || loading}
+                disabled={isDisabled || !hasMedia || loading}
                 title="Generate accessibility alt text"
               >
                 Alt text
@@ -912,7 +930,7 @@ export function AiAssistPanel({
           )}
 
           {/* Video Features - always show, disabled until video uploaded */}
-          {!noPlatform && (!hasMedia || isVideo) && (
+          {!isDisabled && (!hasMedia || isVideo) && (
             <>
               {!isVideo && (
                 <div className="ai-empty-state">Upload a video to enable video AI features</div>
@@ -922,7 +940,7 @@ export function AiAssistPanel({
                   type="button"
                   className="ai-action-btn"
                   onClick={handleVideoCaptionIdeas}
-                  disabled={!isVideo || loading}
+                  disabled={isDisabled || !isVideo || loading}
                   title="Generate caption ideas based on video"
                 >
                   Caption ideas
@@ -931,7 +949,7 @@ export function AiAssistPanel({
                   type="button"
                   className="ai-action-btn"
                   onClick={handleThumbnailSuggest}
-                  disabled={!isVideo || loading}
+                  disabled={isDisabled || !isVideo || loading}
                   title="Pick a thumbnail from video frames"
                 >
                   Pick thumbnail

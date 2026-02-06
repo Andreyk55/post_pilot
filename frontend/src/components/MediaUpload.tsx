@@ -12,6 +12,8 @@ interface MediaUploadProps {
   onValidationChange?: (status: ValidationStatus, errors: MediaValidationError[], warnings: MediaValidationWarning[]) => void
   selectedPlatform?: PlatformId | null
   placement?: Placement
+  /** When true, disables all upload functionality (no connected account/page) */
+  disabled?: boolean
 }
 
 // Default generic limits (used when no platform-specific rules exist)
@@ -25,7 +27,8 @@ export function MediaUpload({
   onUploadingChange,
   onValidationChange,
   selectedPlatform,
-  placement = 'Feed'
+  placement = 'Feed',
+  disabled = false,
 }: MediaUploadProps) {
   const [uploading, setUploading] = useState(false)
   const [preview, setPreview] = useState<string | null>(null)
@@ -241,7 +244,7 @@ export function MediaUpload({
   }
 
   const handleClick = () => {
-    if (!uploading && fileInputRef.current) {
+    if (!uploading && !disabled && fileInputRef.current) {
       fileInputRef.current.click()
     }
   }
@@ -296,7 +299,7 @@ export function MediaUpload({
         type="file"
         accept="image/*,video/*"
         onChange={handleFileSelect}
-        disabled={uploading}
+        disabled={uploading || disabled}
         className="file-input-hidden"
       />
 
@@ -357,10 +360,10 @@ export function MediaUpload({
         </>
       ) : (
         <div
-          className={`upload-area ${uploading ? 'uploading' : ''}`}
+          className={`upload-area ${uploading ? 'uploading' : ''} ${disabled ? 'disabled' : ''}`}
           onClick={handleClick}
           role="button"
-          tabIndex={0}
+          tabIndex={disabled ? -1 : 0}
           onKeyDown={(e) => e.key === 'Enter' && handleClick()}
         >
           <div className="upload-placeholder">

@@ -18,7 +18,7 @@ function MainApp() {
       case 'dashboard':
         return <Dashboard />
       case 'schedule':
-        return <SchedulePostsPage />
+        return <SchedulePostsPage onNavigate={setCurrentPage} />
       case 'posts':
         return <MyPostsPage />
       case 'accounts':

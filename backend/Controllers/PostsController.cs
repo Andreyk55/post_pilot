@@ -199,6 +199,46 @@ public class PostsController : ControllerBase
             return ValidationProblem(new ValidationProblemDetails(validationErrors));
         }
 
+        // For Facebook posts, verify the target page is connected and has a valid token
+        if (request.Platform == Platform.Facebook)
+        {
+            if (!request.TargetPageId.HasValue)
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Title = "Integration required",
+                    Detail = "A Facebook Page must be selected to schedule a Facebook post.",
+                    Status = StatusCodes.Status409Conflict,
+                    Extensions = { ["code"] = "INTEGRATION_DISCONNECTED" }
+                });
+            }
+
+            var targetPage = await _context.Set<ConnectedPage>()
+                .FirstOrDefaultAsync(p => p.Id == request.TargetPageId.Value);
+
+            if (targetPage == null)
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Title = "Integration disconnected",
+                    Detail = "The selected Facebook Page is no longer connected. Please reconnect in Connected Accounts.",
+                    Status = StatusCodes.Status409Conflict,
+                    Extensions = { ["code"] = "INTEGRATION_DISCONNECTED" }
+                });
+            }
+
+            if (string.IsNullOrEmpty(targetPage.AccessToken))
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Title = "Integration token missing",
+                    Detail = "The selected Facebook Page's access token is missing. Please reconnect in Connected Accounts.",
+                    Status = StatusCodes.Status409Conflict,
+                    Extensions = { ["code"] = "INTEGRATION_DISCONNECTED" }
+                });
+            }
+        }
+
         // Note: Media validation is done client-side via POST /api/media/validate before submission.
         // The frontend blocks submission if media is invalid.
 
@@ -259,6 +299,46 @@ public class PostsController : ControllerBase
         if (validationErrors.Count > 0)
         {
             return ValidationProblem(new ValidationProblemDetails(validationErrors));
+        }
+
+        // For Facebook posts, verify the target page is connected and has a valid token
+        if (request.Platform == Platform.Facebook)
+        {
+            if (!request.TargetPageId.HasValue)
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Title = "Integration required",
+                    Detail = "A Facebook Page must be selected to schedule a Facebook post.",
+                    Status = StatusCodes.Status409Conflict,
+                    Extensions = { ["code"] = "INTEGRATION_DISCONNECTED" }
+                });
+            }
+
+            var targetPage = await _context.Set<ConnectedPage>()
+                .FirstOrDefaultAsync(p => p.Id == request.TargetPageId.Value);
+
+            if (targetPage == null)
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Title = "Integration disconnected",
+                    Detail = "The selected Facebook Page is no longer connected. Please reconnect in Connected Accounts.",
+                    Status = StatusCodes.Status409Conflict,
+                    Extensions = { ["code"] = "INTEGRATION_DISCONNECTED" }
+                });
+            }
+
+            if (string.IsNullOrEmpty(targetPage.AccessToken))
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Title = "Integration token missing",
+                    Detail = "The selected Facebook Page's access token is missing. Please reconnect in Connected Accounts.",
+                    Status = StatusCodes.Status409Conflict,
+                    Extensions = { ["code"] = "INTEGRATION_DISCONNECTED" }
+                });
+            }
         }
 
         var scheduledAtChanged = post.ScheduledAt != request.ScheduledAt;

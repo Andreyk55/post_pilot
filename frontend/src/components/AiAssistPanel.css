@@ -537,6 +537,15 @@
   font-style: italic;
 }
 
+/* Disabled state - when no connected account/page */
+.ai-empty-state.ai-disabled-state {
+  background: rgba(255, 193, 7, 0.08);
+  border: 1px solid rgba(255, 193, 7, 0.2);
+  border-radius: 8px;
+  color: rgba(255, 193, 7, 0.8);
+  font-style: normal;
+}
+
 /* Media info */
 .ai-media-info {
   display: flex;
