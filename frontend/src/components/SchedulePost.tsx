@@ -375,16 +375,11 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
         </div>
 
         {/* Facebook Page Selector - shown when Facebook is selected */}
-        {isFacebookSelected && (
+        {isFacebookSelected && connectedPages.length > 0 && (
           <div className="form-group">
             <label htmlFor="facebookPage">Facebook Page</label>
             {loadingPages ? (
               <div className="loading-pages">Loading pages...</div>
-            ) : connectedPages.length === 0 ? (
-              <div className="no-pages-warning">
-                No Facebook Pages connected. Please connect a page in{' '}
-                <a href="#connected-accounts">Connected Accounts</a>.
-              </div>
             ) : (
               <select
                 id="facebookPage"

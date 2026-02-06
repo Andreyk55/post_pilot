@@ -652,7 +652,7 @@ export function AiAssistPanel({
       {/* Text Tab Content */}
       {activeTab === 'text' && (
         <>
-          {disabled && <div className="ai-empty-state ai-disabled-state">Connect an account to enable AI features</div>}
+          {/* disabled state message handled by top-level banner */}
           {!disabled && noPlatform && <div className="ai-empty-state">Select a platform to enable AI features</div>}
           {!disabled && !noPlatform && isTextEmpty && <div className="ai-empty-state">Enter text to enable AI features</div>}
 
@@ -784,7 +784,7 @@ export function AiAssistPanel({
       {/* Translate Tab Content */}
       {activeTab === 'translate' && (
         <>
-          {disabled && <div className="ai-empty-state ai-disabled-state">Connect an account to enable translation</div>}
+          {/* disabled state message handled by top-level banner */}
           {!disabled && noPlatform && <div className="ai-empty-state">Select a platform to enable translation</div>}
           {!disabled && !noPlatform && isTextEmpty && <div className="ai-empty-state">Enter text to enable translation</div>}
 
@@ -885,7 +885,7 @@ export function AiAssistPanel({
       {/* Media Tab Content */}
       {activeTab === 'media' && (
         <>
-          {disabled && <div className="ai-empty-state ai-disabled-state">Connect an account to enable media AI features</div>}
+          {/* disabled state message handled by top-level banner */}
           {!disabled && noPlatform && <div className="ai-empty-state">Select a platform to enable media AI features</div>}
           {!isDisabled && hasMedia && (
             <div className="ai-media-info">
