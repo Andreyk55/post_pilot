@@ -68,7 +68,7 @@ export function useComposerEnabled({
     if (!hasPlatformSelected) {
       hasValidTarget = false
       disabledReason = 'no_platform'
-      disabledMessage = 'Select a platform above to start composing your post.'
+      disabledMessage = 'Select a platform to start creating your post.'
     } else if (isPlatformNotImplemented) {
       // Instagram, Twitter, and LinkedIn are coming soon
       hasValidTarget = false
