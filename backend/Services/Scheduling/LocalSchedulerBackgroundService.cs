@@ -70,9 +70,9 @@ public class LocalSchedulerBackgroundService : BackgroundService
                 _logger.LogWarning("Reset {Count} posts stuck in Publishing status", stuckPosts);
             }
 
-            // Find posts that are due for publication (Facebook only for now)
+            // Find posts that are due for publication (Facebook + Instagram)
             duePosts = await dbContext.Posts
-                .Where(p => p.Platform == Platform.Facebook)
+                .Where(p => p.Platform == Platform.Facebook || p.Platform == Platform.Instagram)
                 .Where(p =>
                     (p.Status == PostStatus.Pending && p.ScheduledAt <= now) ||
                     (p.Status == PostStatus.RetryPending && p.NextRetryAt != null && p.NextRetryAt <= now))

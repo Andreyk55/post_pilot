@@ -31,7 +31,9 @@
       "Bash(dotnet ef migrations:*)",
       "Bash(cd:*)",
       "Bash(netstat:*)",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "Bash(xargs:*)",
+      "Bash(dotnet restore:*)"
     ]
   }
 }

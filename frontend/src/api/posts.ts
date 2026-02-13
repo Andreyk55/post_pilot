@@ -18,8 +18,11 @@ export interface Post {
   updatedAt: string
   targetPageId: string | null
   targetPageName: string | null
+  targetInstagramAccountId: string | null
+  targetInstagramAccountName: string | null
   publishedAt: string | null
   externalPostId: string | null
+  externalPostUrl: string | null
   errorMessage: string | null
   retryCount: number
   selectedThumbnailUrl: string | null
@@ -32,6 +35,7 @@ export interface CreatePostRequest {
   platform: Platform
   scheduledAt: string
   targetPageId?: string | null
+  targetInstagramAccountId?: string | null
   selectedThumbnailUrl?: string | null
 }
 
@@ -63,6 +67,8 @@ export interface PostDetails {
   updatedAt: string
   targetPageId: string | null
   targetPageName: string | null
+  targetInstagramAccountId: string | null
+  targetInstagramAccountName: string | null
   publishedAt: string | null
   externalPostId: string | null
   errorMessage: string | null

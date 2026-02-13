@@ -85,10 +85,13 @@ public class Startup
         ConfigureMediaValidationServices(services);
 
         // Configure publishers
-        // Use AddHttpClient to register FacebookPagePublisher with a typed HttpClient
-        // and also register it as IPostPublisher
+        // Use AddHttpClient to register publishers with typed HttpClients
         services.AddHttpClient<FacebookPagePublisher>();
         services.AddScoped<IPostPublisher>(sp => sp.GetRequiredService<FacebookPagePublisher>());
+
+        services.AddHttpClient<InstagramPublisher>();
+        services.AddScoped<IPostPublisher>(sp => sp.GetRequiredService<InstagramPublisher>());
+
         services.AddScoped<IPostPublisherResolver, PostPublisherResolver>();
 
         // Configure feature settings

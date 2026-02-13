@@ -24,6 +24,8 @@ public record PostDetailsDto(
     DateTime UpdatedAt,
     Guid? TargetPageId,
     string? TargetPageName,
+    Guid? TargetInstagramAccountId,
+    string? TargetInstagramAccountName,
     DateTime? PublishedAt,
     string? ExternalPostId,
     string? ErrorMessage,

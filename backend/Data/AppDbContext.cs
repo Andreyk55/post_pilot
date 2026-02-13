@@ -34,6 +34,12 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(e => e.TargetPageId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            // Foreign key to ConnectedInstagramAccount (optional - SET NULL on delete)
+            entity.HasOne(e => e.TargetInstagramAccount)
+                .WithMany()
+                .HasForeignKey(e => e.TargetInstagramAccountId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<MetaConnection>(entity =>

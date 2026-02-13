@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("PostPilot.Api.Tests")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+d24137921d59e690d1c06d1f89d1a9ef0b78911b")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b9a661fc3f3b4d508f5330068efbcec97535a036")]
 [assembly: System.Reflection.AssemblyProductAttribute("PostPilot.Api.Tests")]
 [assembly: System.Reflection.AssemblyTitleAttribute("PostPilot.Api.Tests")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

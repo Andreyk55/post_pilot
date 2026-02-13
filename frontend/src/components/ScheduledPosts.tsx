@@ -252,9 +252,9 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
                     >
                       {platformIcons[post.platform] || post.platform.charAt(0)}
                     </span>
-                    {post.targetPageName && (
-                      <span className="page-badge" title={post.targetPageName}>
-                        {post.targetPageName}
+                    {(post.targetPageName || post.targetInstagramAccountName) && (
+                      <span className="page-badge" title={post.targetPageName || post.targetInstagramAccountName || ''}>
+                        {post.targetPageName || post.targetInstagramAccountName}
                       </span>
                     )}
                     <span className="status-badge" data-status={post.status.toLowerCase()}>

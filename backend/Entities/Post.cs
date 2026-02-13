@@ -27,6 +27,16 @@ public class Post
     public Guid? TargetPageId { get; set; }
 
     /// <summary>
+    /// Which Instagram Business Account to post to (references ConnectedInstagramAccount.Id)
+    /// </summary>
+    public Guid? TargetInstagramAccountId { get; set; }
+
+    /// <summary>
+    /// External URL to the published post (e.g., Instagram permalink)
+    /// </summary>
+    public string? ExternalPostUrl { get; set; }
+
+    /// <summary>
     /// Timestamp when the post was actually published
     /// </summary>
     public DateTime? PublishedAt { get; set; }
@@ -69,6 +79,7 @@ public class Post
     /// </summary>
     public string? SelectedThumbnailUrl { get; set; }
 
-    // Navigation property
+    // Navigation properties
     public ConnectedPage? TargetPage { get; set; }
+    public ConnectedInstagramAccount? TargetInstagramAccount { get; set; }
 }

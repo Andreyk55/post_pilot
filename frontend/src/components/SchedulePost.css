@@ -282,6 +282,17 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   font-size: 0.85rem;
 }
 
+/* Instagram media hint */
+.ig-media-hint {
+  margin-bottom: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(228, 64, 95, 0.1);
+  border: 1px solid rgba(228, 64, 95, 0.2);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.8rem;
+}
+
 /* Media validation summary */
 .media-validation-summary {
   margin-top: 0.75rem;

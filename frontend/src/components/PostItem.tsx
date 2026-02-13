@@ -147,8 +147,8 @@ export function PostItem({ post, onDelete, cachedDetails, onDetailsFetched }: Po
             <span className={`status-indicator ${statusConfig.className}`}>
               {statusConfig.label}
             </span>
-            {post.targetPageName && (
-              <span className="target-page">{post.targetPageName}</span>
+            {(post.targetPageName || post.targetInstagramAccountName) && (
+              <span className="target-page">{post.targetPageName || post.targetInstagramAccountName}</span>
             )}
             <span className="post-datetime">{date} at {time}</span>
           </div>
@@ -246,8 +246,8 @@ export function PostItem({ post, onDelete, cachedDetails, onDetailsFetched }: Po
           </div>
         ) : details ? (
           <div className="details-content">
-            {/* Engagement Section - only show if we have data */}
-            {post.status === 'Published' && hasEngagement && (
+            {/* Engagement Section - only show for Facebook with data */}
+            {post.platform === 'Facebook' && post.status === 'Published' && hasEngagement && (
               <div className="engagement-section">
                 <h4 className="section-title">Engagement</h4>
                 <div className="engagement-stats">

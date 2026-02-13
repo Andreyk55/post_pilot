@@ -89,6 +89,7 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
     scheduledTime: string
     platforms: string[]
     targetPageId?: string
+    targetInstagramAccountId?: string
     mediaUrl?: string
     mediaType?: MediaType
     selectedThumbnailUrl?: string
@@ -108,6 +109,8 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
           scheduledAt,
           // Include targetPageId for Facebook posts
           targetPageId: platform === 'Facebook' ? formData.targetPageId : undefined,
+          // Include targetInstagramAccountId for Instagram posts
+          targetInstagramAccountId: platform === 'Instagram' ? formData.targetInstagramAccountId : undefined,
           // Include media URL and type if media was uploaded
           mediaUrl: formData.mediaUrl,
           mediaType: formData.mediaType,

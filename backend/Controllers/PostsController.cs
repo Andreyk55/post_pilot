@@ -53,6 +53,7 @@ public class PostsController : ControllerBase
 
         var posts = await query
             .Include(p => p.TargetPage)
+            .Include(p => p.TargetInstagramAccount)
             .OrderByDescending(p => p.ScheduledAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -73,6 +74,7 @@ public class PostsController : ControllerBase
     {
         var post = await _context.Posts
             .Include(p => p.TargetPage)
+            .Include(p => p.TargetInstagramAccount)
             .FirstOrDefaultAsync(p => p.Id == id);
 
         if (post == null)
@@ -88,6 +90,7 @@ public class PostsController : ControllerBase
     {
         var post = await _context.Posts
             .Include(p => p.TargetPage)
+            .Include(p => p.TargetInstagramAccount)
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
 
         if (post == null)
@@ -97,7 +100,7 @@ public class PostsController : ControllerBase
 
         // Fetch engagement metrics for published Facebook posts
         PostEngagementDto? engagement = null;
-        string? externalPostUrl = null;
+        string? externalPostUrl = post.ExternalPostUrl; // Use stored permalink (e.g. from Instagram)
 
         if (post.Platform == Platform.Facebook &&
             post.Status == PostStatus.Published &&
@@ -181,6 +184,10 @@ public class PostsController : ControllerBase
             UpdatedAt: post.UpdatedAt,
             TargetPageId: post.TargetPageId,
             TargetPageName: post.TargetPage?.Name,
+            TargetInstagramAccountId: post.TargetInstagramAccountId,
+            TargetInstagramAccountName: post.TargetInstagramAccount != null
+                ? $"@{post.TargetInstagramAccount.Username}"
+                : null,
             PublishedAt: post.PublishedAt,
             ExternalPostId: post.ExternalPostId,
             ErrorMessage: post.ErrorMessage,
@@ -239,6 +246,46 @@ public class PostsController : ControllerBase
             }
         }
 
+        // Instagram-specific validation
+        if (request.Platform == Platform.Instagram)
+        {
+            if (!request.TargetInstagramAccountId.HasValue)
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Title = "Integration required",
+                    Detail = "An Instagram Business Account must be selected to schedule an Instagram post.",
+                    Status = StatusCodes.Status409Conflict,
+                    Extensions = { ["code"] = "INTEGRATION_DISCONNECTED" }
+                });
+            }
+
+            var targetIgAccount = await _context.Set<ConnectedInstagramAccount>()
+                .FirstOrDefaultAsync(a => a.Id == request.TargetInstagramAccountId.Value);
+
+            if (targetIgAccount == null)
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Title = "Integration disconnected",
+                    Detail = "The selected Instagram account is no longer connected. Please reconnect in Connected Accounts.",
+                    Status = StatusCodes.Status409Conflict,
+                    Extensions = { ["code"] = "INTEGRATION_DISCONNECTED" }
+                });
+            }
+
+            // Instagram requires exactly 1 image
+            if (string.IsNullOrEmpty(request.MediaUrl) || (request.MediaType ?? MediaType.None) != MediaType.Image)
+            {
+                return BadRequest(new ProblemDetails
+                {
+                    Title = "Invalid media",
+                    Detail = "Instagram Feed posts require exactly one image. Video and text-only posts are not supported yet.",
+                    Status = StatusCodes.Status400BadRequest,
+                });
+            }
+        }
+
         // Note: Media validation is done client-side via POST /api/media/validate before submission.
         // The frontend blocks submission if media is invalid.
 
@@ -251,6 +298,7 @@ public class PostsController : ControllerBase
             Platform = request.Platform,
             ScheduledAt = request.ScheduledAt,
             TargetPageId = request.TargetPageId,
+            TargetInstagramAccountId = request.TargetInstagramAccountId,
             SelectedThumbnailUrl = request.SelectedThumbnailUrl,
             Status = PostStatus.Pending,
             CreatedAt = DateTime.UtcNow,
@@ -273,8 +321,9 @@ public class PostsController : ControllerBase
                 post.Id, scheduleResult.ErrorMessage);
         }
 
-        // Reload with TargetPage for the response
+        // Reload navigation properties for the response
         await _context.Entry(post).Reference(p => p.TargetPage).LoadAsync();
+        await _context.Entry(post).Reference(p => p.TargetInstagramAccount).LoadAsync();
 
         return CreatedAtAction(nameof(GetPost), new { id = post.Id }, PostDto.FromEntity(post));
     }
@@ -341,6 +390,31 @@ public class PostsController : ControllerBase
             }
         }
 
+        // Instagram-specific validation for updates
+        if (request.Platform == Platform.Instagram)
+        {
+            if (!request.TargetInstagramAccountId.HasValue)
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Title = "Integration required",
+                    Detail = "An Instagram Business Account must be selected to schedule an Instagram post.",
+                    Status = StatusCodes.Status409Conflict,
+                    Extensions = { ["code"] = "INTEGRATION_DISCONNECTED" }
+                });
+            }
+
+            if (string.IsNullOrEmpty(request.MediaUrl) || (request.MediaType ?? MediaType.None) != MediaType.Image)
+            {
+                return BadRequest(new ProblemDetails
+                {
+                    Title = "Invalid media",
+                    Detail = "Instagram Feed posts require exactly one image.",
+                    Status = StatusCodes.Status400BadRequest,
+                });
+            }
+        }
+
         var scheduledAtChanged = post.ScheduledAt != request.ScheduledAt;
 
         post.Content = request.Content;
@@ -349,6 +423,7 @@ public class PostsController : ControllerBase
         post.Platform = request.Platform;
         post.ScheduledAt = request.ScheduledAt;
         post.TargetPageId = request.TargetPageId;
+        post.TargetInstagramAccountId = request.TargetInstagramAccountId;
         post.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -424,6 +499,7 @@ public record CreatePostRequest(
     Platform Platform,
     DateTime ScheduledAt,
     Guid? TargetPageId = null,
+    Guid? TargetInstagramAccountId = null,
     string? SelectedThumbnailUrl = null,
     List<Guid>? MediaAssetIds = null
 );
@@ -434,7 +510,8 @@ public record UpdatePostRequest(
     MediaType? MediaType,
     Platform Platform,
     DateTime ScheduledAt,
-    Guid? TargetPageId = null
+    Guid? TargetPageId = null,
+    Guid? TargetInstagramAccountId = null
 );
 
 public record PaginatedResponse<T>(
@@ -461,8 +538,11 @@ public record PostDto(
     DateTime UpdatedAt,
     Guid? TargetPageId,
     string? TargetPageName,
+    Guid? TargetInstagramAccountId,
+    string? TargetInstagramAccountName,
     DateTime? PublishedAt,
     string? ExternalPostId,
+    string? ExternalPostUrl,
     string? ErrorMessage,
     int RetryCount,
     string? SelectedThumbnailUrl
@@ -480,8 +560,13 @@ public record PostDto(
         post.UpdatedAt,
         post.TargetPageId,
         post.TargetPage?.Name,
+        post.TargetInstagramAccountId,
+        post.TargetInstagramAccount != null
+            ? $"@{post.TargetInstagramAccount.Username}"
+            : null,
         post.PublishedAt,
         post.ExternalPostId,
+        post.ExternalPostUrl,
         post.ErrorMessage,
         post.RetryCount,
         post.SelectedThumbnailUrl

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using PostPilot.Api.Controllers;
 using PostPilot.Api.Data;
+using PostPilot.Api.Entities;
 using PostPilot.Api.Enums;
 using PostPilot.Api.Services.Publishing;
 using PostPilot.Api.Services.Scheduling;
@@ -43,11 +44,53 @@ public class PostsControllerTests : IDisposable
         _context.Dispose();
     }
 
+    /// <summary>
+    /// Helper to create a ConnectedInstagramAccount for tests that need one.
+    /// </summary>
+    private async Task<ConnectedInstagramAccount> CreateTestInstagramAccount()
+    {
+        var metaConnection = new MetaConnection
+        {
+            Id = Guid.NewGuid(),
+            UserId = Guid.Parse("00000000-0000-0000-0000-000000000001"),
+            AccessToken = "test-token",
+            TokenExpiresAt = DateTime.UtcNow.AddDays(60),
+            ConnectedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+        _context.MetaConnections.Add(metaConnection);
+
+        var connectedPage = new ConnectedPage
+        {
+            Id = Guid.NewGuid(),
+            MetaConnectionId = metaConnection.Id,
+            PageId = "123456",
+            Name = "Test Page",
+            AccessToken = "page-token",
+            CreatedAt = DateTime.UtcNow,
+        };
+        _context.ConnectedPages.Add(connectedPage);
+
+        var igAccount = new ConnectedInstagramAccount
+        {
+            Id = Guid.NewGuid(),
+            MetaConnectionId = metaConnection.Id,
+            IgBusinessId = "ig-123",
+            Username = "testuser",
+            Name = "Test IG",
+            PageId = "123456",
+            PageName = "Test Page",
+            CreatedAt = DateTime.UtcNow,
+        };
+        _context.ConnectedInstagramAccounts.Add(igAccount);
+        await _context.SaveChangesAsync();
+        return igAccount;
+    }
+
     #region CreatePost Platform-Specific Validation Tests
 
     [Theory]
     [InlineData(Platform.Facebook, 5000)]
-    [InlineData(Platform.Instagram, 2200)]
     [InlineData(Platform.LinkedIn, 3000)]
     [InlineData(Platform.Twitter, 280)]
     public async Task CreatePost_TextAtExactMaxLength_Succeeds(Platform platform, int maxLength)
@@ -68,9 +111,29 @@ public class PostsControllerTests : IDisposable
         Assert.Equal(platform, post.Platform);
     }
 
+    [Fact]
+    public async Task CreatePost_Instagram_TextAtExactMaxLength_Succeeds()
+    {
+        var igAccount = await CreateTestInstagramAccount();
+        var content = new string('x', 2200);
+        var request = new CreatePostRequest(
+            Content: content,
+            MediaUrl: "https://example.com/image.jpg",
+            MediaType: MediaType.Image,
+            Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1),
+            TargetInstagramAccountId: igAccount.Id);
+
+        var result = await _controller.CreatePost(request);
+
+        var createdResult = Assert.IsType<CreatedAtActionResult>(result.Result);
+        var post = Assert.IsType<PostDto>(createdResult.Value);
+        Assert.Equal(content, post.Content);
+        Assert.Equal(Platform.Instagram, post.Platform);
+    }
+
     [Theory]
     [InlineData(Platform.Facebook, 5000)]
-    [InlineData(Platform.Instagram, 2200)]
     [InlineData(Platform.LinkedIn, 3000)]
     [InlineData(Platform.Twitter, 280)]
     public async Task CreatePost_TextExceedsMaxLength_ReturnsValidationError(Platform platform, int maxLength)
@@ -94,9 +157,31 @@ public class PostsControllerTests : IDisposable
         Assert.Contains($"Max {maxLength} characters", problemDetails.Errors["content"][0]);
     }
 
+    [Fact]
+    public async Task CreatePost_Instagram_TextExceedsMaxLength_ReturnsValidationError()
+    {
+        var content = new string('x', 2201);
+        var igAccount = await CreateTestInstagramAccount();
+        var request = new CreatePostRequest(
+            Content: content,
+            MediaUrl: "https://example.com/image.jpg",
+            MediaType: MediaType.Image,
+            Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1),
+            TargetInstagramAccountId: igAccount.Id);
+
+        var result = await _controller.CreatePost(request);
+
+        var objectResult = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(400, objectResult.StatusCode);
+
+        var problemDetails = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
+        Assert.True(problemDetails.Errors.ContainsKey("content"));
+        Assert.Contains("Text is too long for Instagram", problemDetails.Errors["content"][0]);
+    }
+
     [Theory]
     [InlineData(Platform.Facebook)]
-    [InlineData(Platform.Instagram)]
     [InlineData(Platform.LinkedIn)]
     [InlineData(Platform.Twitter)]
     public async Task CreatePost_NullContent_Succeeds(Platform platform)
@@ -117,11 +202,148 @@ public class PostsControllerTests : IDisposable
 
     #endregion
 
+    #region Instagram-Specific Validation Tests
+
+    [Fact]
+    public async Task CreatePost_Instagram_RequiresTargetAccount()
+    {
+        var request = new CreatePostRequest(
+            Content: "Test caption",
+            MediaUrl: "https://example.com/image.jpg",
+            MediaType: MediaType.Image,
+            Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1));
+
+        var result = await _controller.CreatePost(request);
+
+        var objectResult = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(409, objectResult.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreatePost_Instagram_RequiresImage()
+    {
+        var igAccount = await CreateTestInstagramAccount();
+
+        // No media at all
+        var request = new CreatePostRequest(
+            Content: "Test caption",
+            MediaUrl: null,
+            MediaType: null,
+            Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1),
+            TargetInstagramAccountId: igAccount.Id);
+
+        var result = await _controller.CreatePost(request);
+
+        var objectResult = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(400, objectResult.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreatePost_Instagram_RejectsVideo()
+    {
+        var igAccount = await CreateTestInstagramAccount();
+
+        var request = new CreatePostRequest(
+            Content: "Test caption",
+            MediaUrl: "https://example.com/video.mp4",
+            MediaType: MediaType.Video,
+            Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1),
+            TargetInstagramAccountId: igAccount.Id);
+
+        var result = await _controller.CreatePost(request);
+
+        var objectResult = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(400, objectResult.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreatePost_Instagram_RejectsTextOnly()
+    {
+        var igAccount = await CreateTestInstagramAccount();
+
+        var request = new CreatePostRequest(
+            Content: "Test caption",
+            MediaUrl: null,
+            MediaType: MediaType.None,
+            Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1),
+            TargetInstagramAccountId: igAccount.Id);
+
+        var result = await _controller.CreatePost(request);
+
+        var objectResult = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(400, objectResult.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreatePost_Instagram_WithImage_Succeeds()
+    {
+        var igAccount = await CreateTestInstagramAccount();
+
+        var request = new CreatePostRequest(
+            Content: "Test caption #hashtag",
+            MediaUrl: "https://example.com/image.jpg",
+            MediaType: MediaType.Image,
+            Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1),
+            TargetInstagramAccountId: igAccount.Id);
+
+        var result = await _controller.CreatePost(request);
+
+        var createdResult = Assert.IsType<CreatedAtActionResult>(result.Result);
+        var post = Assert.IsType<PostDto>(createdResult.Value);
+        Assert.Equal(Platform.Instagram, post.Platform);
+        Assert.Equal(igAccount.Id, post.TargetInstagramAccountId);
+        Assert.Equal("@testuser", post.TargetInstagramAccountName);
+    }
+
+    [Fact]
+    public async Task CreatePost_Instagram_DisconnectedAccount_ReturnsConflict()
+    {
+        var request = new CreatePostRequest(
+            Content: "Test caption",
+            MediaUrl: "https://example.com/image.jpg",
+            MediaType: MediaType.Image,
+            Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1),
+            TargetInstagramAccountId: Guid.NewGuid()); // Non-existent account
+
+        var result = await _controller.CreatePost(request);
+
+        var objectResult = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(409, objectResult.StatusCode);
+    }
+
+    #endregion
+
+    #region Publisher Routing Tests
+
+    [Fact]
+    public void PostPublisherResolver_ReturnsCorrectPublisher()
+    {
+        // Verify the resolver pattern works for multiple publishers
+        var fbPublisher = new Mock<IPostPublisher>();
+        fbPublisher.Setup(p => p.SupportedPlatform).Returns(Platform.Facebook);
+
+        var igPublisher = new Mock<IPostPublisher>();
+        igPublisher.Setup(p => p.SupportedPlatform).Returns(Platform.Instagram);
+
+        var resolver = new PostPublisherResolver(new[] { fbPublisher.Object, igPublisher.Object });
+
+        Assert.Same(fbPublisher.Object, resolver.GetPublisher(Platform.Facebook));
+        Assert.Same(igPublisher.Object, resolver.GetPublisher(Platform.Instagram));
+        Assert.Null(resolver.GetPublisher(Platform.Twitter));
+    }
+
+    #endregion
+
     #region UpdatePost Platform-Specific Validation Tests
 
     [Theory]
     [InlineData(Platform.Facebook, 5000)]
-    [InlineData(Platform.Instagram, 2200)]
     [InlineData(Platform.LinkedIn, 3000)]
     [InlineData(Platform.Twitter, 280)]
     public async Task UpdatePost_TextAtExactMaxLength_Succeeds(Platform platform, int maxLength)
@@ -158,7 +380,6 @@ public class PostsControllerTests : IDisposable
 
     [Theory]
     [InlineData(Platform.Facebook, 5000)]
-    [InlineData(Platform.Instagram, 2200)]
     [InlineData(Platform.LinkedIn, 3000)]
     [InlineData(Platform.Twitter, 280)]
     public async Task UpdatePost_TextExceedsMaxLength_ReturnsValidationError(Platform platform, int maxLength)

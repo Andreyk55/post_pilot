@@ -48,6 +48,10 @@ public static class LambdaStartup
         // Publisher services
         services.AddHttpClient<FacebookPagePublisher>();
         services.AddScoped<IPostPublisher>(sp => sp.GetRequiredService<FacebookPagePublisher>());
+
+        services.AddHttpClient<InstagramPublisher>();
+        services.AddScoped<IPostPublisher>(sp => sp.GetRequiredService<InstagramPublisher>());
+
         services.AddScoped<IPostPublisherResolver, PostPublisherResolver>();
 
         // Scheduler (no-op for Lambda - we don't schedule retries via EventBridge from Publisher Lambda)

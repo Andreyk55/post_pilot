@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { metaApi } from '../api/meta'
 import { aiApi, type AiPlatform, type AiGoal, type AudienceLocationMode } from '../api/ai'
 import type { MediaType, ValidationStatus, MediaValidationError, MediaValidationWarning } from '../api/media'
-import type { ConnectedPage } from '../types/meta'
+import type { ConnectedPage, ConnectedInstagramAccount } from '../types/meta'
 import { MediaUpload } from './MediaUpload'
 import { AiAssistPanel, type StickyLanguageState } from './AiAssistPanel'
 import { SuggestedTimes } from './SuggestedTimes'
@@ -23,6 +23,7 @@ interface SchedulePostProps {
     scheduledTime: string
     platforms: string[]
     targetPageId?: string
+    targetInstagramAccountId?: string
     mediaUrl?: string
     mediaType?: MediaType
     selectedThumbnailUrl?: string
@@ -61,8 +62,10 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
   const [scheduledTime, setScheduledTime] = useState('')
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([])
   const [connectedPages, setConnectedPages] = useState<ConnectedPage[]>([])
+  const [connectedInstagramAccounts, setConnectedInstagramAccounts] = useState<ConnectedInstagramAccount[]>([])
   const [isAccountConnected, setIsAccountConnected] = useState(false)
   const [selectedPageId, setSelectedPageId] = useState<string>('')
+  const [selectedInstagramAccountId, setSelectedInstagramAccountId] = useState<string>('')
   const [loadingPages, setLoadingPages] = useState(false)
   const [mediaUrl, setMediaUrl] = useState<string | null>(null)
   const [mediaType, setMediaType] = useState<MediaType | null>(null)
@@ -151,31 +154,37 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
     })
   }, [])
 
-  // Load connected Facebook Pages on mount
+  // Load connected pages and Instagram accounts on mount
   useEffect(() => {
-    loadConnectedPages()
+    loadConnectedAccounts()
   }, [])
 
-  const loadConnectedPages = async () => {
+  const loadConnectedAccounts = async () => {
     try {
       setLoadingPages(true)
       const response = await metaApi.getConnection()
       setIsAccountConnected(response.isConnected)
       if (response.isConnected && response.connection) {
         setConnectedPages(response.connection.pages)
+        setConnectedInstagramAccounts(response.connection.instagramAccounts || [])
         // Auto-select first page if only one exists
         if (response.connection.pages.length === 1) {
           setSelectedPageId(response.connection.pages[0].id)
         }
+        // Auto-select first IG account if only one exists
+        if (response.connection.instagramAccounts?.length === 1) {
+          setSelectedInstagramAccountId(response.connection.instagramAccounts[0].id)
+        }
       }
     } catch (err) {
-      console.error('Failed to load connected pages:', err)
+      console.error('Failed to load connected accounts:', err)
     } finally {
       setLoadingPages(false)
     }
   }
 
   const isFacebookSelected = selectedPlatforms.includes('facebook')
+  const isInstagramSelected = selectedPlatforms.includes('instagram')
 
   // Determine if composer should be enabled based on platform and connection state
   const composerState = useComposerEnabled({
@@ -184,6 +193,8 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
     isAccountConnected,
     selectedPageId,
     loadingPages,
+    connectedInstagramAccounts,
+    selectedInstagramAccountId,
   })
 
   // Clear selected page if it's no longer in the connected pages list
@@ -196,6 +207,16 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
     }
   }, [connectedPages, selectedPageId])
 
+  // Clear selected IG account if it's no longer connected
+  useEffect(() => {
+    if (selectedInstagramAccountId && connectedInstagramAccounts.length > 0) {
+      const accountExists = connectedInstagramAccounts.some(a => a.id === selectedInstagramAccountId)
+      if (!accountExists) {
+        setSelectedInstagramAccountId('')
+      }
+    }
+  }, [connectedInstagramAccounts, selectedInstagramAccountId])
+
   const selectPlatform = (platformId: string) => {
     if (MAX_PLATFORMS_PER_POST === 1) {
       // Single selection mode: replace current selection
@@ -205,12 +226,23 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
         if (platformId === 'facebook') {
           setSelectedPageId('')
         }
+        if (platformId === 'instagram') {
+          setSelectedInstagramAccountId('')
+        }
       } else {
         // Select new platform, replacing any previous selection
         setSelectedPlatforms([platformId])
         // Clear page selection if Facebook is deselected
         if (selectedPlatforms.includes('facebook') && platformId !== 'facebook') {
           setSelectedPageId('')
+        }
+        // Clear IG selection if Instagram is deselected
+        if (selectedPlatforms.includes('instagram') && platformId !== 'instagram') {
+          setSelectedInstagramAccountId('')
+        }
+        // Auto-select IG account if switching to Instagram and only one exists
+        if (platformId === 'instagram' && connectedInstagramAccounts.length === 1) {
+          setSelectedInstagramAccountId(connectedInstagramAccounts[0].id)
         }
       }
     } else {
@@ -224,8 +256,14 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
       if (platformId === 'facebook' && selectedPlatforms.includes('facebook')) {
         setSelectedPageId('')
       }
+      if (platformId === 'instagram' && selectedPlatforms.includes('instagram')) {
+        setSelectedInstagramAccountId('')
+      }
     }
   }
+
+  // Instagram-specific validation
+  const isInstagramWithVideo = isInstagramSelected && mediaType === 'Video'
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -240,12 +278,23 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
       return
     }
 
+    // Require IG account selection for Instagram
+    if (isInstagramSelected && !selectedInstagramAccountId) {
+      return
+    }
+
+    // Instagram requires exactly 1 image
+    if (isInstagramSelected && (!mediaUrl || mediaType !== 'Image')) {
+      return
+    }
+
     onSchedule({
       content,
       scheduledDate,
       scheduledTime,
       platforms: selectedPlatforms,
       targetPageId: isFacebookSelected ? selectedPageId : undefined,
+      targetInstagramAccountId: isInstagramSelected ? selectedInstagramAccountId : undefined,
       mediaUrl: mediaUrl || undefined,
       mediaType: mediaType || undefined,
       selectedThumbnailUrl: selectedThumbnailUrl || undefined,
@@ -257,6 +306,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
     setScheduledTime('')
     setSelectedPlatforms([])
     setSelectedPageId('')
+    setSelectedInstagramAccountId('')
     setMediaUrl(null)
     setMediaType(null)
     setUploadError(null)
@@ -280,6 +330,8 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
   const isFormValid = (content || mediaUrl) && scheduledDate && scheduledTime &&
     selectedPlatforms.length > 0 &&
     (!isFacebookSelected || selectedPageId) &&
+    (!isInstagramSelected || selectedInstagramAccountId) &&
+    (!isInstagramSelected || (mediaUrl && mediaType === 'Image')) &&
     !isUploading &&
     !isTextTooLong &&
     !hasInvalidMedia
@@ -293,6 +345,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
     setScheduledTime('')
     setSelectedPlatforms([])
     setSelectedPageId('')
+    setSelectedInstagramAccountId('')
     setMediaUrl(null)
     setMediaType(null)
     setUploadError(null)
@@ -319,10 +372,11 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
   const { isEnabled: isComposerEnabled, disabledMessage, disabledReason } = composerState
 
   // Determine if we should show the "Go to Connected Accounts" button
-  // Show when no account is connected or when a page was disconnected,
-  // but not when account is connected and user just needs to select/connect a page
+  // Show when no account is connected or when a page/account was disconnected
   const showConnectedAccountsLink = disabledReason === 'no_account_connected' ||
-    disabledReason === 'page_not_found'
+    disabledReason === 'page_not_found' ||
+    disabledReason === 'no_ig_accounts_connected' ||
+    disabledReason === 'ig_account_not_found'
 
   return (
     <div className={`schedule-post ${!isComposerEnabled ? 'composer-disabled' : ''}`}>
@@ -355,7 +409,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
           )}
           <div className="platforms">
             {platforms.map(platform => {
-              const isNotImplemented = platform.id === 'instagram' || platform.id === 'twitter' || platform.id === 'linkedin'
+              const isNotImplemented = platform.id === 'twitter' || platform.id === 'linkedin'
               return (
                 <button
                   key={platform.id}
@@ -399,13 +453,42 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
           </div>
         )}
 
+        {/* Instagram Account Selector - shown when Instagram is selected */}
+        {isInstagramSelected && connectedInstagramAccounts.length > 0 && (
+          <div className="form-group">
+            <label htmlFor="instagramAccount">Instagram Account</label>
+            <span className="hint-text">Instagram Feed (Image)</span>
+            {loadingPages ? (
+              <div className="loading-pages">Loading accounts...</div>
+            ) : (
+              <select
+                id="instagramAccount"
+                value={selectedInstagramAccountId}
+                onChange={(e) => setSelectedInstagramAccountId(e.target.value)}
+                className="page-select"
+                disabled={!isComposerEnabled && connectedInstagramAccounts.length > 0}
+              >
+                <option value="">Select an account...</option>
+                {connectedInstagramAccounts.map(account => (
+                  <option key={account.id} value={account.id}>
+                    @{account.username} {account.pageName && `(${account.pageName})`}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        )}
+
         <div className="form-group">
-          <label htmlFor="content">Post Content</label>
+          <label htmlFor="content">
+            {isInstagramSelected ? 'Caption' : 'Post Content'}
+            {isInstagramSelected && <span className="hint-text" style={{ marginLeft: '8px' }}>Include #hashtags in caption</span>}
+          </label>
           <textarea
             id="content"
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder="What do you want to share?"
+            placeholder={isInstagramSelected ? "Write your caption... #hashtags welcome" : "What do you want to share?"}
             rows={4}
             className={isTextTooLong ? 'error' : ''}
             disabled={!isComposerEnabled}
@@ -451,7 +534,19 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
         </div>
 
         <div className="form-group">
-          <label>Media (optional)</label>
+          <label>
+            {isInstagramSelected ? 'Image (required)' : 'Media (optional)'}
+          </label>
+          {isInstagramSelected && !mediaUrl && (
+            <div className="ig-media-hint">
+              Instagram Feed posts require exactly 1 image. Video and carousel are not supported yet.
+            </div>
+          )}
+          {isInstagramWithVideo && (
+            <div className="media-validation-summary">
+              <strong>Video not supported for Instagram Feed posts.</strong> Please remove the video and upload an image instead.
+            </div>
+          )}
           <MediaUpload
             key={uploadKey}
             onUploadComplete={(s3Key, type) => {

@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import type { ConnectedPage } from '../types/meta'
+import type { ConnectedPage, ConnectedInstagramAccount } from '../types/meta'
 
 export interface ComposerEnabledState {
   /** Whether the composer is enabled and interactive */
@@ -21,12 +21,16 @@ interface UseComposerEnabledOptions {
   selectedPlatforms: string[]
   /** List of connected Facebook pages */
   connectedPages: ConnectedPage[]
-  /** Whether a Facebook account is connected */
+  /** Whether a Facebook/Meta account is connected */
   isAccountConnected: boolean
   /** Selected Facebook page ID */
   selectedPageId: string
   /** Whether pages are currently being loaded */
   loadingPages: boolean
+  /** List of connected Instagram business accounts */
+  connectedInstagramAccounts: ConnectedInstagramAccount[]
+  /** Selected Instagram account ID */
+  selectedInstagramAccountId: string
 }
 
 /**
@@ -34,7 +38,7 @@ interface UseComposerEnabledOptions {
  *
  * The composer is enabled only when:
  * 1. A platform is selected AND
- * 2. For platforms that require a target (Facebook), a connected target is selected AND
+ * 2. For platforms that require a target (Facebook/Instagram), a connected target is selected AND
  * 3. That target exists in the fetched connected targets list
  *
  * When disabled, all composer inputs, AI features, and scheduling controls should be non-interactive.
@@ -45,13 +49,15 @@ export function useComposerEnabled({
   isAccountConnected,
   selectedPageId,
   loadingPages,
+  connectedInstagramAccounts,
+  selectedInstagramAccountId,
 }: UseComposerEnabledOptions): ComposerEnabledState {
   return useMemo(() => {
     const hasPlatformSelected = selectedPlatforms.length > 0
     const selectedPlatform = selectedPlatforms[0]
 
     // Check if the selected platform requires a connected target
-    const platformRequiresTarget = selectedPlatform === 'facebook'
+    const platformRequiresTarget = selectedPlatform === 'facebook' || selectedPlatform === 'instagram'
 
     // Check if we have a valid target for platforms that need one
     let hasValidTarget = true
@@ -59,23 +65,47 @@ export function useComposerEnabled({
     let disabledMessage: string | null = null
 
     // Check if selected platform is not yet implemented
-    // Instagram, Twitter, and LinkedIn are coming soon
-    const isInstagramSelected = selectedPlatform === 'instagram'
+    // Twitter and LinkedIn are coming soon (Instagram is now implemented)
     const isTwitterSelected = selectedPlatform === 'twitter'
     const isLinkedInSelected = selectedPlatform === 'linkedin'
-    const isPlatformNotImplemented = isInstagramSelected || isTwitterSelected || isLinkedInSelected
+    const isPlatformNotImplemented = isTwitterSelected || isLinkedInSelected
 
     if (!hasPlatformSelected) {
       hasValidTarget = false
       disabledReason = 'no_platform'
       disabledMessage = 'Select a platform to start creating your post.'
     } else if (isPlatformNotImplemented) {
-      // Instagram, Twitter, and LinkedIn are coming soon
       hasValidTarget = false
       disabledReason = 'platform_not_implemented'
-      const platformName = isInstagramSelected ? 'Instagram' : isTwitterSelected ? 'Twitter/X' : 'LinkedIn'
+      const platformName = isTwitterSelected ? 'Twitter/X' : 'LinkedIn'
       disabledMessage = `${platformName} integration coming soon.`
-    } else if (platformRequiresTarget) {
+    } else if (selectedPlatform === 'instagram') {
+      // Instagram requires an IG business account selection
+      if (loadingPages) {
+        hasValidTarget = false
+        disabledReason = 'loading'
+        disabledMessage = 'Loading connected accounts...'
+      } else if (!isAccountConnected) {
+        hasValidTarget = false
+        disabledReason = 'no_account_connected'
+        disabledMessage = 'No Meta account connected. Connect your account to enable Instagram scheduling.'
+      } else if (connectedInstagramAccounts.length === 0) {
+        hasValidTarget = false
+        disabledReason = 'no_ig_accounts_connected'
+        disabledMessage = 'No Instagram Business Account connected. Link an Instagram account in Connected Accounts.'
+      } else if (!selectedInstagramAccountId) {
+        hasValidTarget = false
+        disabledReason = 'no_ig_account_selected'
+        disabledMessage = 'Select an Instagram account above to enable scheduling and AI features.'
+      } else {
+        const accountExists = connectedInstagramAccounts.some(a => a.id === selectedInstagramAccountId)
+        if (!accountExists) {
+          hasValidTarget = false
+          disabledReason = 'ig_account_not_found'
+          disabledMessage = 'Selected Instagram account is no longer connected. Please select a different account or reconnect in Connected Accounts.'
+        }
+      }
+    } else if (selectedPlatform === 'facebook') {
       // Facebook requires a page selection
       if (loadingPages) {
         hasValidTarget = false
@@ -114,7 +144,7 @@ export function useComposerEnabled({
       platformRequiresTarget,
       hasValidTarget,
     }
-  }, [selectedPlatforms, connectedPages, isAccountConnected, selectedPageId, loadingPages])
+  }, [selectedPlatforms, connectedPages, isAccountConnected, selectedPageId, loadingPages, connectedInstagramAccounts, selectedInstagramAccountId])
 }
 
 /**
