@@ -106,7 +106,7 @@ public class Startup
         ConfigureInsightsService(services, featureSettings);
 
         // Configure AI services (Gemini)
-        ConfigureAiServices(services);
+        ConfigureAiServices(services, Configuration);
 
         // Configure CORS for frontend
         services.AddCors(options =>
@@ -241,10 +241,13 @@ public class Startup
         }
     }
 
-    private static void ConfigureAiServices(IServiceCollection services)
+    private static void ConfigureAiServices(IServiceCollection services, IConfiguration configuration)
     {
         // Memory cache for AI responses and rate limiting
         services.AddMemoryCache();
+
+        services.Configure<AiRateLimiterOptions>(
+            configuration.GetSection("Ai:RateLimiter"));
 
         // Gemini settings from environment variables only (no hardcoded defaults)
         var apiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? string.Empty;
