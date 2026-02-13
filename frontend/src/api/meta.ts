@@ -10,6 +10,7 @@ import type {
   MetaUpdatePagesRequest,
   FacebookPage,
   ValidationLimitsResponse,
+  InstagramDiscoveryResponse,
 } from '../types/meta'
 
 const API_URL = 'http://localhost:5122/api'
@@ -110,6 +111,15 @@ export const metaApi = {
       body: JSON.stringify(request),
     })
     if (!response.ok) throw new Error('Failed to update Meta connection')
+    return response.json()
+  },
+
+  /**
+   * Get Instagram eligibility for all connected Facebook Pages
+   */
+  async getInstagramEligibility(): Promise<InstagramDiscoveryResponse> {
+    const response = await fetch(`${API_URL}/meta/instagram/eligibility`)
+    if (!response.ok) throw new Error('Failed to get Instagram eligibility')
     return response.json()
   },
 

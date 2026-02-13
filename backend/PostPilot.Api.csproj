@@ -6,6 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="PostPilot.Api.Tests" />
+  </ItemGroup>
+
   <!-- Exclude test project from compilation -->
   <ItemGroup>
     <Compile Remove="PostPilot.Api.Tests\**" />

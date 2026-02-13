@@ -109,6 +109,31 @@ export interface MetaUpdatePagesRequest {
   selectedInstagramIds: string[]
 }
 
+// Instagram eligibility discovery
+export type InstagramEligibilityStatus =
+  | 'Connected'
+  | 'NotLinked'
+  | 'MissingPermission'
+  | 'NotProfessional'
+  | 'Unknown'
+
+export interface InstagramEligibilityDto {
+  pageId: string
+  pageName: string
+  igUserId: string | null
+  igUsername: string | null
+  igDisplayName: string | null
+  igProfilePictureUrl: string | null
+  eligibilityStatus: InstagramEligibilityStatus
+  reason: string
+}
+
+export interface InstagramDiscoveryResponse {
+  pages: InstagramEligibilityDto[]
+  totalPages: number
+  linkedCount: number
+}
+
 // Connected target display type (unified for UI)
 export interface ConnectedTarget {
   id: string

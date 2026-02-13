@@ -110,6 +110,33 @@ public record MetaAvailablePagesResponse(
     List<FacebookPageDto> Pages
 );
 
+// Instagram eligibility discovery (per-page breakdown)
+public enum InstagramEligibilityStatus
+{
+    Connected,
+    NotLinked,
+    MissingPermission,
+    NotProfessional,
+    Unknown
+}
+
+public record InstagramEligibilityDto(
+    string PageId,
+    string PageName,
+    string? IgUserId,
+    string? IgUsername,
+    string? IgDisplayName,
+    string? IgProfilePictureUrl,
+    InstagramEligibilityStatus EligibilityStatus,
+    string Reason
+);
+
+public record InstagramDiscoveryResponse(
+    List<InstagramEligibilityDto> Pages,
+    int TotalPages,
+    int LinkedCount
+);
+
 // Validation Limits
 public record ValidationLimitsResponse(
     VoiceProfileLimits VoiceProfile,

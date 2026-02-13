@@ -49,4 +49,15 @@ public interface IMetaOAuthService
     /// Disconnect Meta - revoke tokens and remove connection
     /// </summary>
     Task DisconnectAsync(Guid userId);
+
+    /// <summary>
+    /// Discover Instagram eligibility for all connected Facebook Pages.
+    /// Returns per-page breakdown with status (Connected, NotLinked, etc.)
+    /// </summary>
+    Task<InstagramDiscoveryResponse> DiscoverInstagramEligibilityAsync(Guid userId);
+
+    /// <summary>
+    /// Debug: returns raw Graph API responses for Instagram discovery diagnostics
+    /// </summary>
+    Task<object> DebugInstagramDiscoveryAsync(Guid userId);
 }

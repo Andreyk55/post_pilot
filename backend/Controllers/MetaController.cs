@@ -221,6 +221,47 @@ public class MetaController : ControllerBase
     }
 
     /// <summary>
+    /// Discover Instagram eligibility for all connected Facebook Pages
+    /// </summary>
+    [HttpGet("instagram/eligibility")]
+    public async Task<ActionResult<InstagramDiscoveryResponse>> GetInstagramEligibility()
+    {
+        try
+        {
+            var result = await _metaOAuthService.DiscoverInstagramEligibilityAsync(CurrentUserId);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Instagram eligibility check failed: {Message}", ex.Message);
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to check Instagram eligibility");
+            return StatusCode(500, new { error = "Failed to check Instagram eligibility" });
+        }
+    }
+
+    /// <summary>
+    /// Debug: raw Graph API responses for Instagram discovery diagnostics
+    /// </summary>
+    [HttpGet("instagram/debug")]
+    public async Task<ActionResult<object>> DebugInstagramDiscovery()
+    {
+        try
+        {
+            var result = await _metaOAuthService.DebugInstagramDiscoveryAsync(CurrentUserId);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to debug Instagram discovery");
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Get validation limits for the application
     /// </summary>
     [HttpGet("limits")]

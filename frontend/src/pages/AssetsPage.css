@@ -343,6 +343,23 @@
   margin: 0;
 }
 
+/* Instagram eligibility status badges */
+.asset-status.not-linked {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.15);
+}
+
+/* Instagram help text */
+.ig-help-text {
+  padding: 0.75rem 1rem;
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+  color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  text-align: center;
+}
+
 /* Spinner */
 .spinner {
   width: 16px;
