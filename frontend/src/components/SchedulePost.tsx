@@ -244,6 +244,10 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
         if (platformId === 'instagram' && connectedInstagramAccounts.length === 1) {
           setSelectedInstagramAccountId(connectedInstagramAccounts[0].id)
         }
+        // Auto-select Facebook page if switching to Facebook and only one exists
+        if (platformId === 'facebook' && connectedPages.length === 1) {
+          setSelectedPageId(connectedPages[0].id)
+        }
       }
     } else {
       // Multi-select mode: toggle selection
@@ -440,7 +444,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
                 value={selectedPageId}
                 onChange={(e) => setSelectedPageId(e.target.value)}
                 className="page-select"
-                disabled={!isComposerEnabled && connectedPages.length > 0}
+                disabled={loadingPages}
               >
                 <option value="">Select a page...</option>
                 {connectedPages.map(page => (
@@ -466,7 +470,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
                 value={selectedInstagramAccountId}
                 onChange={(e) => setSelectedInstagramAccountId(e.target.value)}
                 className="page-select"
-                disabled={!isComposerEnabled && connectedInstagramAccounts.length > 0}
+                disabled={loadingPages}
               >
                 <option value="">Select an account...</option>
                 {connectedInstagramAccounts.map(account => (
