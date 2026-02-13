@@ -933,21 +933,111 @@ RULES:
     protected static AiMediaCaptionIdeasResponse ParseImageCaptionResponse(string responseText)
     {
         var json = ExtractJson(responseText);
-        var parsed = JsonSerializer.Deserialize<VariantsJsonResponse>(json, JsonOptions)
-            ?? throw new GeminiApiException("Failed to parse image caption response", 500);
+
+        VariantsJsonResponse? parsed = null;
+        try
+        {
+            parsed = JsonSerializer.Deserialize<VariantsJsonResponse>(json, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            parsed = TrySalvagePartialImageCaptionJson(json);
+        }
+
+        if (parsed == null || parsed.Variants.Count == 0)
+        {
+            throw new GeminiApiException(
+                $"Failed to parse image caption response. Raw ({responseText.Length} chars): {(responseText.Length > 500 ? responseText[..500] + "..." : responseText)}",
+                500);
+        }
 
         var variants = parsed.Variants
-            .Select(v => new AiMediaCaptionVariant(v.Title, v.Text))
+            .Where(v => !string.IsNullOrWhiteSpace(v.Text))
+            .Select(v => new AiMediaCaptionVariant(
+                string.IsNullOrWhiteSpace(v.Title) ? "Caption" : v.Title,
+                v.Text.Trim()))
             .ToList();
 
+        if (variants.Count == 0)
+        {
+            throw new GeminiApiException("No valid caption variants in response", 500);
+        }
+
         return new AiMediaCaptionIdeasResponse(AiMediaAction.CaptionIdeas, variants);
+    }
+
+    protected static VariantsJsonResponse? TrySalvagePartialImageCaptionJson(string json)
+    {
+        try
+        {
+            var variants = new List<VariantItem>();
+
+            var variantsStart = json.IndexOf("\"variants\"", StringComparison.OrdinalIgnoreCase);
+            if (variantsStart < 0) return null;
+
+            var arrayStart = json.IndexOf('[', variantsStart);
+            if (arrayStart < 0) return null;
+
+            var currentPos = arrayStart + 1;
+
+            while (currentPos < json.Length)
+            {
+                var objectStart = json.IndexOf('{', currentPos);
+                if (objectStart < 0) break;
+
+                var objectEnd = FindMatchingBrace(json, objectStart);
+                if (objectEnd < 0) break;
+
+                var objectJson = json.Substring(objectStart, objectEnd - objectStart + 1);
+                try
+                {
+                    var variant = JsonSerializer.Deserialize<VariantItem>(objectJson, JsonOptions);
+                    if (variant != null && !string.IsNullOrWhiteSpace(variant.Text))
+                    {
+                        variants.Add(variant);
+                    }
+                }
+                catch
+                {
+                    // Skip unparseable object
+                }
+
+                currentPos = objectEnd + 1;
+            }
+
+            if (variants.Count > 0)
+            {
+                return new VariantsJsonResponse { Variants = variants };
+            }
+        }
+        catch
+        {
+            // If salvage fails, return null
+        }
+
+        return null;
     }
 
     protected static AiImageQualityCheckResponse ParseImageQualityResponse(string responseText)
     {
         var json = ExtractJson(responseText);
-        var parsed = JsonSerializer.Deserialize<PreFlightJsonResponse>(json, JsonOptions)
-            ?? throw new GeminiApiException("Failed to parse image quality response", 500);
+
+        PreFlightJsonResponse? parsed = null;
+        try
+        {
+            parsed = JsonSerializer.Deserialize<PreFlightJsonResponse>(json, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            parsed = TrySalvagePartialPreFlightJson(json);
+        }
+
+        if (parsed == null)
+        {
+            throw new GeminiApiException(
+                $"Failed to parse image quality response. Raw ({responseText.Length} chars): {(responseText.Length > 500 ? responseText[..500] + "..." : responseText)}",
+                500);
+        }
 
         var issues = parsed.Issues
             .Select(i => new AiImageQualityIssue(
@@ -962,8 +1052,29 @@ RULES:
     protected static AiAltTextResponse ParseAltTextResponse(string responseText)
     {
         var json = ExtractJson(responseText);
-        var parsed = JsonSerializer.Deserialize<AltTextJsonResponse>(json, JsonOptions)
-            ?? throw new GeminiApiException("Failed to parse alt text response", 500);
+
+        AltTextJsonResponse? parsed = null;
+        try
+        {
+            parsed = JsonSerializer.Deserialize<AltTextJsonResponse>(json, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            // Try to extract alt text with regex as fallback
+            var altTextMatch = System.Text.RegularExpressions.Regex.Match(
+                json, "\"altText\"\\s*:\\s*\"([^\"]*)\"", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (altTextMatch.Success && !string.IsNullOrWhiteSpace(altTextMatch.Groups[1].Value))
+            {
+                return new AiAltTextResponse(AiMediaAction.AltText, altTextMatch.Groups[1].Value);
+            }
+        }
+
+        if (parsed == null || string.IsNullOrWhiteSpace(parsed.AltText))
+        {
+            throw new GeminiApiException(
+                $"Failed to parse alt text response. Raw ({responseText.Length} chars): {(responseText.Length > 500 ? responseText[..500] + "..." : responseText)}",
+                500);
+        }
 
         return new AiAltTextResponse(AiMediaAction.AltText, parsed.AltText);
     }

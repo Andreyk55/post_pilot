@@ -14,6 +14,7 @@ namespace PostPilot.Api.Services.Ai;
 public class GoogleAiClientRouter : IGeminiClient
 {
     private readonly IGeminiClient _client;
+    private readonly IGeminiClient _visionClient;
     private readonly ILogger<GoogleAiClientRouter> _logger;
 
     public GoogleAiClientRouter(
@@ -47,6 +48,30 @@ public class GoogleAiClientRouter : IGeminiClient
                 settings,
                 cache,
                 loggerFactory.CreateLogger<GeminiTextClient>());
+        }
+
+        // Vision client: use dedicated VisionModel if configured, otherwise fall back to primary client
+        if (!string.IsNullOrEmpty(settings.VisionModel))
+        {
+            var visionSettings = new GeminiSettings
+            {
+                ApiKey = settings.ApiKey,
+                Model = settings.VisionModel,
+                BaseUrl = settings.BaseUrl,
+                TimeoutSeconds = settings.TimeoutSeconds
+            };
+            _logger.LogInformation(
+                "Using dedicated vision model '{VisionModel}' for image analysis.",
+                settings.VisionModel);
+            _visionClient = new GeminiTextClient(
+                httpClient,
+                visionSettings,
+                cache,
+                loggerFactory.CreateLogger<GeminiTextClient>());
+        }
+        else
+        {
+            _visionClient = _client;
         }
     }
 
@@ -108,7 +133,7 @@ public class GoogleAiClientRouter : IGeminiClient
         string language,
         CancellationToken cancellationToken = default)
     {
-        return _client.GenerateImageCaptionIdeasAsync(imageBytes, imageMimeType, platform, existingText, language, cancellationToken);
+        return _visionClient.GenerateImageCaptionIdeasAsync(imageBytes, imageMimeType, platform, existingText, language, cancellationToken);
     }
 
     public Task<AiImageQualityCheckResponse> CheckImageQualityAsync(
@@ -116,7 +141,7 @@ public class GoogleAiClientRouter : IGeminiClient
         string imageMimeType,
         CancellationToken cancellationToken = default)
     {
-        return _client.CheckImageQualityAsync(imageBytes, imageMimeType, cancellationToken);
+        return _visionClient.CheckImageQualityAsync(imageBytes, imageMimeType, cancellationToken);
     }
 
     public Task<AiAltTextResponse> GenerateAltTextAsync(
@@ -124,6 +149,6 @@ public class GoogleAiClientRouter : IGeminiClient
         string imageMimeType,
         CancellationToken cancellationToken = default)
     {
-        return _client.GenerateAltTextAsync(imageBytes, imageMimeType, cancellationToken);
+        return _visionClient.GenerateAltTextAsync(imageBytes, imageMimeType, cancellationToken);
     }
 }

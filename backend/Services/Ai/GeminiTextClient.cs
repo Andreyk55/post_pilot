@@ -189,7 +189,11 @@ public class GeminiTextClient : GoogleAiClientBase, IGeminiClient
         }
 
         var prompt = BuildImageCaptionPrompt(platform, existingText, language);
-        var responseText = await CallVisionAsync(prompt, imageBytes, imageMimeType, maxOutputTokens: 512, cancellationToken: cancellationToken);
+        var responseText = await CallVisionAsync(prompt, imageBytes, imageMimeType, maxOutputTokens: 1024, cancellationToken: cancellationToken);
+
+        Logger.LogDebug("Image caption raw response ({Length} chars): {Response}",
+            responseText.Length, responseText.Length > 2000 ? responseText[..2000] + "..." : responseText);
+
         var result = ParseImageCaptionResponse(responseText);
 
         Cache.Set(cacheKey, result, CacheDuration);
@@ -211,7 +215,11 @@ public class GeminiTextClient : GoogleAiClientBase, IGeminiClient
         }
 
         var prompt = BuildImageQualityPrompt();
-        var responseText = await CallVisionAsync(prompt, imageBytes, imageMimeType, maxOutputTokens: 512, cancellationToken: cancellationToken);
+        var responseText = await CallVisionAsync(prompt, imageBytes, imageMimeType, maxOutputTokens: 1024, cancellationToken: cancellationToken);
+
+        Logger.LogDebug("Image quality raw response ({Length} chars): {Response}",
+            responseText.Length, responseText.Length > 2000 ? responseText[..2000] + "..." : responseText);
+
         var result = ParseImageQualityResponse(responseText);
 
         Cache.Set(cacheKey, result, CacheDuration);
@@ -233,7 +241,11 @@ public class GeminiTextClient : GoogleAiClientBase, IGeminiClient
         }
 
         var prompt = BuildAltTextPrompt();
-        var responseText = await CallVisionAsync(prompt, imageBytes, imageMimeType, maxOutputTokens: 256, cancellationToken: cancellationToken);
+        var responseText = await CallVisionAsync(prompt, imageBytes, imageMimeType, maxOutputTokens: 512, cancellationToken: cancellationToken);
+
+        Logger.LogDebug("Alt text raw response ({Length} chars): {Response}",
+            responseText.Length, responseText.Length > 2000 ? responseText[..2000] + "..." : responseText);
+
         var result = ParseAltTextResponse(responseText);
 
         Cache.Set(cacheKey, result, CacheDuration);

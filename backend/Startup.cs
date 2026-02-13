@@ -254,10 +254,14 @@ public class Startup
         var model = Environment.GetEnvironmentVariable("GEMINI_MODEL")
             ?? throw new InvalidOperationException("Required environment variable 'GEMINI_MODEL' is missing.");
 
+        // Optional separate vision model for image analysis (needed when primary model is Gemma)
+        var visionModel = Environment.GetEnvironmentVariable("GEMINI_VISION_MODEL");
+
         var geminiSettings = new GeminiSettings
         {
             ApiKey = apiKey,
-            Model = model
+            Model = model,
+            VisionModel = visionModel
         };
 
         services.AddSingleton(geminiSettings);

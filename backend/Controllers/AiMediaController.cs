@@ -110,9 +110,12 @@ public class AiMediaController : ControllerBase
         }
         catch (GeminiApiException ex) when (ex.StatusCode == 413 || ex.StatusCode == 400)
         {
+            _logger.LogWarning(ex, "Gemini media error for asset {AssetUrl}: Status={StatusCode}, Message={Message}",
+                request.AssetUrl, ex.StatusCode, ex.Message);
+
             return Problem(
                 title: "Media processing error",
-                detail: "Media too large or unsupported format.",
+                detail: $"Media too large or unsupported format. ({ex.Message})",
                 statusCode: StatusCodes.Status413PayloadTooLarge);
         }
         catch (GeminiApiException ex) when (ex.StatusCode == 504)
