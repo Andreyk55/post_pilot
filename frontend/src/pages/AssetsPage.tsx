@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import './AssetsPage.css'
 import { metaApi } from '../api/meta'
-import type { MetaConnection, FacebookPage, InstagramAccount, ConnectedPage, ConnectedInstagramAccount, InstagramEligibilityDto } from '../types/meta'
+import type { MetaConnection, FacebookPage, ConnectedPage, ConnectedInstagramAccount, InstagramEligibilityDto } from '../types/meta'
 
 interface AssetsPageProps {
   onNavigate: (page: string) => void
@@ -12,16 +12,14 @@ export function AssetsPage({ onNavigate }: AssetsPageProps) {
   const [metaConnection, setMetaConnection] = useState<MetaConnection | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Available pages/accounts from Meta (not yet connected)
+  // Available pages from Meta (not yet connected)
   const [availablePages, setAvailablePages] = useState<FacebookPage[]>([])
-  const [availableInstagram, setAvailableInstagram] = useState<InstagramAccount[]>([])
   const [igEligibility, setIgEligibility] = useState<InstagramEligibilityDto[]>([])
   const [loadingPages, setLoadingPages] = useState(false)
 
   // Connection states
   const [connectingPageIds, setConnectingPageIds] = useState<Set<string>>(new Set())
   const [disconnectingPageIds, setDisconnectingPageIds] = useState<Set<string>>(new Set())
-  const [connectingIgIds, setConnectingIgIds] = useState<Set<string>>(new Set())
   const [disconnectingIgIds, setDisconnectingIgIds] = useState<Set<string>>(new Set())
 
   // Load Meta connection on mount
@@ -53,13 +51,6 @@ export function AssetsPage({ onNavigate }: AssetsPageProps) {
       setLoadingPages(true)
       const { pages } = await metaApi.getAvailablePages()
       setAvailablePages(pages)
-
-      // Discover Instagram accounts for all pages
-      if (pages.length > 0) {
-        const pageIds = pages.map(p => p.id)
-        const igResponse = await metaApi.discoverInstagram({ tempToken: '', pageIds })
-        setAvailableInstagram(igResponse.instagramAccounts)
-      }
 
       // Load Instagram eligibility (per-page breakdown)
       try {
@@ -135,39 +126,6 @@ export function AssetsPage({ onNavigate }: AssetsPageProps) {
     }
   }
 
-  const handleConnectInstagram = async (ig: InstagramAccount) => {
-    if (!metaConnection) return
-
-    // Check if the linked page is connected
-    const linkedPageConnected = metaConnection.pages.some(p => p.pageId === ig.pageId)
-    if (!linkedPageConnected) {
-      alert(`Please connect the "${ig.pageName}" Facebook Page first before connecting this Instagram account.`)
-      return
-    }
-
-    setConnectingIgIds(prev => new Set(prev).add(ig.id))
-    try {
-      const currentPageIds = metaConnection.pages.map(p => p.pageId)
-      const currentIgIds = metaConnection.instagramAccounts.map(a => a.igBusinessId)
-
-      await metaApi.updateConnection({
-        selectedPageIds: currentPageIds,
-        selectedInstagramIds: [...currentIgIds, ig.id]
-      })
-
-      await loadMetaConnection()
-    } catch (err) {
-      console.error('Failed to connect Instagram:', err)
-      alert('Failed to connect Instagram account. Please try again.')
-    } finally {
-      setConnectingIgIds(prev => {
-        const next = new Set(prev)
-        next.delete(ig.id)
-        return next
-      })
-    }
-  }
-
   const handleDisconnectInstagram = async (ig: ConnectedInstagramAccount) => {
     if (!metaConnection) return
 
@@ -201,13 +159,6 @@ export function AssetsPage({ onNavigate }: AssetsPageProps) {
     if (!metaConnection) return availablePages
     const connectedPageIds = new Set(metaConnection.pages.map(p => p.pageId))
     return availablePages.filter(p => !connectedPageIds.has(p.id))
-  }
-
-  // Get Instagram accounts that are available but not yet connected
-  const getUnconnectedInstagram = () => {
-    if (!metaConnection) return availableInstagram
-    const connectedIgIds = new Set(metaConnection.instagramAccounts.map(ig => ig.igBusinessId))
-    return availableInstagram.filter(ig => !connectedIgIds.has(ig.id))
   }
 
   // Loading state
@@ -252,7 +203,6 @@ export function AssetsPage({ onNavigate }: AssetsPageProps) {
   }
 
   const unconnectedPages = getUnconnectedPages()
-  const unconnectedInstagram = getUnconnectedInstagram()
 
   return (
     <div className="assets-page">
@@ -381,21 +331,23 @@ export function AssetsPage({ onNavigate }: AssetsPageProps) {
           </div>
         </div>
 
-        {/* Connected Instagram Accounts */}
-        {metaConnection.instagramAccounts.length > 0 && (
-          <div className="assets-list">
-            <h3 className="list-subtitle">Connected Accounts</h3>
-            {metaConnection.instagramAccounts.map(ig => (
-              <div key={ig.id} className="asset-item connected">
+        {/* Section A: Connected accounts — IG accounts enabled in PostPilot (DB state) */}
+        <div className="assets-list">
+          <h3 className="list-subtitle">Connected accounts</h3>
+          {metaConnection.instagramAccounts.length > 0 ? (
+            metaConnection.instagramAccounts.map(ig => (
+              <div key={ig.igBusinessId} className="asset-item connected">
                 <div className="asset-avatar instagram">
                   {ig.profilePictureUrl ? (
                     <img src={ig.profilePictureUrl} alt={ig.username} />
                   ) : (
-                    ig.username.charAt(0).toUpperCase()
+                    (ig.username ?? ig.name ?? '?').charAt(0).toUpperCase()
                   )}
                 </div>
                 <div className="asset-details">
-                  <span className="asset-name">@{ig.username}</span>
+                  <span className="asset-name">
+                    {ig.username ? `@${ig.username}` : ig.name ?? 'Instagram Account'}
+                  </span>
                   <span className="asset-meta">Linked to {ig.pageName}</span>
                 </div>
                 <div className="asset-status connected">
@@ -420,113 +372,58 @@ export function AssetsPage({ onNavigate }: AssetsPageProps) {
                   )}
                 </button>
               </div>
-            ))}
-          </div>
-        )}
+            ))
+          ) : (
+            <div className="section-empty">
+              <p>No Instagram accounts enabled yet. Connect a Facebook Page that has a linked Instagram professional account.</p>
+            </div>
+          )}
+        </div>
 
-        {/* Unconnected Instagram Accounts */}
-        {unconnectedInstagram.length > 0 && (
+        {/* Section B: Instagram linked Pages — link status in Meta (per Page), discovery info only */}
+        {!loadingPages && (
           <div className="assets-list">
-            <h3 className="list-subtitle">Available Accounts</h3>
-            {unconnectedInstagram.map(ig => {
-              const linkedPageConnected = metaConnection.pages.some(p => p.pageId === ig.pageId)
-              return (
-                <div key={ig.id} className="asset-item">
-                  <div className="asset-avatar instagram">
-                    {ig.profilePictureUrl ? (
-                      <img src={ig.profilePictureUrl} alt={ig.username} />
-                    ) : (
-                      ig.username.charAt(0).toUpperCase()
-                    )}
+            <h3 className="list-subtitle">Instagram linked Pages</h3>
+            {igEligibility.length > 0 ? (
+              igEligibility.map(page => (
+                <div key={page.pageId} className={`asset-item ${page.eligibilityStatus === 'Connected' ? 'connected' : ''}`}>
+                  <div className="asset-avatar">
+                    {page.pageName.charAt(0).toUpperCase()}
                   </div>
                   <div className="asset-details">
-                    <span className="asset-name">@{ig.username}</span>
-                    <span className="asset-meta">
-                      Linked to {ig.pageName}
-                      {!linkedPageConnected && ' (Page not connected)'}
+                    <span className="asset-name">
+                      {page.pageName}
+                      {page.eligibilityStatus === 'Connected' && (
+                        <span className="ig-linked-label">
+                          {page.igUsername ? ` → @${page.igUsername}` : ' → Instagram linked'}
+                        </span>
+                      )}
                     </span>
+                    {page.eligibilityStatus !== 'Connected' && (
+                      <span className="asset-meta">
+                        No Instagram account is linked to this Facebook Page. Link an Instagram professional account in Meta Business Suite.
+                      </span>
+                    )}
                   </div>
-                  <button
-                    className={`connect-btn small ${!linkedPageConnected ? 'disabled' : ''}`}
-                    onClick={() => handleConnectInstagram(ig)}
-                    disabled={connectingIgIds.has(ig.id) || !linkedPageConnected}
-                    title={!linkedPageConnected ? 'Connect the linked Facebook Page first' : 'Connect account'}
-                  >
-                    {connectingIgIds.has(ig.id) ? (
-                      <>
-                        <span className="spinner small"></span>
-                        Connecting...
-                      </>
-                    ) : (
+                  <div className={`asset-status ${page.eligibilityStatus === 'Connected' ? 'connected' : 'not-linked'}`}>
+                    {page.eligibilityStatus === 'Connected' ? (
                       <>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <line x1="12" y1="5" x2="12" y2="19"></line>
-                          <line x1="5" y1="12" x2="19" y2="12"></line>
+                          <polyline points="20 6 9 17 4 12" />
                         </svg>
-                        Connect
+                        Linked
                       </>
+                    ) : (
+                      'Not linked'
                     )}
-                  </button>
+                  </div>
                 </div>
-              )
-            })}
-          </div>
-        )}
-
-        {/* Per-page Instagram eligibility breakdown - always shown when available */}
-        {igEligibility.length > 0 && !loadingPages && (
-          <div className="assets-list">
-            <h3 className="list-subtitle">Instagram Status by Page</h3>
-            {igEligibility.map(page => (
-              <div key={page.pageId} className={`asset-item ${page.eligibilityStatus === 'Connected' ? 'connected' : ''}`}>
-                <div className="asset-avatar">
-                  {page.igProfilePictureUrl ? (
-                    <img src={page.igProfilePictureUrl} alt={page.igUsername ?? page.pageName} />
-                  ) : (
-                    page.pageName.charAt(0).toUpperCase()
-                  )}
-                </div>
-                <div className="asset-details">
-                  <span className="asset-name">
-                    {page.igUsername ? `@${page.igUsername}` : page.pageName}
-                  </span>
-                  <span className="asset-meta">{page.reason}</span>
-                </div>
-                <div className={`asset-status ${page.eligibilityStatus === 'Connected' ? 'connected' : 'not-linked'}`}>
-                  {page.eligibilityStatus === 'Connected' ? (
-                    <>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                      Linked
-                    </>
-                  ) : page.eligibilityStatus === 'NotLinked' ? (
-                    'Not linked'
-                  ) : page.eligibilityStatus === 'MissingPermission' ? (
-                    'Missing permission'
-                  ) : page.eligibilityStatus === 'NotProfessional' ? (
-                    'Not professional'
-                  ) : (
-                    'Unknown'
-                  )}
-                </div>
-              </div>
-            ))}
-            {igEligibility.some(p => p.eligibilityStatus !== 'Connected') && (
-              <div className="ig-help-text">
-                <span>Link an Instagram professional account to your Facebook Page in Meta Business Suite.</span>
+              ))
+            ) : (
+              <div className="section-empty">
+                <p>No Facebook Pages found. Connect Meta and select at least one Page.</p>
               </div>
             )}
-          </div>
-        )}
-
-        {/* Empty state: no eligibility data at all */}
-        {metaConnection.instagramAccounts.length === 0 && unconnectedInstagram.length === 0 && igEligibility.length === 0 && !loadingPages && (
-          <div className="section-empty">
-            <p>No Instagram professional accounts found linked to your Facebook Pages.</p>
-            <span className="ig-help-text">
-              Link an Instagram professional account to your Facebook Page in Meta Business Suite.
-            </span>
           </div>
         )}
       </section>
