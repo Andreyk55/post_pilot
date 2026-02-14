@@ -79,6 +79,25 @@ public class Post
     /// </summary>
     public string? SelectedThumbnailUrl { get; set; }
 
+    /// <summary>
+    /// Instagram container creation ID returned from POST /{ig-user-id}/media.
+    /// Used for stateful video publishing: create container → poll status → publish.
+    /// Persisted so the publisher can resume polling across multiple attempts.
+    /// </summary>
+    public string? InstagramCreationId { get; set; }
+
+    /// <summary>
+    /// Number of times we've polled the IG container status while it's IN_PROGRESS.
+    /// Separate from RetryCount (which tracks actual failures).
+    /// If this exceeds MaxProcessingPollCount, the post fails with a timeout.
+    /// </summary>
+    public int ProcessingPollCount { get; set; }
+
+    /// <summary>
+    /// Maximum processing poll attempts before timing out (default ~10 minutes at 30s intervals).
+    /// </summary>
+    public const int MaxProcessingPollCount = 20;
+
     // Navigation properties
     public ConnectedPage? TargetPage { get; set; }
     public ConnectedInstagramAccount? TargetInstagramAccount { get; set; }

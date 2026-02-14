@@ -33,7 +33,9 @@
       "Bash(netstat:*)",
       "Bash(powershell:*)",
       "Bash(xargs:*)",
-      "Bash(dotnet restore:*)"
+      "Bash(dotnet restore:*)",
+      "Bash(dotnet ef database:*)",
+      "Bash(pushd:*)"
     ]
   }
 }

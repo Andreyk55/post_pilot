@@ -274,13 +274,14 @@ public class PostsController : ControllerBase
                 });
             }
 
-            // Instagram requires exactly 1 image
-            if (string.IsNullOrEmpty(request.MediaUrl) || (request.MediaType ?? MediaType.None) != MediaType.Image)
+            // Instagram requires exactly 1 media item (image or video)
+            var mediaType = request.MediaType ?? MediaType.None;
+            if (string.IsNullOrEmpty(request.MediaUrl) || (mediaType != MediaType.Image && mediaType != MediaType.Video))
             {
                 return BadRequest(new ProblemDetails
                 {
                     Title = "Invalid media",
-                    Detail = "Instagram Feed posts require exactly one image. Video and text-only posts are not supported yet.",
+                    Detail = "Instagram Feed posts require exactly one media item (image or video). Text-only posts are not supported.",
                     Status = StatusCodes.Status400BadRequest,
                 });
             }
@@ -404,12 +405,13 @@ public class PostsController : ControllerBase
                 });
             }
 
-            if (string.IsNullOrEmpty(request.MediaUrl) || (request.MediaType ?? MediaType.None) != MediaType.Image)
+            var updateMediaType = request.MediaType ?? MediaType.None;
+            if (string.IsNullOrEmpty(request.MediaUrl) || (updateMediaType != MediaType.Image && updateMediaType != MediaType.Video))
             {
                 return BadRequest(new ProblemDetails
                 {
                     Title = "Invalid media",
-                    Detail = "Instagram Feed posts require exactly one image.",
+                    Detail = "Instagram Feed posts require exactly one media item (image or video).",
                     Status = StatusCodes.Status400BadRequest,
                 });
             }

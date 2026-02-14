@@ -266,8 +266,8 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
     }
   }
 
-  // Instagram-specific validation
-  const isInstagramWithVideo = isInstagramSelected && mediaType === 'Video'
+  // Instagram requires exactly 1 media item (image or video)
+  const isInstagramMediaValid = !isInstagramSelected || (mediaUrl && (mediaType === 'Image' || mediaType === 'Video'))
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -287,8 +287,8 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
       return
     }
 
-    // Instagram requires exactly 1 image
-    if (isInstagramSelected && (!mediaUrl || mediaType !== 'Image')) {
+    // Instagram requires exactly 1 media item (image or video)
+    if (isInstagramSelected && (!mediaUrl || (mediaType !== 'Image' && mediaType !== 'Video'))) {
       return
     }
 
@@ -335,7 +335,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
     selectedPlatforms.length > 0 &&
     (!isFacebookSelected || selectedPageId) &&
     (!isInstagramSelected || selectedInstagramAccountId) &&
-    (!isInstagramSelected || (mediaUrl && mediaType === 'Image')) &&
+    isInstagramMediaValid &&
     !isUploading &&
     !isTextTooLong &&
     !hasInvalidMedia
@@ -461,7 +461,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
         {isInstagramSelected && connectedInstagramAccounts.length > 0 && (
           <div className="form-group">
             <label htmlFor="instagramAccount">Instagram Account</label>
-            <span className="hint-text">Instagram Feed (Image)</span>
+            <span className="hint-text">Instagram Feed</span>
             {loadingPages ? (
               <div className="loading-pages">Loading accounts...</div>
             ) : (
@@ -539,16 +539,11 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
 
         <div className="form-group">
           <label>
-            {isInstagramSelected ? 'Image (required)' : 'Media (optional)'}
+            {isInstagramSelected ? 'Media (required)' : 'Media (optional)'}
           </label>
           {isInstagramSelected && !mediaUrl && (
             <div className="ig-media-hint">
-              Instagram Feed posts require exactly 1 image. Video and carousel are not supported yet.
-            </div>
-          )}
-          {isInstagramWithVideo && (
-            <div className="media-validation-summary">
-              <strong>Video not supported for Instagram Feed posts.</strong> Please remove the video and upload an image instead.
+              Instagram Feed posts require exactly 1 media item. Carousel not supported yet.
             </div>
           )}
           <MediaUpload

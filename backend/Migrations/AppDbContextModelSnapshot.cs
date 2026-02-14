@@ -237,6 +237,9 @@ namespace PostPilot.Api.Migrations
                     b.Property<string>("ExternalPostUrl")
                         .HasColumnType("text");
 
+                    b.Property<string>("InstagramCreationId")
+                        .HasColumnType("text");
+
                     b.Property<int>("MaxRetries")
                         .HasColumnType("integer");
 
@@ -252,6 +255,9 @@ namespace PostPilot.Api.Migrations
                     b.Property<string>("Platform")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int>("ProcessingPollCount")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime?>("PublishedAt")
                         .HasColumnType("timestamp with time zone");
