@@ -452,6 +452,12 @@ public class PostsController : ControllerBase
             return NotFound();
         }
 
+        // Only allow deleting posts that haven't been published or are currently publishing
+        if (post.Status == PostStatus.Published || post.Status == PostStatus.Publishing)
+        {
+            return BadRequest(new { error = $"Cannot delete a post with status '{post.Status}'." });
+        }
+
         // Cancel any scheduled trigger before deleting
         await _scheduler.CancelScheduleAsync(post);
 
