@@ -15,6 +15,26 @@ function getEffectiveMediaType(post: Post): 'None' | 'Image' | 'Video' {
   return 'None'
 }
 
+// Helper to get the display label for the media badge
+function getMediaBadgeLabel(post: Post): string {
+  if (post.platform === 'Instagram' && post.instagramMediaType) {
+    switch (post.instagramMediaType) {
+      case 'Reels': return 'Reel'
+      case 'Image': return 'Image Post'
+      case 'CarouselAlbum': return 'Carousel'
+      case 'Video': return 'Video'
+      default: return getEffectiveMediaType(post) === 'Video' ? 'Video' : 'Image'
+    }
+  }
+  return getEffectiveMediaType(post) === 'Video' ? 'Video' : 'Image'
+}
+
+// Returns the CSS data-type value for badge coloring
+function getMediaBadgeType(post: Post): string {
+  if (post.instagramMediaType) return post.instagramMediaType.toLowerCase()
+  return getEffectiveMediaType(post) === 'Video' ? 'video' : 'image'
+}
+
 interface PostItemProps {
   post: Post
   onDelete: (id: string) => void
@@ -147,6 +167,11 @@ export function PostItem({ post, onDelete, cachedDetails, onDetailsFetched }: Po
             <span className={`status-indicator ${statusConfig.className}`}>
               {statusConfig.label}
             </span>
+            {post.platform === 'Instagram' && (
+              <span className="media-type-badge" data-type={getMediaBadgeType(post)}>
+                {getMediaBadgeLabel(post)}
+              </span>
+            )}
             {(post.targetPageName || post.targetInstagramAccountName) && (
               <span className="target-page">{post.targetPageName || post.targetInstagramAccountName}</span>
             )}
@@ -188,12 +213,13 @@ export function PostItem({ post, onDelete, cachedDetails, onDetailsFetched }: Po
             post.selectedThumbnailUrl ? (
               <div className="post-video-thumbnail custom-thumbnail">
                 <img src={post.selectedThumbnailUrl} alt="Video thumbnail" />
-                <span className="video-badge">Video</span>
+                <span className="video-badge">{getMediaBadgeLabel(post)}</span>
               </div>
             ) : (
               <VideoThumbnail
                 videoUrl={getMediaUrl(post.mediaUrl) || ''}
                 className="post-video-thumbnail"
+                badgeLabel={getMediaBadgeLabel(post)}
               />
             )
           )}

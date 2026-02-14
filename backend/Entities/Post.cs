@@ -80,6 +80,12 @@ public class Post
     public string? SelectedThumbnailUrl { get; set; }
 
     /// <summary>
+    /// Instagram media type (IMAGE, REELS, VIDEO, CAROUSEL_ALBUM) as returned by Graph API.
+    /// Populated after successful IG publish. Null for non-Instagram posts or pre-migration rows.
+    /// </summary>
+    public InstagramMediaType? InstagramMediaType { get; set; }
+
+    /// <summary>
     /// Instagram container creation ID returned from POST /{ig-user-id}/media.
     /// Used for stateful video publishing: create container → poll status → publish.
     /// Persisted so the publisher can resume polling across multiple attempts.

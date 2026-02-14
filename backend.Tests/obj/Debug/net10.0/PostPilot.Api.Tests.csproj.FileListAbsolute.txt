@@ -74,3 +74,4 @@ D:\dev\projects\post_pilot\backend.Tests\obj\Debug\net10.0\refint\PostPilot.Api.
 D:\dev\projects\post_pilot\backend.Tests\obj\Debug\net10.0\PostPilot.Api.Tests.pdb
 D:\dev\projects\post_pilot\backend.Tests\obj\Debug\net10.0\PostPilot.Api.Tests.genruntimeconfig.cache
 D:\dev\projects\post_pilot\backend.Tests\obj\Debug\net10.0\ref\PostPilot.Api.Tests.dll
+D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\.msCoverageSourceRootsMapping_PostPilot.Api.Tests

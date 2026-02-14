@@ -172,7 +172,7 @@ public class InstagramPublisher : IPostPublisher
                 // Try to fetch permalink
                 if (!string.IsNullOrEmpty(result.ExternalPostId))
                 {
-                    await TryFetchPermalinkAsync(post, result.ExternalPostId, accessToken, cancellationToken);
+                    await TryFetchMediaInfoAsync(post, result.ExternalPostId, accessToken, cancellationToken);
                 }
 
                 return result;
@@ -572,35 +572,98 @@ public class InstagramPublisher : IPostPublisher
     }
 
     /// <summary>
-    /// Tries to fetch the permalink for a published IG media and store it on the post.
+    /// Fetches media info (permalink + media_type) for a published IG media and stores both on the post.
+    /// Falls back to deriving media type from permalink URL if the Graph API call fails.
     /// </summary>
-    private async Task TryFetchPermalinkAsync(
+    private async Task TryFetchMediaInfoAsync(
         Post post, string mediaId, string accessToken, CancellationToken cancellationToken)
     {
         try
         {
-            var url = $"{GraphApiBaseUrl}/{mediaId}?fields=permalink&access_token={accessToken}";
+            var url = $"{GraphApiBaseUrl}/{mediaId}?fields=permalink,media_type&access_token={accessToken}";
             var response = await _httpClient.GetAsync(url, cancellationToken);
 
             if (response.IsSuccessStatusCode)
             {
                 var body = await response.Content.ReadAsStringAsync(cancellationToken);
-                var result = JsonSerializer.Deserialize<IgPermalinkResponse>(body);
+                var result = JsonSerializer.Deserialize<IgMediaInfoResponse>(body);
 
                 if (!string.IsNullOrEmpty(result?.Permalink))
                 {
                     post.ExternalPostUrl = result.Permalink;
-                    await _dbContext.SaveChangesAsync(cancellationToken);
-
-                    _logger.LogInformation("Stored permalink for IG post {PostId}: {Permalink}",
-                        post.Id, result.Permalink);
                 }
+
+                if (!string.IsNullOrEmpty(result?.MediaType))
+                {
+                    post.InstagramMediaType = ParseGraphMediaType(result.MediaType);
+
+                    _logger.LogInformation(
+                        "Stored IG media info for post {PostId}: permalink={Permalink}, media_type={MediaType}",
+                        post.Id, result.Permalink, result.MediaType);
+                }
+
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                return;
             }
+
+            _logger.LogWarning(
+                "IG media info fetch failed for post {PostId}: HTTP {StatusCode}",
+                post.Id, (int)response.StatusCode);
         }
         catch (Exception ex)
         {
-            // Non-critical - just log and continue
-            _logger.LogWarning(ex, "Failed to fetch permalink for IG post {PostId}", post.Id);
+            _logger.LogWarning(ex, "Failed to fetch media info for IG post {PostId}, using fallback", post.Id);
+        }
+
+        // Fallback: derive media type from permalink URL if we have one
+        TrySetMediaTypeFromPermalink(post);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Maps the Graph API media_type string to our InstagramMediaType enum.
+    /// </summary>
+    internal static Enums.InstagramMediaType ParseGraphMediaType(string graphMediaType)
+    {
+        return graphMediaType?.ToUpperInvariant() switch
+        {
+            "IMAGE" => Enums.InstagramMediaType.Image,
+            "VIDEO" => Enums.InstagramMediaType.Reels, // IG API returns VIDEO for Reels
+            "REELS" => Enums.InstagramMediaType.Reels,
+            "CAROUSEL_ALBUM" => Enums.InstagramMediaType.CarouselAlbum,
+            _ => Enums.InstagramMediaType.Unknown,
+        };
+    }
+
+    /// <summary>
+    /// Fallback: derive IG media type from the permalink URL pattern.
+    /// Only used when the Graph API media info call fails.
+    /// </summary>
+    private void TrySetMediaTypeFromPermalink(Post post)
+    {
+        if (string.IsNullOrEmpty(post.ExternalPostUrl))
+            return;
+
+        var url = post.ExternalPostUrl;
+        if (url.Contains("/reel/", StringComparison.OrdinalIgnoreCase) ||
+            url.Contains("/reels/", StringComparison.OrdinalIgnoreCase))
+        {
+            post.InstagramMediaType = Enums.InstagramMediaType.Reels;
+            _logger.LogInformation(
+                "Fallback: derived IG media type REELS from permalink for post {PostId}", post.Id);
+        }
+        else if (url.Contains("/p/", StringComparison.OrdinalIgnoreCase))
+        {
+            post.InstagramMediaType = Enums.InstagramMediaType.Image;
+            _logger.LogInformation(
+                "Fallback: derived IG media type IMAGE from permalink for post {PostId}", post.Id);
+        }
+        else
+        {
+            post.InstagramMediaType = Enums.InstagramMediaType.Unknown;
+            _logger.LogWarning(
+                "Fallback: could not derive IG media type from permalink for post {PostId}: {Url}",
+                post.Id, url);
         }
     }
 
@@ -789,10 +852,13 @@ internal class IgContainerStatusResponse
     public string? Id { get; set; }
 }
 
-internal class IgPermalinkResponse
+internal class IgMediaInfoResponse
 {
     [JsonPropertyName("permalink")]
     public string? Permalink { get; set; }
+
+    [JsonPropertyName("media_type")]
+    public string? MediaType { get; set; }
 
     [JsonPropertyName("id")]
     public string? Id { get; set; }

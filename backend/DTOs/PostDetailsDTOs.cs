@@ -31,5 +31,6 @@ public record PostDetailsDto(
     string? ErrorMessage,
     int RetryCount,
     PostEngagementDto? Engagement,
-    string? ExternalPostUrl
+    string? ExternalPostUrl,
+    string? InstagramMediaType
 );

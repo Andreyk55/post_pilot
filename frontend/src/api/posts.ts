@@ -26,6 +26,7 @@ export interface Post {
   errorMessage: string | null
   retryCount: number
   selectedThumbnailUrl: string | null
+  instagramMediaType: string | null
 }
 
 export interface CreatePostRequest {
@@ -75,6 +76,7 @@ export interface PostDetails {
   retryCount: number
   engagement: PostEngagement | null
   externalPostUrl: string | null
+  instagramMediaType: string | null
 }
 
 export const postsApi = {

@@ -240,6 +240,9 @@ namespace PostPilot.Api.Migrations
                     b.Property<string>("InstagramCreationId")
                         .HasColumnType("text");
 
+                    b.Property<int?>("InstagramMediaType")
+                        .HasColumnType("integer");
+
                     b.Property<int>("MaxRetries")
                         .HasColumnType("integer");
 

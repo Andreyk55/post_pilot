@@ -193,7 +193,8 @@ public class PostsController : ControllerBase
             ErrorMessage: post.ErrorMessage,
             RetryCount: post.RetryCount,
             Engagement: engagement,
-            ExternalPostUrl: externalPostUrl
+            ExternalPostUrl: externalPostUrl,
+            InstagramMediaType: post.InstagramMediaType?.ToString()
         );
     }
 
@@ -553,7 +554,8 @@ public record PostDto(
     string? ExternalPostUrl,
     string? ErrorMessage,
     int RetryCount,
-    string? SelectedThumbnailUrl
+    string? SelectedThumbnailUrl,
+    string? InstagramMediaType
 )
 {
     public static PostDto FromEntity(Post post) => new(
@@ -577,6 +579,7 @@ public record PostDto(
         post.ExternalPostUrl,
         post.ErrorMessage,
         post.RetryCount,
-        post.SelectedThumbnailUrl
+        post.SelectedThumbnailUrl,
+        post.InstagramMediaType?.ToString()
     );
 }

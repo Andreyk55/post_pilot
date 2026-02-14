@@ -15,6 +15,26 @@ function getEffectiveMediaType(post: Post): 'None' | 'Image' | 'Video' {
   return 'None'
 }
 
+// Helper to get the display label for the media badge
+function getMediaBadgeLabel(post: Post): string {
+  if (post.platform === 'Instagram' && post.instagramMediaType) {
+    switch (post.instagramMediaType) {
+      case 'Reels': return 'Reel'
+      case 'Image': return 'Image Post'
+      case 'CarouselAlbum': return 'Carousel'
+      case 'Video': return 'Video'
+      default: return getEffectiveMediaType(post) === 'Video' ? 'Video' : 'Image'
+    }
+  }
+  return getEffectiveMediaType(post) === 'Video' ? 'Video' : 'Image'
+}
+
+// Returns the CSS data-type value for badge coloring
+function getMediaBadgeType(post: Post): string {
+  if (post.instagramMediaType) return post.instagramMediaType.toLowerCase()
+  return getEffectiveMediaType(post) === 'Video' ? 'video' : 'image'
+}
+
 interface ScheduledPostsProps {
   posts: Post[]
   onDelete: (id: string) => void
@@ -212,7 +232,7 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
                     />
                     <span className="media-indicator">
                       <ImageIcon />
-                      Image
+                      {getMediaBadgeLabel(post)}
                     </span>
                   </div>
                 )}
@@ -233,7 +253,7 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
                     )}
                     <span className="media-indicator">
                       <VideoIcon />
-                      Video
+                      {getMediaBadgeLabel(post)}
                     </span>
                   </div>
                 )}
@@ -263,6 +283,11 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
                       <span className="status-dot" />
                       {post.status}
                     </span>
+                    {post.platform === 'Instagram' && (
+                      <span className="media-type-badge" data-type={getMediaBadgeType(post)}>
+                        {getMediaBadgeLabel(post)}
+                      </span>
+                    )}
                   </div>
                 </div>
 

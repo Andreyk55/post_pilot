@@ -5,12 +5,14 @@ interface VideoThumbnailProps {
   className?: string
   /** Time in seconds to capture the thumbnail from (default: 0 for first frame) */
   captureTime?: number
+  /** Optional label for the video badge (e.g. "Video", "Reel") */
+  badgeLabel?: string
 }
 
 // Simple in-memory cache for thumbnails
 const thumbnailCache = new Map<string, string>()
 
-export function VideoThumbnail({ videoUrl, className = '', captureTime = 0 }: VideoThumbnailProps) {
+export function VideoThumbnail({ videoUrl, className = '', captureTime = 0, badgeLabel }: VideoThumbnailProps) {
   const [thumbnail, setThumbnail] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
@@ -148,6 +150,7 @@ export function VideoThumbnail({ videoUrl, className = '', captureTime = 0 }: Vi
           <path d="M8 5v14l11-7z"/>
         </svg>
       </div>
+      {badgeLabel && <span className="video-badge">{badgeLabel}</span>}
     </div>
   )
 }
