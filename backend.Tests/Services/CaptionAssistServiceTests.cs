@@ -198,7 +198,7 @@ public class CaptionAssistServiceTests
 
     private class MockCaptionGenerator : ICaptionGenerator
     {
-        public Task<CaptionGenerateResult> GenerateAsync(Services.Ai.CaptionGenerateRequest request, CancellationToken cancellationToken = default)
+        public Task<CaptionGenerateResult> GenerateAsync(CaptionGenerateRequest request, CancellationToken cancellationToken = default)
         {
             return Task.FromResult(new CaptionGenerateResult(new[] { "Mock caption" }, Array.Empty<string>()));
         }

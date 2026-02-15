@@ -17,8 +17,9 @@ function getEffectiveMediaType(post: Post): 'None' | 'Image' | 'Video' {
 
 // Helper to get the display label for the media badge
 function getMediaBadgeLabel(post: Post): string {
-  // Carousel detection: from instagramMediaType (after publishing) or from mediaItems (before publishing)
-  if (post.platform === 'Instagram' && (post.mediaItems && post.mediaItems.length >= 2)) {
+  // Multi-image detection: IG carousel or FB multi-photo
+  if (post.mediaItems && post.mediaItems.length >= 2) {
+    if (post.platform === 'Facebook') return `Photos (${post.mediaItems.length})`
     return 'Carousel'
   }
   if (post.platform === 'Instagram' && post.instagramMediaType) {
@@ -238,7 +239,10 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
                     />
                     <span className="media-indicator">
                       <ImageIcon />
-                      Carousel ({post.mediaItems.length})
+                      {post.platform === 'Facebook'
+                        ? `Photos (${post.mediaItems.length})`
+                        : `Carousel (${post.mediaItems.length})`
+                      }
                     </span>
                   </div>
                 )}
@@ -305,7 +309,7 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
                       <span className="status-dot" />
                       {post.status}
                     </span>
-                    {post.platform === 'Instagram' && (
+                    {(post.platform === 'Instagram' || (post.platform === 'Facebook' && post.mediaItems && post.mediaItems.length >= 2)) && (
                       <span className="media-type-badge" data-type={getMediaBadgeType(post)}>
                         {getMediaBadgeLabel(post)}
                       </span>

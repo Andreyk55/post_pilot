@@ -17,7 +17,9 @@ function getEffectiveMediaType(post: Post): 'None' | 'Image' | 'Video' {
 
 // Helper to get the display label for the media badge
 function getMediaBadgeLabel(post: Post): string {
-  if (post.platform === 'Instagram' && (post.mediaItems && post.mediaItems.length >= 2)) {
+  // Multi-image detection: IG carousel or FB multi-photo
+  if (post.mediaItems && post.mediaItems.length >= 2) {
+    if (post.platform === 'Facebook') return `Photos (${post.mediaItems.length})`
     return 'Carousel'
   }
   if (post.platform === 'Instagram' && post.instagramMediaType) {
@@ -171,7 +173,7 @@ export function PostItem({ post, onDelete, cachedDetails, onDetailsFetched }: Po
             <span className={`status-indicator ${statusConfig.className}`}>
               {statusConfig.label}
             </span>
-            {post.platform === 'Instagram' && (
+            {(post.platform === 'Instagram' || (post.platform === 'Facebook' && post.mediaItems && post.mediaItems.length >= 2)) && (
               <span className="media-type-badge" data-type={getMediaBadgeType(post)}>
                 {getMediaBadgeLabel(post)}
               </span>
@@ -214,7 +216,12 @@ export function PostItem({ post, onDelete, cachedDetails, onDetailsFetched }: Po
                 src={getMediaUrl(post.mediaItems[0].mediaUrl) || ''}
                 alt="Carousel preview"
               />
-              <span className="video-badge">Carousel ({post.mediaItems.length})</span>
+              <span className="video-badge">
+                {post.platform === 'Facebook'
+                  ? `Photos (${post.mediaItems.length})`
+                  : `Carousel (${post.mediaItems.length})`
+                }
+              </span>
             </div>
           )}
           {/* Single image */}

@@ -117,8 +117,8 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
           mediaType: formData.mediaType,
           // Include selected thumbnail URL for video posts
           selectedThumbnailUrl: formData.selectedThumbnailUrl,
-          // Include media items for carousel posts
-          mediaItems: platform === 'Instagram' ? formData.mediaItems : undefined,
+          // Include media items for multi-image posts (Instagram carousel, Facebook multi-photo)
+          mediaItems: (platform === 'Instagram' || platform === 'Facebook') ? formData.mediaItems : undefined,
         }
         const post = await postsApi.create(request)
         newPosts.push(post)

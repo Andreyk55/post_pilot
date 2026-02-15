@@ -17,7 +17,7 @@ public class GeminiClientTests
     private readonly HttpClient _httpClient;
     private readonly IMemoryCache _cache;
     private readonly GeminiSettings _settings;
-    private readonly GeminiClient _client;
+    private readonly GeminiTextClient _client;
 
     public GeminiClientTests()
     {
@@ -32,11 +32,11 @@ public class GeminiClientTests
             TimeoutSeconds = 30
         };
 
-        _client = new GeminiClient(
+        _client = new GeminiTextClient(
             _httpClient,
             _settings,
             _cache,
-            NullLogger<GeminiClient>.Instance);
+            NullLogger<GeminiTextClient>.Instance);
     }
 
     [Fact]
@@ -695,7 +695,7 @@ public class GeminiClientTests
 
         SetupHttpResponse(HttpStatusCode.OK, JsonSerializer.Serialize(geminiResponse));
 
-        var result = await _client.PreFlightCheckAsync(
+        var result = await _client.RunPreFlightCheckAsync(
             AiPlatform.Facebook,
             "This is a test post without hashtags or CTA",
             "en");
@@ -737,7 +737,7 @@ public class GeminiClientTests
 
         SetupHttpResponse(HttpStatusCode.OK, JsonSerializer.Serialize(geminiResponse));
 
-        var result = await _client.PreFlightCheckAsync(
+        var result = await _client.RunPreFlightCheckAsync(
             AiPlatform.Facebook,
             "Short test post",
             "en");

@@ -58,11 +58,30 @@ export function MultiMediaUpload({
       setUploadError(null)
     }
 
-    // Validate all are images (no videos for carousel)
-    for (const file of filesToUpload) {
-      if (!file.type.startsWith('image/')) {
-        setUploadError('Instagram carousel only supports images. Videos are not allowed.')
-        return
+    // For multi-image: all items must be images (no videos)
+    // Allow a single video only when there are no existing images (single-post mode)
+    const hasExistingImages = items.length > 0
+    const hasVideoInBatch = filesToUpload.some(f => f.type.startsWith('video/'))
+    const hasMultipleFiles = filesToUpload.length + items.length > 1
+
+    if (hasVideoInBatch && (hasExistingImages || hasMultipleFiles)) {
+      setUploadError('Multi-image posts only support images. Videos are not allowed. Remove existing images first or upload a single video.')
+      return
+    }
+
+    // If uploading images alongside an existing video, block it
+    if (items.length === 1 && items[0].mediaType === 'Video' && filesToUpload.some(f => f.type.startsWith('image/'))) {
+      setUploadError('Cannot mix video with images. Remove the video first to create a multi-image post.')
+      return
+    }
+
+    // For Instagram, only images are allowed (no videos even as single upload via this component)
+    if (selectedPlatform === 'instagram') {
+      for (const file of filesToUpload) {
+        if (!file.type.startsWith('image/')) {
+          setUploadError('Instagram carousel only supports images. Use single upload for videos.')
+          return
+        }
       }
     }
 
@@ -190,12 +209,18 @@ export function MultiMediaUpload({
   const hasInvalidItems = items.some(item => item.validationStatus === 'Invalid')
   const itemCount = items.length
 
+  // For Facebook with 0 items, accept both images and video (single video upload)
+  // Once there are images, only accept more images
+  const acceptTypes = (selectedPlatform === 'facebook' && items.length === 0)
+    ? 'image/jpeg,image/png,video/mp4,video/quicktime,video/x-msvideo'
+    : 'image/jpeg,image/png'
+
   return (
     <div className="multi-media-upload">
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/jpeg,image/png"
+        accept={acceptTypes}
         onChange={handleFileSelect}
         disabled={uploading || disabled || !canAddMore}
         className="file-input-hidden"
@@ -275,9 +300,13 @@ export function MultiMediaUpload({
           <div className="upload-placeholder">
             <span className="upload-icon">+</span>
             <span className="upload-text">
-              {uploading ? 'Uploading...' : 'Add Images (2-10 for carousel)'}
+              {uploading ? 'Uploading...' : `Add Images (2-10 for ${selectedPlatform === 'facebook' ? 'multi-photo' : 'carousel'})`}
             </span>
-            <span className="upload-hint">JPEG, PNG only. Select multiple files.</span>
+            <span className="upload-hint">
+              {selectedPlatform === 'facebook'
+                ? 'JPEG, PNG images (or a single video). Select multiple files for multi-photo.'
+                : 'JPEG, PNG only. Select multiple files.'}
+            </span>
           </div>
         </div>
       )}
@@ -287,10 +316,14 @@ export function MultiMediaUpload({
         <div className="carousel-status-bar">
           <span className="carousel-count">{itemCount} image{itemCount !== 1 ? 's' : ''}</span>
           {itemCount >= minItems && (
-            <span className="carousel-badge">Carousel</span>
+            <span className="carousel-badge">
+              {selectedPlatform === 'facebook' ? 'Multi-photo' : 'Carousel'}
+            </span>
           )}
           {itemCount === 1 && (
-            <span className="carousel-hint">Add 1 more for carousel</span>
+            <span className="carousel-hint">
+              Add 1 more for {selectedPlatform === 'facebook' ? 'multi-photo' : 'carousel'}
+            </span>
           )}
           {hasInvalidItems && (
             <span className="carousel-warning">Some images have validation issues</span>

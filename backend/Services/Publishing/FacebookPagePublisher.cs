@@ -12,6 +12,7 @@ namespace PostPilot.Api.Services.Publishing;
 
 /// <summary>
 /// Publisher implementation for Facebook Pages using Meta Graph API.
+/// Supports text-only, single image, single video, and multi-photo (2-10 images) posts.
 /// </summary>
 public class FacebookPagePublisher : IPostPublisher
 {
@@ -43,6 +44,7 @@ public class FacebookPagePublisher : IPostPublisher
         10,   // Permission denied
         100,  // Invalid parameter
         102,  // Session invalidated
+        197,  // Empty post (missing message or media)
         190,  // Access token expired or invalid
         200,  // Permission error
         210,  // User not visible
@@ -77,9 +79,10 @@ public class FacebookPagePublisher : IPostPublisher
     {
         _logger.LogInformation("Starting publish for post {PostId}", postId);
 
-        // Step 1: Load post with target page
+        // Step 1: Load post with target page and media items
         var post = await _dbContext.Posts
             .Include(p => p.TargetPage)
+            .Include(p => p.MediaItems)
             .FirstOrDefaultAsync(p => p.Id == postId, cancellationToken);
 
         if (post == null)
@@ -176,10 +179,16 @@ public class FacebookPagePublisher : IPostPublisher
         return false;
     }
 
-    private async Task<PublishResult> CallMetaApiAsync(Post post, CancellationToken cancellationToken)
+    internal async Task<PublishResult> CallMetaApiAsync(Post post, CancellationToken cancellationToken)
     {
         var pageId = post.TargetPage!.PageId;
         var accessToken = post.TargetPage.AccessToken;
+
+        // Route to multi-photo flow if 2+ media items
+        if (post.MediaItems?.Count >= 2)
+        {
+            return await PublishMultiPhotoAsync(post, pageId, accessToken, cancellationToken);
+        }
 
         string url;
         HttpContent content;
@@ -262,6 +271,194 @@ public class FacebookPagePublisher : IPostPublisher
             post.Id, response.StatusCode, responseBody);
 
         return ParseMetaResponse(post.Id, response, responseBody);
+    }
+
+    // ──────────────────────────────────────────────
+    //  MULTI-PHOTO FLOW (attached_media)
+    // ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Publishes a multi-photo post (2-10 images) to a Facebook Page using the attached_media flow:
+    /// 1. Upload each photo as unpublished: POST /{pageId}/photos?published=false
+    /// 2. Create feed post with attached_media referencing all uploaded photos
+    /// </summary>
+    private async Task<PublishResult> PublishMultiPhotoAsync(
+        Post post, string pageId, string accessToken, CancellationToken cancellationToken)
+    {
+        var mediaItems = post.MediaItems!.OrderBy(m => m.Order).ToList();
+
+        _logger.LogInformation(
+            "Starting FB multi-photo publish for post {PostId} with {Count} images",
+            post.Id, mediaItems.Count);
+
+        if (mediaItems.Count < 2)
+        {
+            _logger.LogError(
+                "Multi-photo publish called with {Count} images for post {PostId} — need at least 2. Aborting.",
+                mediaItems.Count, post.Id);
+            return new PublishResult(false, ErrorType: PublishErrorType.Permanent,
+                ErrorMessage: $"Multi-photo post requires at least 2 images, got {mediaItems.Count}");
+        }
+
+        // Step 1: Upload each photo as unpublished
+        var photoIds = new List<string>();
+
+        for (int i = 0; i < mediaItems.Count; i++)
+        {
+            var item = mediaItems[i];
+            var imageUrl = ResolveMediaUrlForItem(item);
+
+            var uploadResult = await UploadUnpublishedPhotoAsync(
+                pageId, imageUrl, accessToken, cancellationToken);
+
+            if (!uploadResult.Success)
+            {
+                _logger.LogWarning(
+                    "Failed to upload unpublished photo {Index}/{Total} for post {PostId}: {Error}. " +
+                    "Aborting multi-photo publish — will NOT create feed post.",
+                    i + 1, mediaItems.Count, post.Id, uploadResult.ErrorMessage);
+                return uploadResult;
+            }
+
+            photoIds.Add(uploadResult.ExternalPostId!);
+
+            _logger.LogInformation(
+                "Uploaded unpublished photo {Index}/{Total}: {PhotoId} for post {PostId}",
+                i + 1, mediaItems.Count, uploadResult.ExternalPostId, post.Id);
+        }
+
+        // HARD GUARD: Never call /feed without photo IDs
+        if (photoIds.Count == 0)
+        {
+            _logger.LogError(
+                "No photo IDs collected for post {PostId} despite {Count} media items. Aborting — will NOT create feed post.",
+                post.Id, mediaItems.Count);
+            return new PublishResult(false, ErrorType: PublishErrorType.Transient,
+                ErrorMessage: "No photos were uploaded successfully. Cannot create multi-photo post.");
+        }
+
+        _logger.LogInformation(
+            "All {Count} photos uploaded for post {PostId}. Proceeding to create feed post with attached_media.",
+            photoIds.Count, post.Id);
+
+        // Step 2: Create feed post with attached_media
+        var feedResult = await CreateFeedPostWithAttachedMediaAsync(
+            pageId, post.Content, photoIds, accessToken, cancellationToken);
+
+        if (!feedResult.Success)
+        {
+            _logger.LogWarning(
+                "Failed to create feed post with attached_media for post {PostId}: {Error}",
+                post.Id, feedResult.ErrorMessage);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "Created FB multi-photo feed post {ExternalId} for post {PostId}",
+                feedResult.ExternalPostId, post.Id);
+        }
+
+        return feedResult;
+    }
+
+    /// <summary>
+    /// Uploads a single photo as unpublished to a Facebook Page.
+    /// POST /{pageId}/photos with published=false  (x-www-form-urlencoded).
+    /// Returns the photo ID (media_fbid) for use in attached_media.
+    /// </summary>
+    private async Task<PublishResult> UploadUnpublishedPhotoAsync(
+        string pageId, string imageUrl, string accessToken, CancellationToken cancellationToken)
+    {
+        var url = $"{GraphApiBaseUrl}/{pageId}/photos";
+        var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["url"] = imageUrl,
+            ["published"] = "false",
+            ["access_token"] = accessToken,
+        });
+
+        _logger.LogInformation("Uploading unpublished photo: POST {Url} (imageUrl={ImageUrl})",
+            url, imageUrl);
+
+        var response = await _httpClient.PostAsync(url, content, cancellationToken);
+        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        // Log response with token redaction
+        var redactedBody = RedactTokenInBody(responseBody);
+        _logger.LogInformation("Unpublished photo upload response: {StatusCode} - {Body}",
+            response.StatusCode, redactedBody);
+
+        return ParseMetaPhotoIdResponse(response, responseBody);
+    }
+
+    /// <summary>
+    /// Creates a feed post with attached_media referencing multiple unpublished photos.
+    /// POST /{pageId}/feed with message + attached_media[0..N].
+    /// MUST use x-www-form-urlencoded with UN-ENCODED brackets in keys.
+    /// </summary>
+    internal async Task<PublishResult> CreateFeedPostWithAttachedMediaAsync(
+        string pageId, string message, List<string> photoIds,
+        string accessToken, CancellationToken cancellationToken)
+    {
+        // HARD GUARD: refuse to call /feed without photo IDs
+        if (photoIds == null || photoIds.Count == 0)
+        {
+            _logger.LogError("CreateFeedPostWithAttachedMediaAsync called with zero photoIds — aborting.");
+            return new PublishResult(false, ErrorType: PublishErrorType.Permanent,
+                ErrorMessage: "Cannot create multi-photo feed post without any uploaded photos.");
+        }
+
+        var url = $"{GraphApiBaseUrl}/{pageId}/feed";
+
+        // FB requires "message" to be non-empty even for photo-only posts (error 197).
+        // Use a single space as safe fallback when the user provides no caption.
+        var effectiveMessage = string.IsNullOrWhiteSpace(message) ? " " : message;
+
+        // Build the form body MANUALLY so that brackets in keys are NOT percent-encoded.
+        // FormUrlEncodedContent encodes [ ] as %5B %5D which Facebook may reject/ignore.
+        var parts = new List<string>
+        {
+            $"message={Uri.EscapeDataString(effectiveMessage)}",
+            $"access_token={Uri.EscapeDataString(accessToken)}",
+        };
+
+        for (int i = 0; i < photoIds.Count; i++)
+        {
+            // Each value must be a JSON string: {"media_fbid":"<id>"}
+            var attachedMediaValue = $"{{\"media_fbid\":\"{photoIds[i]}\"}}";
+            parts.Add($"attached_media[{i}]={Uri.EscapeDataString(attachedMediaValue)}");
+        }
+
+        var formBody = string.Join("&", parts);
+        var content = new StringContent(formBody, System.Text.Encoding.UTF8, "application/x-www-form-urlencoded");
+
+        // Log attached_media keys and photo count (no tokens)
+        var attachedKeys = string.Join(", ", Enumerable.Range(0, photoIds.Count).Select(i => $"attached_media[{i}]"));
+        _logger.LogInformation(
+            "Creating FB feed post: POST {Url} with {PhotoCount} photos, keys=[{AttachedKeys}], hasUserMessage={HasMessage}",
+            url, photoIds.Count, attachedKeys, !string.IsNullOrWhiteSpace(message));
+
+        var response = await _httpClient.PostAsync(url, content, cancellationToken);
+        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        // Log response with token redaction
+        var redactedBody = RedactTokenInBody(responseBody);
+        _logger.LogInformation("FB feed post response: {StatusCode} - {Body}",
+            response.StatusCode, redactedBody);
+
+        return ParseMetaResponse(Guid.Empty, response, responseBody);
+    }
+
+    /// <summary>
+    /// Resolves a public URL for a PostMediaItem (generates pre-signed URL if S3 key).
+    /// </summary>
+    private string ResolveMediaUrlForItem(PostMediaItem item)
+    {
+        if (_mediaService.IsS3Key(item.MediaUrl))
+        {
+            return _mediaService.GenerateDownloadUrl(item.MediaUrl, MetaDownloadUrlExpiration);
+        }
+        return item.MediaUrl;
     }
 
     private async Task<PublishResult> PublishVideoAsync(Post post, string pageId, string accessToken, CancellationToken cancellationToken)
@@ -371,6 +568,41 @@ public class FacebookPagePublisher : IPostPublisher
         }
     }
 
+    /// <summary>
+    /// Parses the response from uploading an unpublished photo.
+    /// FB /photos returns {"id": "photo_id"} on success.
+    /// </summary>
+    private PublishResult ParseMetaPhotoIdResponse(HttpResponseMessage response, string responseBody)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            var result = JsonSerializer.Deserialize<MetaPostResponse>(responseBody);
+            var photoId = result?.Id;
+
+            if (string.IsNullOrEmpty(photoId))
+            {
+                _logger.LogWarning("FB unpublished photo upload returned success but no photo ID");
+                return new PublishResult(false, ErrorType: PublishErrorType.Transient,
+                    ErrorMessage: "FB photo upload returned success but no photo ID");
+            }
+
+            return new PublishResult(true, ExternalPostId: photoId);
+        }
+        else
+        {
+            var error = JsonSerializer.Deserialize<MetaErrorResponse>(responseBody);
+            var errorCode = error?.Error?.Code ?? 0;
+            var errorType = ClassifyError(errorCode);
+
+            _logger.LogWarning("FB unpublished photo upload error: Code={Code}, Message={Message}",
+                errorCode, error?.Error?.Message);
+
+            return new PublishResult(false,
+                ErrorType: errorType,
+                ErrorMessage: error?.Error?.Message ?? $"HTTP {(int)response.StatusCode}");
+        }
+    }
+
     private PublishErrorType ClassifyError(int errorCode)
     {
         if (PermanentErrorCodes.Contains(errorCode))
@@ -450,6 +682,20 @@ public class FacebookPagePublisher : IPostPublisher
             post.Id, post.RetryCount, retryAt, delayMinutes);
 
         return result;
+    }
+
+    /// <summary>
+    /// Redacts access tokens from response/request bodies for safe logging.
+    /// </summary>
+    private static string RedactTokenInBody(string body)
+    {
+        if (string.IsNullOrEmpty(body)) return body;
+        // Redact any access_token values in JSON or query string style
+        return System.Text.RegularExpressions.Regex.Replace(
+            body,
+            @"(access_token["":\s=]+)[^\s&""}\]]+",
+            "$1[REDACTED]",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     }
 }
 

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using PostPilot.Api.Controllers;
 using PostPilot.Api.DTOs;
+using PostPilot.Api.Entities;
 using PostPilot.Api.Services.Ai;
 using Xunit;
 
@@ -22,6 +23,10 @@ public class AiTextControllerTests
         _controller = new AiTextController(
             _geminiClientMock.Object,
             _rateLimiterMock.Object,
+            null!,
+            null!,
+            null!,
+            null!,
             NullLogger<AiTextController>.Instance);
     }
 
@@ -105,6 +110,7 @@ public class AiTextControllerTests
                 "Test text",
                 null,
                 "en",
+                It.IsAny<AiVoiceProfile?>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedResponse);
 
@@ -131,6 +137,7 @@ public class AiTextControllerTests
                 AiPlatform.Instagram,
                 "Test text",
                 "en",
+                It.IsAny<AiVoiceProfile?>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedResponse);
 
@@ -161,6 +168,7 @@ public class AiTextControllerTests
                 AiPlatform.X,
                 "Test text",
                 "en",
+                It.IsAny<AiVoiceProfile?>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedResponse);
 
@@ -186,6 +194,7 @@ public class AiTextControllerTests
                 It.IsAny<string>(),
                 It.IsAny<AiTone?>(),
                 It.IsAny<string>(),
+                It.IsAny<AiVoiceProfile?>(),
                 It.IsAny<CancellationToken>()))
             .ThrowsAsync(new GeminiApiException("Quota exceeded", 429));
 
@@ -209,6 +218,7 @@ public class AiTextControllerTests
                 It.IsAny<string>(),
                 It.IsAny<AiTone?>(),
                 It.IsAny<string>(),
+                It.IsAny<AiVoiceProfile?>(),
                 It.IsAny<CancellationToken>()))
             .ThrowsAsync(new GeminiApiException("Request timed out", 504));
 
@@ -232,6 +242,7 @@ public class AiTextControllerTests
                 It.IsAny<string>(),
                 It.IsAny<AiTone?>(),
                 It.IsAny<string>(),
+                It.IsAny<AiVoiceProfile?>(),
                 It.IsAny<CancellationToken>()))
             .ThrowsAsync(new GeminiApiException("Service unavailable", 503));
 

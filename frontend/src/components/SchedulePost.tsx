@@ -272,8 +272,12 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
     }
   }
 
-  // Instagram media validation: single image/video OR carousel (2+ images)
+  // Multi-image detection: Instagram carousel or Facebook multi-photo
   const isInstagramCarousel = isInstagramSelected && carouselItems.length >= 2
+  const isFacebookMultiPhoto = isFacebookSelected && carouselItems.length >= 2
+  const isMultiImage = isInstagramCarousel || isFacebookMultiPhoto
+
+  // Instagram media validation: single image/video OR carousel (2+ images)
   const isInstagramMediaValid = !isInstagramSelected ||
     isInstagramCarousel ||
     (mediaUrl && (mediaType === 'Image' || mediaType === 'Video'))
@@ -281,7 +285,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
-    const hasCarousel = isInstagramSelected && carouselItems.length >= 2
+    const hasCarousel = (isInstagramSelected || isFacebookSelected) && carouselItems.length >= 2
     const hasMedia = mediaUrl || hasCarousel
 
     // Require either content or media, plus date/time/platform
@@ -355,7 +359,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
   const hasInvalidCarouselItems = carouselItems.some(item => item.validationStatus === 'Invalid')
 
   // Form is valid if there's content OR media, plus date/time/platform, not uploading, text within limits, and no invalid media
-  const isFormValid = (content || mediaUrl || isInstagramCarousel) && scheduledDate && scheduledTime &&
+  const isFormValid = (content || mediaUrl || isMultiImage) && scheduledDate && scheduledTime &&
     selectedPlatforms.length > 0 &&
     (!isFacebookSelected || selectedPageId) &&
     (!isInstagramSelected || selectedInstagramAccountId) &&
@@ -572,7 +576,12 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
               Upload 1 image/video for a single post, or 2-10 images for a carousel.
             </div>
           )}
-          {isInstagramSelected ? (
+          {isFacebookSelected && !mediaUrl && carouselItems.length === 0 && (
+            <div className="ig-media-hint">
+              Upload 1 image/video, or 2-10 images for a multi-photo post.
+            </div>
+          )}
+          {isInstagramSelected || isFacebookSelected ? (
             <MultiMediaUpload
               key={uploadKey}
               items={carouselItems}

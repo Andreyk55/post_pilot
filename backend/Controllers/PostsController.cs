@@ -253,6 +253,31 @@ public class PostsController : ControllerBase
                     Extensions = { ["code"] = "INTEGRATION_DISCONNECTED" }
                 });
             }
+
+            // Facebook multi-photo validation: 2-10 images via MediaItems
+            if (request.MediaItems is { Count: > 0 })
+            {
+                if (request.MediaItems.Count < 2 || request.MediaItems.Count > 10)
+                {
+                    return BadRequest(new ProblemDetails
+                    {
+                        Title = "Invalid multi-photo post",
+                        Detail = "Facebook multi-photo posts require 2 to 10 images.",
+                        Status = StatusCodes.Status400BadRequest,
+                    });
+                }
+
+                // All items must be images (no videos in multi-photo)
+                if (request.MediaItems.Any(m => m.MediaType != MediaType.Image))
+                {
+                    return BadRequest(new ProblemDetails
+                    {
+                        Title = "Invalid multi-photo media",
+                        Detail = "Facebook multi-photo posts only support images. Videos are not allowed in multi-photo posts.",
+                        Status = StatusCodes.Status400BadRequest,
+                    });
+                }
+            }
         }
 
         // Instagram-specific validation

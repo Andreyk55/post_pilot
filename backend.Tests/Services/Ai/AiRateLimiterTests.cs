@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using PostPilot.Api.Services.Ai;
+using PostPilot.Api.Settings;
 using Xunit;
 
 namespace PostPilot.Api.Tests.Services.Ai;
@@ -14,7 +16,7 @@ public class AiRateLimiterTests
     {
         var cache = new MemoryCache(new MemoryCacheOptions());
         var logger = NullLogger<InMemoryAiRateLimiter>.Instance;
-        _rateLimiter = new InMemoryAiRateLimiter(cache, logger);
+        _rateLimiter = new InMemoryAiRateLimiter(cache, logger, Options.Create(new AiRateLimiterOptions()));
     }
 
     [Fact]
