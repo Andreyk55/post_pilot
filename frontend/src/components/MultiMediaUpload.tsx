@@ -246,7 +246,8 @@ export function MultiMediaUpload({
     }
   }
 
-  const hasInvalidItems = items.some(item => item.validationStatus === 'Invalid')
+  const invalidItems = items.filter(item => item.validationStatus === 'Invalid')
+  const hasInvalidItems = invalidItems.length > 0
   const itemCount = items.length
 
   // Determine accepted file types for the <input>
@@ -418,8 +419,29 @@ export function MultiMediaUpload({
             <span className="carousel-hint">{getStatusHint()}</span>
           )}
           {hasInvalidItems && (
-            <span className="carousel-warning">Some items have validation issues</span>
+            <span className="carousel-warning">
+              {invalidItems.length} item{invalidItems.length !== 1 ? 's' : ''} failed validation
+            </span>
           )}
+        </div>
+      )}
+
+      {/* Validation error details */}
+      {hasInvalidItems && (
+        <div className="carousel-validation-errors">
+          {invalidItems.map(item => (
+            <div key={item.id} className="carousel-validation-error-item">
+              <span className="carousel-validation-error-name">
+                {item.mediaType === 'Video' ? 'Reel' : item.fileName}:
+              </span>
+              {item.validationErrors.length > 0
+                ? item.validationErrors.map((err, i) => (
+                    <span key={i} className="carousel-validation-error-msg">{err.message}</span>
+                  ))
+                : <span className="carousel-validation-error-msg">Validation failed</span>
+              }
+            </div>
+          ))}
         </div>
       )}
 
