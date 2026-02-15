@@ -64,7 +64,7 @@ export function validateInstagramSelection(
     if (newFiles.length > 1) {
       return {
         ok: false,
-        errorMessage: 'Instagram carousel supports images only. For video, upload a single MP4 (published as Reel).',
+        errorMessage: 'Carousel supports photos only. To post a Reel, upload a single MP4.',
         nextFiles: [...existingFiles],
       }
     }
@@ -73,7 +73,7 @@ export function validateInstagramSelection(
     if (existingHasImage) {
       return {
         ok: false,
-        errorMessage: 'Cannot add video to existing images. Remove images first, then upload a single video (published as Reel).',
+        errorMessage: 'Carousel supports photos only. To post a Reel, upload a single MP4.',
         nextFiles: [...existingFiles],
       }
     }
@@ -82,7 +82,7 @@ export function validateInstagramSelection(
     if (existingHasVideo) {
       return {
         ok: false,
-        errorMessage: 'Only one video allowed. Remove the existing video first.',
+        errorMessage: 'Only one Reel allowed. Remove the existing video first.',
         nextFiles: [...existingFiles],
       }
     }
@@ -95,7 +95,7 @@ export function validateInstagramSelection(
   if (existingHasVideo) {
     return {
       ok: false,
-      errorMessage: 'Cannot mix video with images. Remove the video first to create a carousel.',
+      errorMessage: 'Cannot mix Reel with photos. Remove the video first to create a carousel.',
       nextFiles: [...existingFiles],
     }
   }
@@ -104,7 +104,7 @@ export function validateInstagramSelection(
   if (newHasVideo && newHasImage) {
     return {
       ok: false,
-      errorMessage: 'Instagram carousel supports images only. For video, upload a single MP4 (published as Reel).',
+      errorMessage: 'Carousel supports photos only. To post a Reel, upload a single MP4.',
       nextFiles: [...existingFiles],
     }
   }
@@ -149,7 +149,7 @@ export function getInstagramMediaMode(files: MediaFileInfo[]): InstagramMediaMod
 export function getInstagramUploaderLabel(mode: InstagramMediaMode, count: number): string {
   switch (mode) {
     case 'empty': return 'Add photo or video'
-    case 'single_video': return 'Video selected (will publish as Reel)'
+    case 'single_video': return 'Reel selected'
     case 'single_image': return '1 photo selected'
     case 'carousel': return `${count} photos selected (carousel)`
   }
@@ -158,9 +158,9 @@ export function getInstagramUploaderLabel(mode: InstagramMediaMode, count: numbe
 /** Dynamic format hint text */
 export function getInstagramFormatHint(mode: InstagramMediaMode): string {
   switch (mode) {
-    case 'empty': return 'JPG, PNG, or MP4'
-    case 'single_video': return 'MP4 (single video / Reel)'
-    case 'single_image': return 'JPG, PNG'
-    case 'carousel': return 'JPG, PNG only (carousel images)'
+    case 'empty': return 'Photos (JPG/PNG) or Reel (MP4)'
+    case 'single_video': return 'Reel (MP4)'
+    case 'single_image': return 'Photo (JPG/PNG)'
+    case 'carousel': return 'Carousel photos only (JPG/PNG)'
   }
 }

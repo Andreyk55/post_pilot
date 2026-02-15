@@ -288,7 +288,7 @@ export function MultiMediaUpload({
   // Instagram: dynamic status bar text
   const getStatusText = (): string => {
     if (isInstagram) {
-      if (itemCount === 1 && items[0].mediaType === 'Video') return '1 video'
+      if (itemCount === 1 && items[0].mediaType === 'Video') return '1 Reel'
       return `${itemCount} photo${itemCount !== 1 ? 's' : ''}`
     }
     return `${itemCount} image${itemCount !== 1 ? 's' : ''}`
