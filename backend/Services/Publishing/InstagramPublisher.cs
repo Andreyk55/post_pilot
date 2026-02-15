@@ -143,7 +143,20 @@ public class InstagramPublisher : IPostPublisher
                 ErrorMessage: "No access token for linked Facebook Page");
         }
 
-        // Step 5: Route to image, video, or carousel flow
+        // Step 5: Last-moment safety check — reload status to catch cancellations
+        var currentStatus = await _dbContext.Posts
+            .Where(p => p.Id == postId)
+            .Select(p => p.Status)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (currentStatus == PostStatus.Canceled)
+        {
+            _logger.LogInformation("Post {PostId} was canceled before Meta API call, aborting publish", postId);
+            return new PublishResult(false, ErrorType: PublishErrorType.Permanent,
+                ErrorMessage: "Post was canceled");
+        }
+
+        // Step 6: Route to image, video, or carousel flow
         var isCarousel = post.MediaItems?.Count >= 2;
         try
         {
@@ -342,6 +355,19 @@ public class InstagramPublisher : IPostPublisher
     private async Task<PublishResult> ScheduleProcessingRetryAsync(
         Post post, CancellationToken cancellationToken)
     {
+        // Guard: never retry a canceled post
+        var freshStatus = await _dbContext.Posts
+            .Where(p => p.Id == post.Id)
+            .Select(p => p.Status)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (freshStatus == PostStatus.Canceled)
+        {
+            _logger.LogInformation("Post {PostId} was canceled, skipping processing retry", post.Id);
+            return new PublishResult(false, ErrorType: PublishErrorType.Permanent,
+                ErrorMessage: "Post was canceled");
+        }
+
         post.ProcessingPollCount++;
 
         if (post.ProcessingPollCount >= Post.MaxProcessingPollCount)
@@ -980,6 +1006,18 @@ public class InstagramPublisher : IPostPublisher
         PublishResult result,
         CancellationToken cancellationToken)
     {
+        // Guard: never retry a canceled post
+        var freshStatus = await _dbContext.Posts
+            .Where(p => p.Id == post.Id)
+            .Select(p => p.Status)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (freshStatus == PostStatus.Canceled)
+        {
+            _logger.LogInformation("Post {PostId} was canceled, skipping retry", post.Id);
+            return result;
+        }
+
         post.RetryCount++;
         post.ErrorMessage = result.ErrorMessage;
         post.UpdatedAt = DateTime.UtcNow;

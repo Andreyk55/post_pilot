@@ -10,6 +10,7 @@ const STATUS_TABS: { label: string; value: PostStatus | 'all'; count?: number }[
   { label: 'Published', value: 'Published' },
   { label: 'Failed', value: 'Failed' },
   { label: 'Retry Pending', value: 'RetryPending' },
+  { label: 'Canceled', value: 'Canceled' },
 ]
 
 const PAGE_SIZE = 20
@@ -88,6 +89,20 @@ export function MyPostsPage() {
     return () => container.removeEventListener('scroll', handleScroll)
   }, [handleScroll])
 
+  const handleCancel = async (id: string) => {
+    try {
+      await postsApi.cancel(id)
+      setPosts(prev => prev.map(post =>
+        post.id === id ? { ...post, status: 'Canceled' as const } : post
+      ))
+      setError(null)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to cancel post'
+      setError(message)
+      console.error(err)
+    }
+  }
+
   const handleDelete = async (id: string) => {
     try {
       await postsApi.delete(id)
@@ -101,7 +116,8 @@ export function MyPostsPage() {
       })
       setError(null)
     } catch (err) {
-      setError('Failed to delete post')
+      const message = err instanceof Error ? err.message : 'Failed to delete post'
+      setError(message)
       console.error(err)
     }
   }
@@ -186,6 +202,7 @@ export function MyPostsPage() {
               <PostItem
                 key={post.id}
                 post={post}
+                onCancel={handleCancel}
                 onDelete={handleDelete}
                 cachedDetails={detailsCache.get(post.id)}
                 onDetailsFetched={handleDetailsFetched}

@@ -126,13 +126,27 @@ export const postsApi = {
     return response.json()
   },
 
+  async cancel(id: string): Promise<void> {
+    const response = await fetch(`${API_URL}/posts/${id}/cancel`, {
+      method: 'POST',
+    })
+    if (!response.ok) {
+      if (response.status === 409) {
+        const body = await response.json().catch(() => null)
+        throw new Error(body?.detail || 'This post can no longer be canceled because its status has changed.')
+      }
+      throw new Error('Failed to cancel post')
+    }
+  },
+
   async delete(id: string): Promise<void> {
     const response = await fetch(`${API_URL}/posts/${id}`, {
       method: 'DELETE',
     })
     if (!response.ok) {
       if (response.status === 409) {
-        throw new Error('This post can no longer be removed because its status has changed.')
+        const body = await response.json().catch(() => null)
+        throw new Error(body?.detail || 'This post can no longer be deleted because its status has changed.')
       }
       throw new Error('Failed to delete post')
     }

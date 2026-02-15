@@ -526,8 +526,8 @@ public class PostsController : ControllerBase
         return NoContent();
     }
 
-    [HttpDelete("{id}")]
-    public async Task<IActionResult> DeletePost(Guid id)
+    [HttpPost("{id}/cancel")]
+    public async Task<IActionResult> CancelPost(Guid id)
     {
         var post = await _context.Posts.FindAsync(id);
 
@@ -538,25 +538,34 @@ public class PostsController : ControllerBase
 
         switch (post.Status)
         {
-            // Already canceled — idempotent, nothing to do
+            // Already canceled — idempotent
             case PostStatus.Canceled:
-                return NoContent();
+                return Ok();
 
-            // Active states — cannot remove, would cause race conditions
+            // Cannot cancel posts that are publishing or already published
             case PostStatus.Publishing:
-            case PostStatus.Published:
                 return Conflict(new ProblemDetails
                 {
-                    Title = "Cannot remove post",
-                    Detail = $"Post cannot be removed while in '{post.Status}' status.",
+                    Title = "Cannot cancel post",
+                    Detail = "This post is currently being published and cannot be canceled.",
                     Status = StatusCodes.Status409Conflict,
                 });
 
-            // Failed — delete the record entirely (cleanup)
+            case PostStatus.Published:
+                return Conflict(new ProblemDetails
+                {
+                    Title = "Cannot cancel post",
+                    Detail = "This post has already been published and cannot be canceled.",
+                    Status = StatusCodes.Status409Conflict,
+                });
+
+            // Failed — treat as idempotent (already stopped), mark Canceled
             case PostStatus.Failed:
-                _context.Posts.Remove(post);
+                post.Status = PostStatus.Canceled;
+                post.CanceledAt = DateTime.UtcNow;
+                post.UpdatedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
-                return NoContent();
+                return Ok();
 
             // Pending / RetryPending — cancel the schedule and mark as canceled
             default:
@@ -567,7 +576,51 @@ public class PostsController : ControllerBase
                 post.UpdatedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
 
+                return Ok();
+        }
+    }
+
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeletePost(Guid id)
+    {
+        var post = await _context.Posts
+            .Include(p => p.MediaItems)
+            .FirstOrDefaultAsync(p => p.Id == id);
+
+        if (post == null)
+        {
+            return NotFound();
+        }
+
+        switch (post.Status)
+        {
+            // Only Canceled and Failed posts can be hard-deleted
+            case PostStatus.Canceled:
+            case PostStatus.Failed:
+                _context.Posts.Remove(post);
+                await _context.SaveChangesAsync();
                 return NoContent();
+
+            // Pending / RetryPending — must cancel first
+            case PostStatus.Pending:
+            case PostStatus.RetryPending:
+                return Conflict(new ProblemDetails
+                {
+                    Title = "Cannot delete post",
+                    Detail = "Cancel the scheduled post before deleting.",
+                    Status = StatusCodes.Status409Conflict,
+                });
+
+            // Publishing / Published — cannot delete
+            case PostStatus.Publishing:
+            case PostStatus.Published:
+            default:
+                return Conflict(new ProblemDetails
+                {
+                    Title = "Cannot delete post",
+                    Detail = "Cannot delete a post that is publishing or already published.",
+                    Status = StatusCodes.Status409Conflict,
+                });
         }
     }
 

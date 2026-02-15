@@ -118,7 +118,20 @@ public class FacebookPagePublisher : IPostPublisher
                 ErrorMessage: "No target page configured");
         }
 
-        // Step 5: Call Meta Graph API
+        // Step 5: Last-moment safety check — reload status to catch cancellations
+        var currentStatus = await _dbContext.Posts
+            .Where(p => p.Id == postId)
+            .Select(p => p.Status)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (currentStatus == PostStatus.Canceled)
+        {
+            _logger.LogInformation("Post {PostId} was canceled before Meta API call, aborting publish", postId);
+            return new PublishResult(false, ErrorType: PublishErrorType.Permanent,
+                ErrorMessage: "Post was canceled");
+        }
+
+        // Step 6: Call Meta Graph API
         try
         {
             var result = await CallMetaApiAsync(post, cancellationToken);
@@ -648,6 +661,18 @@ public class FacebookPagePublisher : IPostPublisher
         PublishResult result,
         CancellationToken cancellationToken)
     {
+        // Guard: never retry a canceled post
+        var freshStatus = await _dbContext.Posts
+            .Where(p => p.Id == post.Id)
+            .Select(p => p.Status)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (freshStatus == PostStatus.Canceled)
+        {
+            _logger.LogInformation("Post {PostId} was canceled, skipping retry", post.Id);
+            return result;
+        }
+
         post.RetryCount++;
         post.ErrorMessage = result.ErrorMessage;
         post.UpdatedAt = DateTime.UtcNow;

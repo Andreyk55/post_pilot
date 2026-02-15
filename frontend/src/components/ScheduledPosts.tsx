@@ -45,6 +45,7 @@ function getMediaBadgeType(post: Post): string {
 
 interface ScheduledPostsProps {
   posts: Post[]
+  onCancel: (id: string) => Promise<void>
   onDelete: (id: string) => Promise<void>
   onLoadMore: () => void
   hasMore: boolean
@@ -115,7 +116,7 @@ const platformIcons: Record<string, string> = {
   LinkedIn: 'in',
 }
 
-export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading, totalCount }: ScheduledPostsProps) {
+export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore, isLoading, totalCount }: ScheduledPostsProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const loadMoreTriggerRef = useRef<HTMLDivElement>(null)
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null)
@@ -188,28 +189,58 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
   const [toastMessage, setToastMessage] = useState('')
   const [toastVisible, setToastVisible] = useState(false)
 
-  const handleConfirmDelete = async () => {
+  const handleConfirmAction = async () => {
     if (!deleteTarget) return
     setIsDeleting(true)
     try {
-      await onDelete(deleteTarget.id)
+      if (deleteTarget.status === 'Pending' || deleteTarget.status === 'RetryPending') {
+        await onCancel(deleteTarget.id)
+      } else {
+        await onDelete(deleteTarget.id)
+      }
       setDeleteTarget(null)
-    } catch {
+    } catch (err) {
       setDeleteTarget(null)
-      setToastMessage('Failed to remove post. Please try again.')
+      const message = err instanceof Error ? err.message : 'Failed to remove post. Please try again.'
+      setToastMessage(message)
       setToastVisible(true)
     } finally {
       setIsDeleting(false)
     }
   }
 
-  const getRemoveTooltip = (status: string) =>
-    status === 'Failed' ? 'Delete failed post' : 'Cancel scheduled post'
-  const getConfirmMessage = (status: string) =>
-    status === 'Failed'
-      ? "This will remove the failed post record. This can't be undone."
-      : "This will cancel the schedule and remove the post. This can't be undone."
-  const canRemove = (status: string) => status === 'Pending' || status === 'Failed' || status === 'RetryPending'
+  const getActionTooltip = (status: string) => {
+    switch (status) {
+      case 'Pending':
+      case 'RetryPending':
+        return 'Cancel scheduled post'
+      case 'Failed':
+        return 'Delete failed post'
+      case 'Canceled':
+        return 'Delete canceled post'
+      default:
+        return ''
+    }
+  }
+  const getConfirmTitle = (status: string) =>
+    status === 'Pending' || status === 'RetryPending' ? 'Cancel scheduled post?' : 'Delete post?'
+  const getConfirmMessage = (status: string) => {
+    switch (status) {
+      case 'Pending':
+      case 'RetryPending':
+        return 'This will cancel the scheduled post. It will not be published. You can delete it afterwards.'
+      case 'Failed':
+        return "This will permanently delete the failed post record. This can't be undone."
+      case 'Canceled':
+        return "This will permanently delete the canceled post record. This can't be undone."
+      default:
+        return ''
+    }
+  }
+  const getConfirmButtonText = (status: string) =>
+    status === 'Pending' || status === 'RetryPending' ? 'Cancel scheduled' : 'Delete'
+  const canRemove = (status: string) =>
+    status === 'Pending' || status === 'Failed' || status === 'RetryPending' || status === 'Canceled'
 
   if ((!posts || posts.length === 0) && !isLoading) {
     return (
@@ -348,7 +379,7 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
                       <button
                         className="remove-btn"
                         onClick={() => setDeleteTarget(post)}
-                        title={getRemoveTooltip(post.status)}
+                        title={getActionTooltip(post.status)}
                       >
                         <TrashIcon />
                       </button>
@@ -378,12 +409,12 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
 
       <ConfirmDialog
         isOpen={deleteTarget !== null}
-        title="Remove post?"
+        title={deleteTarget ? getConfirmTitle(deleteTarget.status) : ''}
         message={deleteTarget ? getConfirmMessage(deleteTarget.status) : ''}
-        confirmText="Remove"
-        cancelText="Cancel"
+        confirmText={deleteTarget ? getConfirmButtonText(deleteTarget.status) : 'Confirm'}
+        cancelText="Back"
         confirmVariant="danger"
-        onConfirm={handleConfirmDelete}
+        onConfirm={handleConfirmAction}
         onCancel={() => setDeleteTarget(null)}
         isLoading={isDeleting}
       />

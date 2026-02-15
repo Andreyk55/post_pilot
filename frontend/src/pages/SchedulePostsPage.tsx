@@ -133,6 +133,14 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
     }
   }
 
+  const handleCancel = async (id: string) => {
+    await postsApi.cancel(id)
+    setPosts(prev => prev.map(post =>
+      post.id === id ? { ...post, status: 'Canceled' as const } : post
+    ))
+    setError(null)
+  }
+
   const handleDelete = async (id: string) => {
     await postsApi.delete(id)
     setPosts(prev => prev.filter(post => post.id !== id))
@@ -174,6 +182,7 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
         ) : (
           <ScheduledPosts
             posts={posts}
+            onCancel={handleCancel}
             onDelete={handleDelete}
             onLoadMore={loadMorePosts}
             hasMore={hasMore}
