@@ -174,10 +174,10 @@ public class FacebookPagePublisher : IPostPublisher
 
     private async Task<bool> TryClaimPostAsync(Post post, CancellationToken cancellationToken)
     {
-        // Optimistic concurrency - only claim if status is still Pending or RetryPending
+        // Optimistic concurrency - only claim if status is still Scheduled or RetryPending
         var rowsAffected = await _dbContext.Posts
             .Where(p => p.Id == post.Id &&
-                       (p.Status == PostStatus.Pending || p.Status == PostStatus.RetryPending))
+                       (p.Status == PostStatus.Scheduled || p.Status == PostStatus.RetryPending))
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(p => p.Status, PostStatus.Publishing)
                 .SetProperty(p => p.UpdatedAt, DateTime.UtcNow),

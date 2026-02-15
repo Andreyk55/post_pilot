@@ -58,8 +58,8 @@ const platformConfig: Record<string, { icon: string; name: string; color: string
 
 const getStatusConfig = (status: PostStatus) => {
   switch (status) {
-    case 'Pending':
-      return { label: 'Scheduled', className: 'status-pending' }
+    case 'Scheduled':
+      return { label: 'Scheduled', className: 'status-scheduled' }
     case 'Publishing':
       return { label: 'Publishing', className: 'status-publishing' }
     case 'Published':
@@ -266,7 +266,7 @@ export function PostItem({ post, onCancel, onDelete, cachedDetails, onDetailsFet
         </div>
 
         <div className="post-actions">
-          {(post.status === 'Pending' || post.status === 'RetryPending') && (
+          {(post.status === 'Scheduled' || post.status === 'RetryPending') && (
             <button
               className="action-btn delete-btn"
               onClick={(e) => {

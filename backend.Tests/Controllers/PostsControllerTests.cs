@@ -355,7 +355,7 @@ public class PostsControllerTests : IDisposable
             Content = "Original content",
             Platform = platform,
             ScheduledAt = DateTime.UtcNow.AddHours(2),
-            Status = PostStatus.Pending,
+            Status = PostStatus.Scheduled,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -391,7 +391,7 @@ public class PostsControllerTests : IDisposable
             Content = "Original content",
             Platform = platform,
             ScheduledAt = DateTime.UtcNow.AddHours(2),
-            Status = PostStatus.Pending,
+            Status = PostStatus.Scheduled,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -436,9 +436,9 @@ public class PostsControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task DeletePost_Pending_SetsCanceledStatusAndCallsSchedulerCancel()
+    public async Task DeletePost_Scheduled_SetsCanceledStatusAndCallsSchedulerCancel()
     {
-        var post = CreateTestPost(PostStatus.Pending);
+        var post = CreateTestPost(PostStatus.Scheduled);
         _context.Posts.Add(post);
         await _context.SaveChangesAsync();
 

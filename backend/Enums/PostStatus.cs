@@ -3,7 +3,7 @@ namespace PostPilot.Api.Enums;
 public enum PostStatus
 {
     /// <summary>Post is scheduled and waiting for publication time</summary>
-    Pending,
+    Scheduled,
 
     /// <summary>Post is currently being published (prevents race conditions)</summary>
     Publishing,

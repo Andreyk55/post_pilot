@@ -83,7 +83,7 @@ public class FacebookPagePublisherTests : IDisposable
             MediaUrl = "https://example.com/image1.jpg",
             TargetPage = page,
             TargetPageId = page.Id,
-            Status = PostStatus.Pending,
+            Status = PostStatus.Scheduled,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };
@@ -500,7 +500,7 @@ public class FacebookPagePublisherTests : IDisposable
             MediaUrl = "https://example.com/image.jpg",
             TargetPage = page,
             TargetPageId = page.Id,
-            Status = PostStatus.Pending,
+            Status = PostStatus.Scheduled,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };
@@ -544,7 +544,7 @@ public class FacebookPagePublisherTests : IDisposable
             MediaType = MediaType.None,
             TargetPage = page,
             TargetPageId = page.Id,
-            Status = PostStatus.Pending,
+            Status = PostStatus.Scheduled,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };

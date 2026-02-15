@@ -5,7 +5,7 @@ import './MyPostsPage.css'
 
 const STATUS_TABS: { label: string; value: PostStatus | 'all'; count?: number }[] = [
   { label: 'All', value: 'all' },
-  { label: 'Pending', value: 'Pending' },
+  { label: 'Scheduled', value: 'Scheduled' },
   { label: 'Publishing', value: 'Publishing' },
   { label: 'Published', value: 'Published' },
   { label: 'Failed', value: 'Failed' },

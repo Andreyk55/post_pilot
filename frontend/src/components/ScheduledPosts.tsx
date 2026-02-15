@@ -193,7 +193,7 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
     if (!deleteTarget) return
     setIsDeleting(true)
     try {
-      if (deleteTarget.status === 'Pending' || deleteTarget.status === 'RetryPending') {
+      if (deleteTarget.status === 'Scheduled' || deleteTarget.status === 'RetryPending') {
         await onCancel(deleteTarget.id)
       } else {
         await onDelete(deleteTarget.id)
@@ -211,7 +211,7 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
 
   const getActionTooltip = (status: string) => {
     switch (status) {
-      case 'Pending':
+      case 'Scheduled':
       case 'RetryPending':
         return 'Cancel scheduled post'
       case 'Failed':
@@ -223,10 +223,10 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
     }
   }
   const getConfirmTitle = (status: string) =>
-    status === 'Pending' || status === 'RetryPending' ? 'Cancel scheduled post?' : 'Delete post?'
+    status === 'Scheduled' || status === 'RetryPending' ? 'Cancel scheduled post?' : 'Delete post?'
   const getConfirmMessage = (status: string) => {
     switch (status) {
-      case 'Pending':
+      case 'Scheduled':
       case 'RetryPending':
         return 'This will cancel the scheduled post. It will not be published. You can delete it afterwards.'
       case 'Failed':
@@ -238,9 +238,9 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
     }
   }
   const getConfirmButtonText = (status: string) =>
-    status === 'Pending' || status === 'RetryPending' ? 'Cancel scheduled' : 'Delete'
+    status === 'Scheduled' || status === 'RetryPending' ? 'Cancel scheduled' : 'Delete'
   const canRemove = (status: string) =>
-    status === 'Pending' || status === 'Failed' || status === 'RetryPending' || status === 'Canceled'
+    status === 'Scheduled' || status === 'Failed' || status === 'RetryPending' || status === 'Canceled'
 
   if ((!posts || posts.length === 0) && !isLoading) {
     return (

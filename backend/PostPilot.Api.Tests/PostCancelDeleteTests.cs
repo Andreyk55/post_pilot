@@ -69,9 +69,9 @@ public class PostCancelDeleteTests : IDisposable
     // ──────────────────────────────────────────────
 
     [Fact]
-    public async Task Cancel_Pending_Returns200_And_StatusBecomesCanceled()
+    public async Task Cancel_Scheduled_Returns200_And_StatusBecomesCanceled()
     {
-        var post = CreatePost(PostStatus.Pending);
+        var post = CreatePost(PostStatus.Scheduled);
 
         var result = await _controller.CancelPost(post.Id);
 
@@ -149,9 +149,9 @@ public class PostCancelDeleteTests : IDisposable
     }
 
     [Fact]
-    public async Task Cancel_Pending_CancelsSchedule()
+    public async Task Cancel_Scheduled_CancelsSchedule()
     {
-        var post = CreatePost(PostStatus.Pending);
+        var post = CreatePost(PostStatus.Scheduled);
 
         await _controller.CancelPost(post.Id);
 
@@ -191,9 +191,9 @@ public class PostCancelDeleteTests : IDisposable
     }
 
     [Fact]
-    public async Task Delete_Pending_Returns409()
+    public async Task Delete_Scheduled_Returns409()
     {
-        var post = CreatePost(PostStatus.Pending);
+        var post = CreatePost(PostStatus.Scheduled);
 
         var result = await _controller.DeletePost(post.Id);
 

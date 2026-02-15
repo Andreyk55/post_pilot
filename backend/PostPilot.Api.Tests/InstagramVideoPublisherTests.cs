@@ -235,7 +235,7 @@ public class InstagramVideoStateTransitionTests
         // First attempt: no container created yet
         Assert.Null(post.InstagramCreationId);
         Assert.Equal(0, post.ProcessingPollCount);
-        Assert.Equal(PostStatus.Pending, post.Status);
+        Assert.Equal(PostStatus.Scheduled, post.Status);
     }
 
     [Fact]
@@ -372,7 +372,7 @@ public class InstagramVideoStateTransitionTests
         MediaUrl = "media/test-video.mp4",
         MediaType = MediaType.Video,
         Platform = Platform.Instagram,
-        Status = PostStatus.Pending,
+        Status = PostStatus.Scheduled,
         ScheduledAt = DateTime.UtcNow.AddMinutes(-1),
         CreatedAt = DateTime.UtcNow,
         UpdatedAt = DateTime.UtcNow,

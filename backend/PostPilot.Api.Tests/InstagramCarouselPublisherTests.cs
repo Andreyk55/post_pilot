@@ -122,7 +122,7 @@ public class InstagramCarouselPostStateTests
             Platform = Platform.Instagram,
             MediaType = MediaType.Image,
             MediaUrl = "media/image1.jpg",
-            Status = PostStatus.Pending,
+            Status = PostStatus.Scheduled,
             ScheduledAt = DateTime.UtcNow.AddMinutes(-1),
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
@@ -270,7 +270,7 @@ public class InstagramCarouselStateTransitionTests
         Assert.Null(post.InstagramChildCreationIds);
         Assert.Null(post.InstagramCarouselCreationId);
         Assert.Equal(0, post.ProcessingPollCount);
-        Assert.Equal(PostStatus.Pending, post.Status);
+        Assert.Equal(PostStatus.Scheduled, post.Status);
     }
 
     [Fact]
@@ -480,7 +480,7 @@ public class InstagramCarouselStateTransitionTests
             Platform = Platform.Instagram,
             MediaType = MediaType.Image,
             MediaUrl = "media/image1.jpg",
-            Status = PostStatus.Pending,
+            Status = PostStatus.Scheduled,
             ScheduledAt = DateTime.UtcNow.AddMinutes(-1),
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,

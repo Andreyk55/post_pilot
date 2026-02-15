@@ -86,11 +86,11 @@ public class FacebookMultiPhotoPostStateTests
     }
 
     [Fact]
-    public void MultiPhotoPost_StatusTransition_PendingToPublishing()
+    public void MultiPhotoPost_StatusTransition_ScheduledToPublishing()
     {
         var post = CreateMultiPhotoPost(3);
 
-        Assert.Equal(PostStatus.Pending, post.Status);
+        Assert.Equal(PostStatus.Scheduled, post.Status);
 
         post.Status = PostStatus.Publishing;
 
@@ -173,7 +173,7 @@ public class FacebookMultiPhotoPostStateTests
             Platform = Platform.Facebook,
             MediaType = MediaType.Image,
             MediaUrl = mediaItems[0].MediaUrl,
-            Status = PostStatus.Pending,
+            Status = PostStatus.Scheduled,
             ScheduledAt = DateTime.UtcNow.AddMinutes(-1),
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
@@ -288,7 +288,7 @@ public class FacebookPublisherRoutingTests
             Id = Guid.NewGuid(),
             Content = "Text only",
             Platform = Platform.Facebook,
-            Status = PostStatus.Pending,
+            Status = PostStatus.Scheduled,
             ScheduledAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
@@ -313,7 +313,7 @@ public class FacebookPublisherRoutingTests
             Platform = Platform.Facebook,
             MediaType = MediaType.Video,
             MediaUrl = "media/video.mp4",
-            Status = PostStatus.Pending,
+            Status = PostStatus.Scheduled,
             ScheduledAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
@@ -359,7 +359,7 @@ public class FacebookPublisherRoutingTests
             Platform = Platform.Facebook,
             MediaType = mediaItemCount > 0 ? MediaType.Image : MediaType.None,
             MediaUrl = mediaItems.Count > 0 ? mediaItems[0].MediaUrl : null,
-            Status = PostStatus.Pending,
+            Status = PostStatus.Scheduled,
             ScheduledAt = DateTime.UtcNow.AddMinutes(-1),
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
@@ -384,7 +384,7 @@ public class FacebookMultiPhotoPostDtoTests
             Platform = Platform.Facebook,
             MediaType = MediaType.Image,
             MediaUrl = "media/image1.jpg",
-            Status = PostStatus.Pending,
+            Status = PostStatus.Scheduled,
             ScheduledAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
@@ -413,7 +413,7 @@ public class FacebookMultiPhotoPostDtoTests
             Content = "FB multi-photo",
             Platform = Platform.Facebook,
             MediaType = MediaType.Image,
-            Status = PostStatus.Pending,
+            Status = PostStatus.Scheduled,
             ScheduledAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,

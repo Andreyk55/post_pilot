@@ -364,7 +364,7 @@ public class PostsController : ControllerBase
             TargetPageId = request.TargetPageId,
             TargetInstagramAccountId = request.TargetInstagramAccountId,
             SelectedThumbnailUrl = request.SelectedThumbnailUrl,
-            Status = PostStatus.Pending,
+            Status = PostStatus.Scheduled,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -421,10 +421,10 @@ public class PostsController : ControllerBase
             return NotFound();
         }
 
-        // Only allow updates to pending posts
-        if (post.Status != PostStatus.Pending)
+        // Only allow updates to scheduled posts
+        if (post.Status != PostStatus.Scheduled)
         {
-            return BadRequest(new { error = "Cannot update a post that is not pending" });
+            return BadRequest(new { error = "Cannot update a post that is not scheduled" });
         }
 
         var validationErrors = ValidateUpdatePostRequest(request);
@@ -567,7 +567,7 @@ public class PostsController : ControllerBase
                 await _context.SaveChangesAsync();
                 return Ok();
 
-            // Pending / RetryPending — cancel the schedule and mark as canceled
+            // Scheduled / RetryPending — cancel the schedule and mark as canceled
             default:
                 await _scheduler.CancelScheduleAsync(post);
 
@@ -601,8 +601,8 @@ public class PostsController : ControllerBase
                 await _context.SaveChangesAsync();
                 return NoContent();
 
-            // Pending / RetryPending — must cancel first
-            case PostStatus.Pending:
+            // Scheduled / RetryPending — must cancel first
+            case PostStatus.Scheduled:
             case PostStatus.RetryPending:
                 return Conflict(new ProblemDetails
                 {

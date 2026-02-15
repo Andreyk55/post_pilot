@@ -65,7 +65,7 @@
   border-radius: 3px;
 }
 
-.status-pending {
+.status-scheduled {
   background: rgba(234, 179, 8, 0.15);
   color: #fbbf24;
 }

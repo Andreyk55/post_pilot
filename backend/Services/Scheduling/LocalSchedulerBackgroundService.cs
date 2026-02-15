@@ -74,7 +74,7 @@ public class LocalSchedulerBackgroundService : BackgroundService
             duePosts = await dbContext.Posts
                 .Where(p => p.Platform == Platform.Facebook || p.Platform == Platform.Instagram)
                 .Where(p =>
-                    (p.Status == PostStatus.Pending && p.ScheduledAt <= now) ||
+                    (p.Status == PostStatus.Scheduled && p.ScheduledAt <= now) ||
                     (p.Status == PostStatus.RetryPending && p.NextRetryAt != null && p.NextRetryAt <= now))
                 .Select(p => new { p.Id, p.Platform })
                 .AsNoTracking()
