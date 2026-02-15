@@ -4,7 +4,7 @@ const API_URL = 'http://localhost:5122/api'
 
 export type Platform = 'Twitter' | 'Instagram' | 'Facebook' | 'LinkedIn'
 
-export type PostStatus = 'Pending' | 'Publishing' | 'Published' | 'Failed' | 'RetryPending'
+export type PostStatus = 'Pending' | 'Publishing' | 'Published' | 'Failed' | 'RetryPending' | 'Canceled'
 
 export interface PostMediaItem {
   id: string
@@ -130,7 +130,12 @@ export const postsApi = {
     const response = await fetch(`${API_URL}/posts/${id}`, {
       method: 'DELETE',
     })
-    if (!response.ok) throw new Error('Failed to delete post')
+    if (!response.ok) {
+      if (response.status === 409) {
+        throw new Error('This post can no longer be removed because its status has changed.')
+      }
+      throw new Error('Failed to delete post')
+    }
   },
 
   async getDetails(id: string): Promise<PostDetails> {

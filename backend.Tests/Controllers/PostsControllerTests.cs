@@ -417,4 +417,146 @@ public class PostsControllerTests : IDisposable
     }
 
     #endregion
+
+    #region DeletePost Status-Based Rules Tests
+
+    private Post CreateTestPost(PostStatus status)
+    {
+        return new Post
+        {
+            Id = Guid.NewGuid(),
+            Content = "Test content",
+            Platform = Platform.Facebook,
+            ScheduledAt = DateTime.UtcNow.AddHours(1),
+            Status = status,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            ScheduleArn = "arn:aws:scheduler:test"
+        };
+    }
+
+    [Fact]
+    public async Task DeletePost_Pending_SetsCanceledStatusAndCallsSchedulerCancel()
+    {
+        var post = CreateTestPost(PostStatus.Pending);
+        _context.Posts.Add(post);
+        await _context.SaveChangesAsync();
+
+        var result = await _controller.DeletePost(post.Id);
+
+        Assert.IsType<NoContentResult>(result);
+
+        var updated = await _context.Posts.FindAsync(post.Id);
+        Assert.NotNull(updated);
+        Assert.Equal(PostStatus.Canceled, updated.Status);
+        Assert.NotNull(updated.CanceledAt);
+
+        _schedulerMock.Verify(
+            s => s.CancelScheduleAsync(It.Is<Post>(p => p.Id == post.Id), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task DeletePost_RetryPending_SetsCanceledStatusAndCallsSchedulerCancel()
+    {
+        var post = CreateTestPost(PostStatus.RetryPending);
+        post.NextRetryAt = DateTime.UtcNow.AddMinutes(5);
+        _context.Posts.Add(post);
+        await _context.SaveChangesAsync();
+
+        var result = await _controller.DeletePost(post.Id);
+
+        Assert.IsType<NoContentResult>(result);
+
+        var updated = await _context.Posts.FindAsync(post.Id);
+        Assert.NotNull(updated);
+        Assert.Equal(PostStatus.Canceled, updated.Status);
+        Assert.NotNull(updated.CanceledAt);
+
+        _schedulerMock.Verify(
+            s => s.CancelScheduleAsync(It.Is<Post>(p => p.Id == post.Id), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task DeletePost_Failed_DeletesRecord()
+    {
+        var post = CreateTestPost(PostStatus.Failed);
+        post.ErrorMessage = "Permanent error";
+        _context.Posts.Add(post);
+        await _context.SaveChangesAsync();
+
+        var result = await _controller.DeletePost(post.Id);
+
+        Assert.IsType<NoContentResult>(result);
+
+        var deleted = await _context.Posts.FindAsync(post.Id);
+        Assert.Null(deleted);
+    }
+
+    [Fact]
+    public async Task DeletePost_Publishing_Returns409Conflict()
+    {
+        var post = CreateTestPost(PostStatus.Publishing);
+        _context.Posts.Add(post);
+        await _context.SaveChangesAsync();
+
+        var result = await _controller.DeletePost(post.Id);
+
+        var conflictResult = Assert.IsType<ConflictObjectResult>(result);
+        Assert.Equal(409, conflictResult.StatusCode);
+
+        // Post should remain untouched
+        var unchanged = await _context.Posts.FindAsync(post.Id);
+        Assert.NotNull(unchanged);
+        Assert.Equal(PostStatus.Publishing, unchanged.Status);
+    }
+
+    [Fact]
+    public async Task DeletePost_Published_Returns409Conflict()
+    {
+        var post = CreateTestPost(PostStatus.Published);
+        post.PublishedAt = DateTime.UtcNow;
+        post.ExternalPostId = "page_post123";
+        _context.Posts.Add(post);
+        await _context.SaveChangesAsync();
+
+        var result = await _controller.DeletePost(post.Id);
+
+        var conflictResult = Assert.IsType<ConflictObjectResult>(result);
+        Assert.Equal(409, conflictResult.StatusCode);
+
+        // Post should remain untouched
+        var unchanged = await _context.Posts.FindAsync(post.Id);
+        Assert.NotNull(unchanged);
+        Assert.Equal(PostStatus.Published, unchanged.Status);
+    }
+
+    [Fact]
+    public async Task DeletePost_Canceled_Returns204Idempotent()
+    {
+        var post = CreateTestPost(PostStatus.Canceled);
+        post.CanceledAt = DateTime.UtcNow.AddMinutes(-5);
+        _context.Posts.Add(post);
+        await _context.SaveChangesAsync();
+
+        var result = await _controller.DeletePost(post.Id);
+
+        Assert.IsType<NoContentResult>(result);
+
+        // Post should still exist (not deleted, just already canceled)
+        var unchanged = await _context.Posts.FindAsync(post.Id);
+        Assert.NotNull(unchanged);
+        Assert.Equal(PostStatus.Canceled, unchanged.Status);
+    }
+
+    [Fact]
+    public async Task DeletePost_NotFound_Returns404()
+    {
+        var result = await _controller.DeletePost(Guid.NewGuid());
+
+        Assert.IsType<NotFoundResult>(result);
+    }
+
+    #endregion
 }

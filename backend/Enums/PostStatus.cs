@@ -15,5 +15,8 @@ public enum PostStatus
     Failed,
 
     /// <summary>Post failed but will be retried</summary>
-    RetryPending
+    RetryPending,
+
+    /// <summary>Post was canceled by the user before publishing</summary>
+    Canceled
 }

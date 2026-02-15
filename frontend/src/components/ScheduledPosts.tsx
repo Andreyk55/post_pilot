@@ -2,6 +2,8 @@ import { useRef, useEffect, useCallback, useState } from 'react'
 import type { Post } from '../api/posts'
 import { getMediaUrl, getMediaTypeFromFile } from '../api/media'
 import { VideoThumbnail } from './VideoThumbnail'
+import { ConfirmDialog } from './ConfirmDialog'
+import { Toast } from './Toast'
 import './ScheduledPosts.css'
 
 // Helper to get effective media type (use mediaType if set, otherwise detect from URL)
@@ -43,7 +45,7 @@ function getMediaBadgeType(post: Post): string {
 
 interface ScheduledPostsProps {
   posts: Post[]
-  onDelete: (id: string) => void
+  onDelete: (id: string) => Promise<void>
   onLoadMore: () => void
   hasMore: boolean
   isLoading: boolean
@@ -119,6 +121,8 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null)
   const [overflowingPosts, setOverflowingPosts] = useState<Set<string>>(new Set())
   const contentRefs = useRef<Map<string, HTMLParagraphElement>>(new Map())
+  const [deleteTarget, setDeleteTarget] = useState<Post | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const toggleExpand = (postId: string) => {
     setExpandedPostId(prev => prev === postId ? null : postId)
@@ -180,6 +184,32 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
     container.addEventListener('scroll', handleScroll)
     return () => container.removeEventListener('scroll', handleScroll)
   }, [handleScroll])
+
+  const [toastMessage, setToastMessage] = useState('')
+  const [toastVisible, setToastVisible] = useState(false)
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return
+    setIsDeleting(true)
+    try {
+      await onDelete(deleteTarget.id)
+      setDeleteTarget(null)
+    } catch {
+      setDeleteTarget(null)
+      setToastMessage('Failed to remove post. Please try again.')
+      setToastVisible(true)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const getRemoveTooltip = (status: string) =>
+    status === 'Failed' ? 'Delete failed post' : 'Cancel scheduled post'
+  const getConfirmMessage = (status: string) =>
+    status === 'Failed'
+      ? "This will remove the failed post record. This can't be undone."
+      : "This will cancel the schedule and remove the post. This can't be undone."
+  const canRemove = (status: string) => status === 'Pending' || status === 'Failed' || status === 'RetryPending'
 
   if ((!posts || posts.length === 0) && !isLoading) {
     return (
@@ -314,18 +344,17 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
                         {getMediaBadgeLabel(post)}
                       </span>
                     )}
+                    {canRemove(post.status) && (
+                      <button
+                        className="remove-btn"
+                        onClick={() => setDeleteTarget(post)}
+                        title={getRemoveTooltip(post.status)}
+                      >
+                        <TrashIcon />
+                      </button>
+                    )}
                   </div>
                 </div>
-
-                {post.status !== 'Published' && post.status !== 'Publishing' && (
-                  <button
-                    className="delete-btn"
-                    onClick={() => onDelete(post.id)}
-                    title="Delete post"
-                  >
-                    <TrashIcon />
-                  </button>
-                )}
               </div>
             )
           })}
@@ -346,6 +375,25 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
 
         <div ref={loadMoreTriggerRef} className="load-more-trigger" />
       </div>
+
+      <ConfirmDialog
+        isOpen={deleteTarget !== null}
+        title="Remove post?"
+        message={deleteTarget ? getConfirmMessage(deleteTarget.status) : ''}
+        confirmText="Remove"
+        cancelText="Cancel"
+        confirmVariant="danger"
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+        isLoading={isDeleting}
+      />
+
+      <Toast
+        message={toastMessage}
+        type="error"
+        isVisible={toastVisible}
+        onClose={() => setToastVisible(false)}
+      />
     </div>
   )
 }

@@ -42,6 +42,11 @@ public class Post
     public DateTime? PublishedAt { get; set; }
 
     /// <summary>
+    /// Timestamp when the post was canceled by the user
+    /// </summary>
+    public DateTime? CanceledAt { get; set; }
+
+    /// <summary>
     /// External ID returned by Meta Graph API (e.g., "page-id_post-id")
     /// Used for idempotency and linking back to Facebook
     /// </summary>

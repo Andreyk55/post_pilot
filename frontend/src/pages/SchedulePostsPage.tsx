@@ -134,15 +134,10 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
   }
 
   const handleDelete = async (id: string) => {
-    try {
-      await postsApi.delete(id)
-      setPosts(prev => prev.filter(post => post.id !== id))
-      setTotalCount(prev => prev - 1)
-      setError(null)
-    } catch (err) {
-      setError('Failed to delete post')
-      console.error(err)
-    }
+    await postsApi.delete(id)
+    setPosts(prev => prev.filter(post => post.id !== id))
+    setTotalCount(prev => prev - 1)
+    setError(null)
   }
 
   const handleProfileSaved = () => {

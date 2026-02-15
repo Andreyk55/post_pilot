@@ -8,9 +8,9 @@
     ".NETCoreApp,Version=v10.0": {
       "PostPilot.Api/1.0.0": {
         "dependencies": {
-          "AWSSDK.S3": "3.7.510.5",
-          "AWSSDK.SQS": "3.7.502.38",
-          "AWSSDK.Scheduler": "3.7.502.39",
+          "AWSSDK.S3": "3.7.510.3",
+          "AWSSDK.SQS": "3.7.502.36",
+          "AWSSDK.Scheduler": "3.7.502.37",
           "Amazon.Lambda.AspNetCoreServer": "9.2.1",
           "Amazon.Lambda.CloudWatchEvents": "4.1.0",
           "Amazon.Lambda.SQSEvents": "2.2.0",
@@ -101,44 +101,44 @@
           }
         }
       },
-      "AWSSDK.Core/3.7.500.77": {
+      "AWSSDK.Core/3.7.500.75": {
         "runtime": {
           "lib/net8.0/AWSSDK.Core.dll": {
             "assemblyVersion": "3.3.0.0",
-            "fileVersion": "3.7.500.77"
+            "fileVersion": "3.7.500.75"
           }
         }
       },
-      "AWSSDK.S3/3.7.510.5": {
+      "AWSSDK.S3/3.7.510.3": {
         "dependencies": {
-          "AWSSDK.Core": "3.7.500.77"
+          "AWSSDK.Core": "3.7.500.75"
         },
         "runtime": {
           "lib/net8.0/AWSSDK.S3.dll": {
             "assemblyVersion": "3.3.0.0",
-            "fileVersion": "3.7.510.5"
+            "fileVersion": "3.7.510.3"
           }
         }
       },
-      "AWSSDK.Scheduler/3.7.502.39": {
+      "AWSSDK.Scheduler/3.7.502.37": {
         "dependencies": {
-          "AWSSDK.Core": "3.7.500.77"
+          "AWSSDK.Core": "3.7.500.75"
         },
         "runtime": {
           "lib/net8.0/AWSSDK.Scheduler.dll": {
             "assemblyVersion": "3.3.0.0",
-            "fileVersion": "3.7.502.39"
+            "fileVersion": "3.7.502.37"
           }
         }
       },
-      "AWSSDK.SQS/3.7.502.38": {
+      "AWSSDK.SQS/3.7.502.36": {
         "dependencies": {
-          "AWSSDK.Core": "3.7.500.77"
+          "AWSSDK.Core": "3.7.500.75"
         },
         "runtime": {
           "lib/net8.0/AWSSDK.SQS.dll": {
             "assemblyVersion": "3.3.0.0",
-            "fileVersion": "3.7.502.38"
+            "fileVersion": "3.7.502.36"
           }
         }
       },
@@ -861,33 +861,33 @@
       "path": "amazon.lambda.sqsevents/2.2.0",
       "hashPath": "amazon.lambda.sqsevents.2.2.0.nupkg.sha512"
     },
-    "AWSSDK.Core/3.7.500.77": {
+    "AWSSDK.Core/3.7.500.75": {
       "type": "package",
       "serviceable": true,
-      "sha512": "sha512-aMCS4lEpCqW4GkR6L6+QBT4Cl/hTIV7IKlF5g6jJSBm/kFrSML+Qil2zuARKXyzCAE07CJowKNKHEOfZyGsHCw==",
-      "path": "awssdk.core/3.7.500.77",
-      "hashPath": "awssdk.core.3.7.500.77.nupkg.sha512"
+      "sha512": "sha512-9m9HXXDhiMagoT0VP1cYUx4n+3Ie4sIB88S5ozgv16GGk+SqRnYuzTGdy8F9UCL0u4JxzEIdzmnFItiJCG//ww==",
+      "path": "awssdk.core/3.7.500.75",
+      "hashPath": "awssdk.core.3.7.500.75.nupkg.sha512"
     },
-    "AWSSDK.S3/3.7.510.5": {
+    "AWSSDK.S3/3.7.510.3": {
       "type": "package",
       "serviceable": true,
-      "sha512": "sha512-JvJvSRo0H1Vz4Vzk8nVTLW1S2cZ7Zm9NBc1b0B11giEVcTjM0M69yHLdNfaC4eLUCP8fN6goHdIrOb6jrFnj3w==",
-      "path": "awssdk.s3/3.7.510.5",
-      "hashPath": "awssdk.s3.3.7.510.5.nupkg.sha512"
+      "sha512": "sha512-9FxKDx0XPx14j/d9zrGEh3C4966uZ1p/7v+iqDHMqBLTS259B1iVP3sEvj4x6QxYtwCj3EtUFGzYwmOgqhqCjw==",
+      "path": "awssdk.s3/3.7.510.3",
+      "hashPath": "awssdk.s3.3.7.510.3.nupkg.sha512"
     },
-    "AWSSDK.Scheduler/3.7.502.39": {
+    "AWSSDK.Scheduler/3.7.502.37": {
       "type": "package",
       "serviceable": true,
-      "sha512": "sha512-sYEzj840TCGSkm01ISg8TNlsZKg4UHSIXaHkb+BTKfrMGSdW4s9PeUrT/stiwD9uE6dOZoYrPVAKf2Cucj1Dyg==",
-      "path": "awssdk.scheduler/3.7.502.39",
-      "hashPath": "awssdk.scheduler.3.7.502.39.nupkg.sha512"
+      "sha512": "sha512-xdJB1o9iyIhJEBroAS7yr3TGU8STLp+mtB36Hs7V7kj5esIJYbA6b6p0M8N0iVkEk5gC28X3oxmgeJGnHo3KiQ==",
+      "path": "awssdk.scheduler/3.7.502.37",
+      "hashPath": "awssdk.scheduler.3.7.502.37.nupkg.sha512"
     },
-    "AWSSDK.SQS/3.7.502.38": {
+    "AWSSDK.SQS/3.7.502.36": {
       "type": "package",
       "serviceable": true,
-      "sha512": "sha512-cLVuMJ+FqmyoOGRV+E2gq63d7WNtOyKVQ828Jjzeaq1lXDLBsX1J5nyTFBylMjFdMepkifg3TCYPfNXUX0T9cA==",
-      "path": "awssdk.sqs/3.7.502.38",
-      "hashPath": "awssdk.sqs.3.7.502.38.nupkg.sha512"
+      "sha512": "sha512-2Yrkmd5Aj3rCY62mXJ7kwLTxKLudLFu8fkQnrKH0cktHhriB1blEp8FJvTRIr9JFKQXu3O0RV+fMo9+tRxAgMw==",
+      "path": "awssdk.sqs/3.7.502.36",
+      "hashPath": "awssdk.sqs.3.7.502.36.nupkg.sha512"
     },
     "Humanizer.Core/2.14.1": {
       "type": "package",

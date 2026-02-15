@@ -129,7 +129,6 @@
 /* ===== Post Content ===== */
 .post-content {
   margin-bottom: 0.875rem;
-  padding-right: 2.5rem;
 }
 
 .post-content:has(.expand-indicator) {
@@ -429,6 +428,15 @@
   background: #ef4444;
 }
 
+.status-badge[data-status="canceled"] {
+  background: rgba(148, 163, 184, 0.1);
+  color: #94a3b8;
+}
+
+.status-badge[data-status="canceled"] .status-dot {
+  background: #94a3b8;
+}
+
 /* Instagram media type badge */
 .media-type-badge {
   font-size: 0.625rem;
@@ -466,34 +474,37 @@
   50% { opacity: 0.4; }
 }
 
-/* ===== Delete Button ===== */
-.delete-btn {
-  position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
-  width: 30px;
-  height: 30px;
+/* ===== Remove Button (inline in badges row) ===== */
+.remove-btn {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 24px;
+  height: 24px;
   padding: 0;
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.25);
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid transparent;
   border-radius: 6px;
-  color: #ef4444;
+  color: rgba(255, 255, 255, 0.3);
   cursor: pointer;
   transition: all 0.15s ease;
+  flex-shrink: 0;
 }
 
-.delete-btn svg {
-  width: 16px;
-  height: 16px;
+.remove-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
-.delete-btn:hover {
+.remove-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+.remove-btn:active {
   background: rgba(239, 68, 68, 0.25);
-  border-color: rgba(239, 68, 68, 0.5);
-  color: #f87171;
 }
 
 /* ===== Loading State ===== */

@@ -536,19 +536,39 @@ public class PostsController : ControllerBase
             return NotFound();
         }
 
-        // Only allow deleting posts that haven't been published or are currently publishing
-        if (post.Status == PostStatus.Published || post.Status == PostStatus.Publishing)
+        switch (post.Status)
         {
-            return BadRequest(new { error = $"Cannot delete a post with status '{post.Status}'." });
+            // Already canceled — idempotent, nothing to do
+            case PostStatus.Canceled:
+                return NoContent();
+
+            // Active states — cannot remove, would cause race conditions
+            case PostStatus.Publishing:
+            case PostStatus.Published:
+                return Conflict(new ProblemDetails
+                {
+                    Title = "Cannot remove post",
+                    Detail = $"Post cannot be removed while in '{post.Status}' status.",
+                    Status = StatusCodes.Status409Conflict,
+                });
+
+            // Failed — delete the record entirely (cleanup)
+            case PostStatus.Failed:
+                _context.Posts.Remove(post);
+                await _context.SaveChangesAsync();
+                return NoContent();
+
+            // Pending / RetryPending — cancel the schedule and mark as canceled
+            default:
+                await _scheduler.CancelScheduleAsync(post);
+
+                post.Status = PostStatus.Canceled;
+                post.CanceledAt = DateTime.UtcNow;
+                post.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+
+                return NoContent();
         }
-
-        // Cancel any scheduled trigger before deleting
-        await _scheduler.CancelScheduleAsync(post);
-
-        _context.Posts.Remove(post);
-        await _context.SaveChangesAsync();
-
-        return NoContent();
     }
 
     private static Dictionary<string, string[]> ValidateCreatePostRequest(CreatePostRequest request)

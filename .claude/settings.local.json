@@ -35,7 +35,8 @@
       "Bash(xargs:*)",
       "Bash(dotnet restore:*)",
       "Bash(dotnet ef database:*)",
-      "Bash(pushd:*)"
+      "Bash(pushd:*)",
+      "Bash(npx vite build:*)"
     ]
   }
 }
