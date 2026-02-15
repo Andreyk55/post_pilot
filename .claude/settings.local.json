@@ -36,7 +36,10 @@
       "Bash(dotnet restore:*)",
       "Bash(dotnet ef database:*)",
       "Bash(pushd:*)",
-      "Bash(npx vite build:*)"
+      "Bash(npx vite build:*)",
+      "Bash(npm install:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(del \"d:\\\\dev\\\\projects\\\\post_pilot\\\\frontend\\\\src\\\\utils\\\\instagramMediaValidation.test.ts\")"
     ]
   }
 }

@@ -1,6 +1,12 @@
 import { useState, useRef } from 'react'
 import { mediaApi, type MediaType, type ValidationStatus, type MediaValidationError, type MediaValidationWarning, type Platform } from '../api/media'
 import { preValidateFile, preValidateImageDimensions, getImageDimensions } from '../constants/mediaValidationRules'
+import {
+  validateInstagramSelection,
+  getInstagramMediaMode,
+  getInstagramUploaderLabel,
+  getInstagramFormatHint,
+} from '../utils/instagramMediaValidation'
 import type { PlatformId } from '../constants/validationLimits'
 import './MultiMediaUpload.css'
 
@@ -40,7 +46,16 @@ export function MultiMediaUpload({
   const [uploadError, setUploadError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const canAddMore = items.length < maxItems
+  const isInstagram = selectedPlatform === 'instagram'
+
+  // Instagram media mode for dynamic labels
+  const igMediaMode = isInstagram
+    ? getInstagramMediaMode(items.map(i => ({ name: i.fileName, type: i.mediaType === 'Video' ? 'video/mp4' : 'image/jpeg' })))
+    : null
+
+  // For Instagram with a video selected, don't allow adding more
+  const igHasVideo = isInstagram && items.length === 1 && items[0].mediaType === 'Video'
+  const canAddMore = igHasVideo ? false : items.length < maxItems
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
@@ -49,6 +64,38 @@ export function MultiMediaUpload({
     // Reset file input
     if (fileInputRef.current) fileInputRef.current.value = ''
 
+    // --- Instagram-specific validation via pure function ---
+    if (isInstagram) {
+      const existingAsInfo = items.map(i => ({
+        name: i.fileName,
+        type: i.mediaType === 'Video' ? 'video/mp4' : 'image/jpeg',
+      }))
+      const newAsInfo = files.map(f => ({ name: f.name, type: f.type }))
+      const result = validateInstagramSelection(existingAsInfo, newAsInfo)
+
+      if (!result.ok) {
+        setUploadError(result.errorMessage)
+        return
+      }
+      if (result.errorMessage) {
+        // Partial accept (e.g. truncated to fit 10)
+        setUploadError(result.errorMessage)
+      } else {
+        setUploadError(null)
+      }
+
+      // Determine which new files to actually upload based on result.nextFiles
+      // nextFiles = existing + accepted new, so accepted new = nextFiles.slice(existing.length)
+      const acceptedCount = result.nextFiles.length - items.length
+      const filesToUpload = files.slice(0, acceptedCount)
+
+      if (filesToUpload.length === 0) return
+
+      await uploadFiles(filesToUpload)
+      return
+    }
+
+    // --- Facebook / other platform validation (original logic) ---
     const remainingSlots = maxItems - items.length
     const filesToUpload = files.slice(0, remainingSlots)
 
@@ -59,7 +106,6 @@ export function MultiMediaUpload({
     }
 
     // For multi-image: all items must be images (no videos)
-    // Allow a single video only when there are no existing images (single-post mode)
     const hasExistingImages = items.length > 0
     const hasVideoInBatch = filesToUpload.some(f => f.type.startsWith('video/'))
     const hasMultipleFiles = filesToUpload.length + items.length > 1
@@ -75,16 +121,10 @@ export function MultiMediaUpload({
       return
     }
 
-    // For Instagram, only images are allowed (no videos even as single upload via this component)
-    if (selectedPlatform === 'instagram') {
-      for (const file of filesToUpload) {
-        if (!file.type.startsWith('image/')) {
-          setUploadError('Instagram carousel only supports images. Use single upload for videos.')
-          return
-        }
-      }
-    }
+    await uploadFiles(filesToUpload)
+  }
 
+  const uploadFiles = async (filesToUpload: File[]) => {
     setUploading(true)
     onUploadingChange?.(true)
 
@@ -209,30 +249,92 @@ export function MultiMediaUpload({
   const hasInvalidItems = items.some(item => item.validationStatus === 'Invalid')
   const itemCount = items.length
 
-  // For Facebook with 0 items, accept both images and video (single video upload)
-  // Once there are images, only accept more images
-  const acceptTypes = (selectedPlatform === 'facebook' && items.length === 0)
-    ? 'image/jpeg,image/png,video/mp4,video/quicktime,video/x-msvideo'
-    : 'image/jpeg,image/png'
+  // Determine accepted file types for the <input>
+  const getAcceptTypes = (): string => {
+    if (isInstagram) {
+      // When empty or with images only: accept both images and video (validation handles the rest)
+      // When a video is already selected: nothing more can be added (canAddMore = false)
+      if (items.length === 0) return 'image/jpeg,image/png,video/mp4'
+      // If existing items are images, only allow more images
+      if (items.some(i => i.mediaType === 'Image')) return 'image/jpeg,image/png'
+      return 'image/jpeg,image/png,video/mp4'
+    }
+    // Facebook: accept video only when empty
+    if (selectedPlatform === 'facebook' && items.length === 0) {
+      return 'image/jpeg,image/png,video/mp4,video/quicktime,video/x-msvideo'
+    }
+    return 'image/jpeg,image/png'
+  }
+
+  // Instagram: dynamic upload text and hint
+  const getUploadText = (): string => {
+    if (uploading) return 'Uploading...'
+    if (isInstagram && igMediaMode) {
+      return getInstagramUploaderLabel(igMediaMode, itemCount)
+    }
+    return `Add Images (2-10 for ${selectedPlatform === 'facebook' ? 'multi-photo' : 'carousel'})`
+  }
+
+  const getUploadHint = (): string => {
+    if (isInstagram && igMediaMode) {
+      return getInstagramFormatHint(igMediaMode)
+    }
+    if (selectedPlatform === 'facebook') {
+      return 'JPEG, PNG images (or a single video). Select multiple files for multi-photo.'
+    }
+    return 'JPEG, PNG only. Select multiple files.'
+  }
+
+  // Instagram: dynamic status bar text
+  const getStatusText = (): string => {
+    if (isInstagram) {
+      if (itemCount === 1 && items[0].mediaType === 'Video') return '1 video'
+      return `${itemCount} photo${itemCount !== 1 ? 's' : ''}`
+    }
+    return `${itemCount} image${itemCount !== 1 ? 's' : ''}`
+  }
+
+  const getStatusBadge = (): string | null => {
+    if (itemCount < minItems) return null
+    if (isInstagram) return 'Carousel'
+    if (selectedPlatform === 'facebook') return 'Multi-photo'
+    return 'Carousel'
+  }
+
+  const getStatusHint = (): string | null => {
+    if (itemCount !== 1) return null
+    if (isInstagram) {
+      if (items[0].mediaType === 'Video') return 'Will publish as Reel'
+      return 'Add 1 more for carousel'
+    }
+    return `Add 1 more for ${selectedPlatform === 'facebook' ? 'multi-photo' : 'carousel'}`
+  }
+
+  // For video items, show video preview differently
+  const isItemVideo = (item: UploadedMediaItem) => item.mediaType === 'Video'
 
   return (
     <div className="multi-media-upload">
       <input
         ref={fileInputRef}
         type="file"
-        accept={acceptTypes}
+        accept={getAcceptTypes()}
         onChange={handleFileSelect}
         disabled={uploading || disabled || !canAddMore}
         className="file-input-hidden"
-        multiple
+        multiple={!(isInstagram && items.length === 0)}
       />
 
-      {/* Image grid */}
+      {/* Media grid */}
       {items.length > 0 && (
         <div className="carousel-grid">
           {items.map((item, index) => (
             <div key={item.id} className={`carousel-item ${item.validationStatus === 'Invalid' ? 'invalid' : ''}`}>
-              <img src={item.previewUrl} alt={`Image ${index + 1}`} className="carousel-thumbnail" />
+              {isItemVideo(item) ? (
+                <video src={item.previewUrl} className="carousel-thumbnail" muted />
+              ) : (
+                <img src={item.previewUrl} alt={`Image ${index + 1}`} className="carousel-thumbnail" />
+              )}
               <div className="carousel-item-overlay">
                 <span className="carousel-order">{index + 1}</span>
                 <div className="carousel-item-actions">
@@ -299,14 +401,8 @@ export function MultiMediaUpload({
         >
           <div className="upload-placeholder">
             <span className="upload-icon">+</span>
-            <span className="upload-text">
-              {uploading ? 'Uploading...' : `Add Images (2-10 for ${selectedPlatform === 'facebook' ? 'multi-photo' : 'carousel'})`}
-            </span>
-            <span className="upload-hint">
-              {selectedPlatform === 'facebook'
-                ? 'JPEG, PNG images (or a single video). Select multiple files for multi-photo.'
-                : 'JPEG, PNG only. Select multiple files.'}
-            </span>
+            <span className="upload-text">{getUploadText()}</span>
+            <span className="upload-hint">{getUploadHint()}</span>
           </div>
         </div>
       )}
@@ -314,19 +410,15 @@ export function MultiMediaUpload({
       {/* Status bar */}
       {items.length > 0 && (
         <div className="carousel-status-bar">
-          <span className="carousel-count">{itemCount} image{itemCount !== 1 ? 's' : ''}</span>
-          {itemCount >= minItems && (
-            <span className="carousel-badge">
-              {selectedPlatform === 'facebook' ? 'Multi-photo' : 'Carousel'}
-            </span>
+          <span className="carousel-count">{getStatusText()}</span>
+          {getStatusBadge() && (
+            <span className="carousel-badge">{getStatusBadge()}</span>
           )}
-          {itemCount === 1 && (
-            <span className="carousel-hint">
-              Add 1 more for {selectedPlatform === 'facebook' ? 'multi-photo' : 'carousel'}
-            </span>
+          {getStatusHint() && (
+            <span className="carousel-hint">{getStatusHint()}</span>
           )}
           {hasInvalidItems && (
-            <span className="carousel-warning">Some images have validation issues</span>
+            <span className="carousel-warning">Some items have validation issues</span>
           )}
         </div>
       )}
