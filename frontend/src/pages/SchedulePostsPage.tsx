@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { postsApi, type Post, type CreatePostRequest, type Platform } from '../api/posts'
+import { postsApi, type Post, type CreatePostRequest, type CreatePostMediaItem, type Platform } from '../api/posts'
 import type { MediaType } from '../api/media'
 import { SchedulePost } from '../components/SchedulePost'
 import { ScheduledPosts } from '../components/ScheduledPosts'
@@ -93,6 +93,7 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
     mediaUrl?: string
     mediaType?: MediaType
     selectedThumbnailUrl?: string
+    mediaItems?: CreatePostMediaItem[]
   }) => {
     try {
       const scheduledAt = new Date(`${formData.scheduledDate}T${formData.scheduledTime}`).toISOString()
@@ -116,6 +117,8 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
           mediaType: formData.mediaType,
           // Include selected thumbnail URL for video posts
           selectedThumbnailUrl: formData.selectedThumbnailUrl,
+          // Include media items for carousel posts
+          mediaItems: platform === 'Instagram' ? formData.mediaItems : undefined,
         }
         const post = await postsApi.create(request)
         newPosts.push(post)

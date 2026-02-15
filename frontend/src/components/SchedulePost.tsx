@@ -4,6 +4,8 @@ import { aiApi, type AiPlatform, type AiGoal, type AudienceLocationMode } from '
 import type { MediaType, ValidationStatus, MediaValidationError, MediaValidationWarning } from '../api/media'
 import type { ConnectedPage, ConnectedInstagramAccount } from '../types/meta'
 import { MediaUpload } from './MediaUpload'
+import { MultiMediaUpload, type UploadedMediaItem } from './MultiMediaUpload'
+import type { CreatePostMediaItem } from '../api/posts'
 import { AiAssistPanel, type StickyLanguageState } from './AiAssistPanel'
 import { SuggestedTimes } from './SuggestedTimes'
 import { type VoiceProfileSummary } from '../api/voiceProfiles'
@@ -27,6 +29,7 @@ interface SchedulePostProps {
     mediaUrl?: string
     mediaType?: MediaType
     selectedThumbnailUrl?: string
+    mediaItems?: CreatePostMediaItem[]
   }) => void
   voiceProfiles: VoiceProfileSummary[]
   onVoiceProfileModalOpen: (profileId?: string | null) => void
@@ -77,6 +80,9 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
   const [selectedThumbnailUrl, setSelectedThumbnailUrl] = useState<string | null>(null)
   const [mediaValidationStatus, setMediaValidationStatus] = useState<ValidationStatus | null>(null)
   const [mediaValidationErrors, setMediaValidationErrors] = useState<MediaValidationError[]>([])
+
+  // Carousel (multi-image) state for Instagram
+  const [carouselItems, setCarouselItems] = useState<UploadedMediaItem[]>([])
 
   // AI state (shared between AiAssistPanel and time suggestions)
   const [goal, setGoal] = useState<AiGoal>('Engage')
@@ -266,14 +272,20 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
     }
   }
 
-  // Instagram requires exactly 1 media item (image or video)
-  const isInstagramMediaValid = !isInstagramSelected || (mediaUrl && (mediaType === 'Image' || mediaType === 'Video'))
+  // Instagram media validation: single image/video OR carousel (2+ images)
+  const isInstagramCarousel = isInstagramSelected && carouselItems.length >= 2
+  const isInstagramMediaValid = !isInstagramSelected ||
+    isInstagramCarousel ||
+    (mediaUrl && (mediaType === 'Image' || mediaType === 'Video'))
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
+    const hasCarousel = isInstagramSelected && carouselItems.length >= 2
+    const hasMedia = mediaUrl || hasCarousel
+
     // Require either content or media, plus date/time/platform
-    if ((!content && !mediaUrl) || !scheduledDate || !scheduledTime || selectedPlatforms.length === 0) {
+    if ((!content && !hasMedia) || !scheduledDate || !scheduledTime || selectedPlatforms.length === 0) {
       return
     }
 
@@ -287,10 +299,19 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
       return
     }
 
-    // Instagram requires exactly 1 media item (image or video)
-    if (isInstagramSelected && (!mediaUrl || (mediaType !== 'Image' && mediaType !== 'Video'))) {
+    // Instagram requires media: either carousel (2+ images) or single image/video
+    if (isInstagramSelected && !hasCarousel && (!mediaUrl || (mediaType !== 'Image' && mediaType !== 'Video'))) {
       return
     }
+
+    // Build media items for carousel
+    const mediaItemsPayload: CreatePostMediaItem[] | undefined = hasCarousel
+      ? carouselItems.map((item, index) => ({
+          mediaUrl: item.s3Key,
+          mediaType: item.mediaType,
+          order: index,
+        }))
+      : undefined
 
     onSchedule({
       content,
@@ -299,9 +320,10 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
       platforms: selectedPlatforms,
       targetPageId: isFacebookSelected ? selectedPageId : undefined,
       targetInstagramAccountId: isInstagramSelected ? selectedInstagramAccountId : undefined,
-      mediaUrl: mediaUrl || undefined,
-      mediaType: mediaType || undefined,
+      mediaUrl: hasCarousel ? undefined : (mediaUrl || undefined),
+      mediaType: hasCarousel ? undefined : (mediaType || undefined),
       selectedThumbnailUrl: selectedThumbnailUrl || undefined,
+      mediaItems: mediaItemsPayload,
     })
 
     // Reset form including language
@@ -318,6 +340,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
     setSelectedThumbnailUrl(null)
     setMediaValidationStatus(null)
     setMediaValidationErrors([])
+    setCarouselItems([])
     setStickyLanguage({ languageCode: 'unknown', confidence: 0, isReliable: false })
   }
 
@@ -329,19 +352,21 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
 
   // Media validation status check - invalid media blocks submission
   const hasInvalidMedia = mediaUrl && mediaValidationStatus === 'Invalid'
+  const hasInvalidCarouselItems = carouselItems.some(item => item.validationStatus === 'Invalid')
 
   // Form is valid if there's content OR media, plus date/time/platform, not uploading, text within limits, and no invalid media
-  const isFormValid = (content || mediaUrl) && scheduledDate && scheduledTime &&
+  const isFormValid = (content || mediaUrl || isInstagramCarousel) && scheduledDate && scheduledTime &&
     selectedPlatforms.length > 0 &&
     (!isFacebookSelected || selectedPageId) &&
     (!isInstagramSelected || selectedInstagramAccountId) &&
     isInstagramMediaValid &&
     !isUploading &&
     !isTextTooLong &&
-    !hasInvalidMedia
+    !hasInvalidMedia &&
+    !hasInvalidCarouselItems
 
   // Check if there's any data in the form to show reset button
-  const hasFormData = content || mediaUrl || scheduledDate || scheduledTime || selectedPlatforms.length > 0
+  const hasFormData = content || mediaUrl || carouselItems.length > 0 || scheduledDate || scheduledTime || selectedPlatforms.length > 0
 
   const handleReset = () => {
     setContent('')
@@ -359,6 +384,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
     setSelectedThumbnailUrl(null)
     setMediaValidationStatus(null)
     setMediaValidationErrors([])
+    setCarouselItems([])
     setStickyLanguage({ languageCode: 'unknown', confidence: 0, isReliable: false })
   }
 
@@ -541,30 +567,56 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
           <label>
             {isInstagramSelected ? 'Media (required)' : 'Media (optional)'}
           </label>
-          {isInstagramSelected && !mediaUrl && (
+          {isInstagramSelected && !mediaUrl && carouselItems.length === 0 && (
             <div className="ig-media-hint">
-              Instagram Feed posts require exactly 1 media item. Carousel not supported yet.
+              Upload 1 image/video for a single post, or 2-10 images for a carousel.
             </div>
           )}
-          <MediaUpload
-            key={uploadKey}
-            onUploadComplete={(s3Key, type) => {
-              setMediaUrl(s3Key)
-              setMediaType(type)
-              setUploadError(null)
-            }}
-            onUploadError={(error) => setUploadError(error)}
-            onClear={() => {
-              setMediaUrl(null)
-              setMediaType(null)
-              setMediaValidationStatus(null)
-              setMediaValidationErrors([])
-            }}
-            onUploadingChange={setIsUploading}
-            onValidationChange={handleMediaValidationChange}
-            selectedPlatform={selectedPlatformId}
-            disabled={!isComposerEnabled}
-          />
+          {isInstagramSelected ? (
+            <MultiMediaUpload
+              key={uploadKey}
+              items={carouselItems}
+              onItemsChange={(items) => {
+                setCarouselItems(items)
+                // If user goes from multi to single (1 item), keep it in carousel state
+                // but also set legacy media for AI panel preview
+                if (items.length === 1) {
+                  setMediaUrl(items[0].s3Key)
+                  setMediaType(items[0].mediaType)
+                } else if (items.length === 0) {
+                  setMediaUrl(null)
+                  setMediaType(null)
+                } else {
+                  // Multi-image: set first image for AI preview
+                  setMediaUrl(items[0].s3Key)
+                  setMediaType('Image')
+                }
+              }}
+              onUploadingChange={setIsUploading}
+              selectedPlatform={selectedPlatformId}
+              disabled={!isComposerEnabled}
+            />
+          ) : (
+            <MediaUpload
+              key={uploadKey}
+              onUploadComplete={(s3Key, type) => {
+                setMediaUrl(s3Key)
+                setMediaType(type)
+                setUploadError(null)
+              }}
+              onUploadError={(error) => setUploadError(error)}
+              onClear={() => {
+                setMediaUrl(null)
+                setMediaType(null)
+                setMediaValidationStatus(null)
+                setMediaValidationErrors([])
+              }}
+              onUploadingChange={setIsUploading}
+              onValidationChange={handleMediaValidationChange}
+              selectedPlatform={selectedPlatformId}
+              disabled={!isComposerEnabled}
+            />
+          )}
           {uploadError && <div className="upload-error">{uploadError}</div>}
           {/* Show validation error summary near submit button */}
           {hasInvalidMedia && mediaValidationErrors.length > 0 && (

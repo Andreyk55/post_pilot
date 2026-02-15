@@ -17,6 +17,9 @@ function getEffectiveMediaType(post: Post): 'None' | 'Image' | 'Video' {
 
 // Helper to get the display label for the media badge
 function getMediaBadgeLabel(post: Post): string {
+  if (post.platform === 'Instagram' && (post.mediaItems && post.mediaItems.length >= 2)) {
+    return 'Carousel'
+  }
   if (post.platform === 'Instagram' && post.instagramMediaType) {
     switch (post.instagramMediaType) {
       case 'Reels': return 'Reel'
@@ -31,6 +34,7 @@ function getMediaBadgeLabel(post: Post): string {
 
 // Returns the CSS data-type value for badge coloring
 function getMediaBadgeType(post: Post): string {
+  if (post.mediaItems && post.mediaItems.length >= 2) return 'carouselalbum'
   if (post.instagramMediaType) return post.instagramMediaType.toLowerCase()
   return getEffectiveMediaType(post) === 'Video' ? 'video' : 'image'
 }
@@ -203,13 +207,25 @@ export function PostItem({ post, onDelete, cachedDetails, onDetailsFetched }: Po
         </div>
 
         <div className={`post-media ${post.mediaUrl ? '' : 'placeholder'}`}>
-          {post.mediaUrl && getEffectiveMediaType(post) === 'Image' && (
+          {/* Carousel preview */}
+          {post.mediaItems && post.mediaItems.length >= 2 && (
+            <div className="post-carousel-thumbnail">
+              <img
+                src={getMediaUrl(post.mediaItems[0].mediaUrl) || ''}
+                alt="Carousel preview"
+              />
+              <span className="video-badge">Carousel ({post.mediaItems.length})</span>
+            </div>
+          )}
+          {/* Single image */}
+          {!(post.mediaItems && post.mediaItems.length >= 2) && post.mediaUrl && getEffectiveMediaType(post) === 'Image' && (
             <img
               src={getMediaUrl(post.mediaUrl) || ''}
               alt="Post attachment"
             />
           )}
-          {post.mediaUrl && getEffectiveMediaType(post) === 'Video' && (
+          {/* Video */}
+          {!(post.mediaItems && post.mediaItems.length >= 2) && post.mediaUrl && getEffectiveMediaType(post) === 'Video' && (
             post.selectedThumbnailUrl ? (
               <div className="post-video-thumbnail custom-thumbnail">
                 <img src={post.selectedThumbnailUrl} alt="Video thumbnail" />

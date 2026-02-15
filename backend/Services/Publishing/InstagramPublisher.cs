@@ -95,9 +95,10 @@ public class InstagramPublisher : IPostPublisher
     {
         _logger.LogInformation("Starting Instagram publish for post {PostId}", postId);
 
-        // Step 1: Load post with target IG account
+        // Step 1: Load post with target IG account and media items
         var post = await _dbContext.Posts
             .Include(p => p.TargetInstagramAccount)
+            .Include(p => p.MediaItems)
             .FirstOrDefaultAsync(p => p.Id == postId, cancellationToken);
 
         if (post == null)
@@ -142,12 +143,23 @@ public class InstagramPublisher : IPostPublisher
                 ErrorMessage: "No access token for linked Facebook Page");
         }
 
-        // Step 5: Route to image or video flow
+        // Step 5: Route to image, video, or carousel flow
+        var isCarousel = post.MediaItems?.Count >= 2;
         try
         {
             PublishResult result;
 
-            if (post.MediaType == MediaType.Video)
+            if (isCarousel)
+            {
+                result = await PublishCarouselToInstagramAsync(post, accessToken, cancellationToken);
+
+                // Carousel flow handles its own state transitions for processing retries.
+                if (result.Success && string.IsNullOrEmpty(result.ExternalPostId))
+                {
+                    return result;
+                }
+            }
+            else if (post.MediaType == MediaType.Video)
             {
                 result = await PublishVideoToInstagramAsync(post, accessToken, cancellationToken);
 
@@ -365,6 +377,210 @@ public class InstagramPublisher : IPostPublisher
         // Return success=false but NOT a hard failure — the caller won't call HandlePublishFailureAsync
         // because we already handled the state transition here.
         return new PublishResult(true);
+    }
+
+    // ──────────────────────────────────────────────
+    //  CAROUSEL FLOW (stateful, multi-attempt)
+    // ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Stateful Instagram carousel publishing flow.
+    /// Steps:
+    ///   1. Create child containers for each image (is_carousel_item=true, no caption)
+    ///   2. Create carousel container (media_type=CAROUSEL, children=..., caption=...)
+    ///   3. Poll carousel container status
+    ///   4. Publish carousel container
+    ///
+    /// Each step is idempotent — IDs are persisted so retries skip completed steps.
+    /// Uses ProcessingPollCount (separate from RetryCount) for IN_PROGRESS polling.
+    /// </summary>
+    private async Task<PublishResult> PublishCarouselToInstagramAsync(
+        Post post, string accessToken, CancellationToken cancellationToken)
+    {
+        var igUserId = post.TargetInstagramAccount!.IgBusinessId;
+        var mediaItems = post.MediaItems!.OrderBy(m => m.Order).ToList();
+
+        _logger.LogInformation(
+            "Starting carousel publish for post {PostId} with {Count} images",
+            post.Id, mediaItems.Count);
+
+        // Step 1: Create child containers (idempotent — skip if already created)
+        var childIds = DeserializeChildIds(post.InstagramChildCreationIds);
+
+        if (childIds.Count < mediaItems.Count)
+        {
+            // Some or all children need to be created
+            for (int i = childIds.Count; i < mediaItems.Count; i++)
+            {
+                var item = mediaItems[i];
+                var imageUrl = ResolveMediaUrlForItem(item);
+
+                var childResult = await CreateCarouselChildContainerAsync(
+                    igUserId, imageUrl, accessToken, cancellationToken);
+
+                if (!childResult.Success)
+                {
+                    _logger.LogWarning(
+                        "Failed to create carousel child {Index} for post {PostId}: {Error}",
+                        i, post.Id, childResult.ErrorMessage);
+                    return childResult;
+                }
+
+                childIds.Add(childResult.ExternalPostId!);
+
+                // Persist after each child so we don't recreate on retry
+                post.InstagramChildCreationIds = SerializeChildIds(childIds);
+                post.UpdatedAt = DateTime.UtcNow;
+                await _dbContext.SaveChangesAsync(cancellationToken);
+
+                _logger.LogInformation(
+                    "Created carousel child {Index}/{Total}: {ChildId} for post {PostId}",
+                    i + 1, mediaItems.Count, childResult.ExternalPostId, post.Id);
+            }
+        }
+
+        // Step 2: Create carousel container (idempotent)
+        if (string.IsNullOrEmpty(post.InstagramCarouselCreationId))
+        {
+            var carouselResult = await CreateCarouselContainerAsync(
+                igUserId, childIds, post.Content, accessToken, cancellationToken);
+
+            if (!carouselResult.Success)
+                return carouselResult;
+
+            post.InstagramCarouselCreationId = carouselResult.ExternalPostId!;
+            post.UpdatedAt = DateTime.UtcNow;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "Created carousel container {CarouselId} for post {PostId}",
+                post.InstagramCarouselCreationId, post.Id);
+        }
+
+        // Step 3: Check carousel container status (single check, no blocking loop)
+        var statusResult = await CheckContainerStatusAsync(
+            post.InstagramCarouselCreationId!, accessToken, cancellationToken);
+
+        switch (statusResult.Status)
+        {
+            case IgContainerStatus.Finished:
+                _logger.LogInformation(
+                    "Carousel container {CarouselId} is FINISHED, publishing for post {PostId}",
+                    post.InstagramCarouselCreationId, post.Id);
+
+                return await PublishMediaContainerAsync(
+                    igUserId, post.InstagramCarouselCreationId!, accessToken, cancellationToken);
+
+            case IgContainerStatus.InProgress:
+                return await ScheduleProcessingRetryAsync(post, cancellationToken);
+
+            case IgContainerStatus.Error:
+                return new PublishResult(false,
+                    ErrorType: PublishErrorType.Permanent,
+                    ErrorMessage: $"Carousel container processing failed: {statusResult.ErrorMessage}");
+
+            case IgContainerStatus.Expired:
+                // Clear carousel container so it can be recreated on retry
+                // (children are still valid if not expired)
+                post.InstagramCarouselCreationId = null;
+                post.UpdatedAt = DateTime.UtcNow;
+                await _dbContext.SaveChangesAsync(cancellationToken);
+
+                return new PublishResult(false,
+                    ErrorType: PublishErrorType.Transient,
+                    ErrorMessage: "Carousel container expired before publishing");
+
+            default:
+                return new PublishResult(false,
+                    ErrorType: PublishErrorType.Transient,
+                    ErrorMessage: $"Unknown carousel container status: {statusResult.Status}");
+        }
+    }
+
+    /// <summary>
+    /// POST /{ig-user-id}/media with image_url and is_carousel_item=true (no caption on children).
+    /// </summary>
+    private async Task<PublishResult> CreateCarouselChildContainerAsync(
+        string igUserId, string imageUrl,
+        string accessToken, CancellationToken cancellationToken)
+    {
+        var url = $"{GraphApiBaseUrl}/{igUserId}/media";
+        var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["image_url"] = imageUrl,
+            ["is_carousel_item"] = "true",
+            ["access_token"] = accessToken,
+        });
+
+        _logger.LogInformation("Creating IG carousel child container: POST {Url}", url);
+
+        var response = await _httpClient.PostAsync(url, content, cancellationToken);
+        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        _logger.LogInformation("IG carousel child container response: {StatusCode} - {Body}",
+            response.StatusCode, RedactToken(responseBody));
+
+        return ParseMetaIdResponse(response, responseBody, "carousel child container creation");
+    }
+
+    /// <summary>
+    /// POST /{ig-user-id}/media with media_type=CAROUSEL, children=..., and caption.
+    /// </summary>
+    private async Task<PublishResult> CreateCarouselContainerAsync(
+        string igUserId, List<string> childCreationIds, string caption,
+        string accessToken, CancellationToken cancellationToken)
+    {
+        var url = $"{GraphApiBaseUrl}/{igUserId}/media";
+        var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["media_type"] = "CAROUSEL",
+            ["children"] = string.Join(",", childCreationIds),
+            ["caption"] = caption ?? "",
+            ["access_token"] = accessToken,
+        });
+
+        _logger.LogInformation("Creating IG carousel container: POST {Url} with {Count} children",
+            url, childCreationIds.Count);
+
+        var response = await _httpClient.PostAsync(url, content, cancellationToken);
+        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        _logger.LogInformation("IG carousel container response: {StatusCode} - {Body}",
+            response.StatusCode, RedactToken(responseBody));
+
+        return ParseMetaIdResponse(response, responseBody, "carousel container creation");
+    }
+
+    /// <summary>
+    /// Resolves a public URL for a PostMediaItem (generates pre-signed URL if S3 key).
+    /// </summary>
+    private string ResolveMediaUrlForItem(PostMediaItem item)
+    {
+        if (_mediaService.IsS3Key(item.MediaUrl))
+        {
+            return _mediaService.GenerateDownloadUrl(item.MediaUrl, MediaDownloadUrlExpiration);
+        }
+        return item.MediaUrl;
+    }
+
+    private static List<string> DeserializeChildIds(string? json)
+    {
+        if (string.IsNullOrEmpty(json))
+            return new List<string>();
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
+        }
+        catch
+        {
+            return new List<string>();
+        }
+    }
+
+    private static string SerializeChildIds(List<string> ids)
+    {
+        return JsonSerializer.Serialize(ids);
     }
 
     // ──────────────────────────────────────────────

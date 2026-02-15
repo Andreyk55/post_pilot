@@ -290,6 +290,32 @@
   letter-spacing: 0.5px;
 }
 
+.post-media .post-carousel-thumbnail {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.post-media .post-carousel-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.post-media .post-carousel-thumbnail .video-badge {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  padding: 1px 4px;
+  background: rgba(102, 126, 234, 0.8);
+  border-radius: 2px;
+  font-size: 0.5rem;
+  font-weight: 600;
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 /* Expand Indicator */
 .post-expand-indicator {
   flex-shrink: 0;

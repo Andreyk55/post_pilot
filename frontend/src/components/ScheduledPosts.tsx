@@ -17,6 +17,10 @@ function getEffectiveMediaType(post: Post): 'None' | 'Image' | 'Video' {
 
 // Helper to get the display label for the media badge
 function getMediaBadgeLabel(post: Post): string {
+  // Carousel detection: from instagramMediaType (after publishing) or from mediaItems (before publishing)
+  if (post.platform === 'Instagram' && (post.mediaItems && post.mediaItems.length >= 2)) {
+    return 'Carousel'
+  }
   if (post.platform === 'Instagram' && post.instagramMediaType) {
     switch (post.instagramMediaType) {
       case 'Reels': return 'Reel'
@@ -31,6 +35,7 @@ function getMediaBadgeLabel(post: Post): string {
 
 // Returns the CSS data-type value for badge coloring
 function getMediaBadgeType(post: Post): string {
+  if (post.mediaItems && post.mediaItems.length >= 2) return 'carouselalbum'
   if (post.instagramMediaType) return post.instagramMediaType.toLowerCase()
   return getEffectiveMediaType(post) === 'Video' ? 'video' : 'image'
 }
@@ -223,7 +228,23 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
                   )}
                 </div>
 
-                {post.mediaUrl && mediaType === 'Image' && (
+                {/* Carousel preview (multiple images) */}
+                {post.mediaItems && post.mediaItems.length >= 2 && (
+                  <div className="post-media-preview carousel-preview">
+                    <img
+                      src={getMediaUrl(post.mediaItems[0].mediaUrl) || ''}
+                      alt=""
+                      className="media-thumbnail"
+                    />
+                    <span className="media-indicator">
+                      <ImageIcon />
+                      Carousel ({post.mediaItems.length})
+                    </span>
+                  </div>
+                )}
+
+                {/* Single image preview (not carousel) */}
+                {!(post.mediaItems && post.mediaItems.length >= 2) && post.mediaUrl && mediaType === 'Image' && (
                   <div className="post-media-preview">
                     <img
                       src={getMediaUrl(post.mediaUrl) || ''}
@@ -237,7 +258,8 @@ export function ScheduledPosts({ posts, onDelete, onLoadMore, hasMore, isLoading
                   </div>
                 )}
 
-                {post.mediaUrl && mediaType === 'Video' && (
+                {/* Video preview */}
+                {!(post.mediaItems && post.mediaItems.length >= 2) && post.mediaUrl && mediaType === 'Video' && (
                   <div className="post-media-preview">
                     {post.selectedThumbnailUrl ? (
                       <img

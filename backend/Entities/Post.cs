@@ -104,7 +104,26 @@ public class Post
     /// </summary>
     public const int MaxProcessingPollCount = 20;
 
+    /// <summary>
+    /// JSON array of child container creation IDs for Instagram carousel publishing.
+    /// Stored so the publisher can skip already-created children on retry.
+    /// Example: ["17889455560051234","17889455560051235"]
+    /// </summary>
+    public string? InstagramChildCreationIds { get; set; }
+
+    /// <summary>
+    /// Carousel container creation ID (the parent container that references children).
+    /// Used for stateful carousel publishing: create children → create carousel → poll → publish.
+    /// </summary>
+    public string? InstagramCarouselCreationId { get; set; }
+
     // Navigation properties
     public ConnectedPage? TargetPage { get; set; }
     public ConnectedInstagramAccount? TargetInstagramAccount { get; set; }
+
+    /// <summary>
+    /// Media items for multi-image posts (carousel). Ordered by PostMediaItem.Order.
+    /// For single-media posts, the legacy MediaUrl/MediaType fields are used instead.
+    /// </summary>
+    public List<PostMediaItem> MediaItems { get; set; } = new();
 }

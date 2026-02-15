@@ -12,6 +12,13 @@ public record PostEngagementDto(
 /// <summary>
 /// Extended post details including engagement metrics fetched from the platform.
 /// </summary>
+public record PostDetailsMediaItemDto(
+    Guid Id,
+    int Order,
+    string MediaUrl,
+    string MediaType
+);
+
 public record PostDetailsDto(
     Guid Id,
     string Content,
@@ -32,5 +39,6 @@ public record PostDetailsDto(
     int RetryCount,
     PostEngagementDto? Engagement,
     string? ExternalPostUrl,
-    string? InstagramMediaType
+    string? InstagramMediaType,
+    List<PostDetailsMediaItemDto>? MediaItems = null
 );

@@ -10,6 +10,7 @@ public class AppDbContext : DbContext
     }
 
     public DbSet<Post> Posts => Set<Post>();
+    public DbSet<PostMediaItem> PostMediaItems => Set<PostMediaItem>();
     public DbSet<MetaConnection> MetaConnections => Set<MetaConnection>();
     public DbSet<ConnectedPage> ConnectedPages => Set<ConnectedPage>();
     public DbSet<ConnectedInstagramAccount> ConnectedInstagramAccounts => Set<ConnectedInstagramAccount>();
@@ -40,6 +41,19 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(e => e.TargetInstagramAccountId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            // Media items relationship
+            entity.HasMany(e => e.MediaItems)
+                .WithOne(m => m.Post)
+                .HasForeignKey(m => m.PostId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PostMediaItem>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.PostId, e.Order });
+            entity.Property(e => e.MediaUrl).IsRequired();
         });
 
         modelBuilder.Entity<MetaConnection>(entity =>

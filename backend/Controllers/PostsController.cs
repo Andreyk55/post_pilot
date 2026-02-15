@@ -54,6 +54,7 @@ public class PostsController : ControllerBase
         var posts = await query
             .Include(p => p.TargetPage)
             .Include(p => p.TargetInstagramAccount)
+            .Include(p => p.MediaItems)
             .OrderByDescending(p => p.ScheduledAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -75,6 +76,7 @@ public class PostsController : ControllerBase
         var post = await _context.Posts
             .Include(p => p.TargetPage)
             .Include(p => p.TargetInstagramAccount)
+            .Include(p => p.MediaItems)
             .FirstOrDefaultAsync(p => p.Id == id);
 
         if (post == null)
@@ -91,6 +93,7 @@ public class PostsController : ControllerBase
         var post = await _context.Posts
             .Include(p => p.TargetPage)
             .Include(p => p.TargetInstagramAccount)
+            .Include(p => p.MediaItems)
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
 
         if (post == null)
@@ -194,7 +197,12 @@ public class PostsController : ControllerBase
             RetryCount: post.RetryCount,
             Engagement: engagement,
             ExternalPostUrl: externalPostUrl,
-            InstagramMediaType: post.InstagramMediaType?.ToString()
+            InstagramMediaType: post.InstagramMediaType?.ToString(),
+            MediaItems: post.MediaItems?.Count > 0
+                ? post.MediaItems.OrderBy(m => m.Order)
+                    .Select(m => new PostDetailsMediaItemDto(m.Id, m.Order, m.MediaUrl, m.MediaType.ToString()))
+                    .ToList()
+                : null
         );
     }
 
@@ -275,16 +283,45 @@ public class PostsController : ControllerBase
                 });
             }
 
-            // Instagram requires exactly 1 media item (image or video)
-            var mediaType = request.MediaType ?? MediaType.None;
-            if (string.IsNullOrEmpty(request.MediaUrl) || (mediaType != MediaType.Image && mediaType != MediaType.Video))
+            // Instagram carousel: 2-10 images via MediaItems
+            var hasMultipleMediaItems = request.MediaItems is { Count: > 0 };
+            if (hasMultipleMediaItems)
             {
-                return BadRequest(new ProblemDetails
+                // Carousel validation
+                if (request.MediaItems!.Count < 2 || request.MediaItems.Count > 10)
                 {
-                    Title = "Invalid media",
-                    Detail = "Instagram Feed posts require exactly one media item (image or video). Text-only posts are not supported.",
-                    Status = StatusCodes.Status400BadRequest,
-                });
+                    return BadRequest(new ProblemDetails
+                    {
+                        Title = "Invalid carousel",
+                        Detail = "Instagram carousel requires 2 to 10 images.",
+                        Status = StatusCodes.Status400BadRequest,
+                    });
+                }
+
+                // All items must be images
+                if (request.MediaItems.Any(m => m.MediaType != MediaType.Image))
+                {
+                    return BadRequest(new ProblemDetails
+                    {
+                        Title = "Invalid carousel media",
+                        Detail = "Instagram carousel only supports images. Videos are not allowed in carousel posts.",
+                        Status = StatusCodes.Status400BadRequest,
+                    });
+                }
+            }
+            else
+            {
+                // Single media: existing validation (image or video required)
+                var mediaType = request.MediaType ?? MediaType.None;
+                if (string.IsNullOrEmpty(request.MediaUrl) || (mediaType != MediaType.Image && mediaType != MediaType.Video))
+                {
+                    return BadRequest(new ProblemDetails
+                    {
+                        Title = "Invalid media",
+                        Detail = "Instagram Feed posts require at least one media item (image or video). Text-only posts are not supported.",
+                        Status = StatusCodes.Status400BadRequest,
+                    });
+                }
             }
         }
 
@@ -307,6 +344,24 @@ public class PostsController : ControllerBase
             UpdatedAt = DateTime.UtcNow
         };
 
+        // Add media items for carousel posts
+        if (request.MediaItems is { Count: > 0 })
+        {
+            post.MediaType = MediaType.Image; // Carousel is image-based
+            post.MediaUrl = request.MediaItems.OrderBy(m => m.Order).First().MediaUrl; // First image as legacy preview
+            post.MediaItems = request.MediaItems
+                .OrderBy(m => m.Order)
+                .Select((m, i) => new PostMediaItem
+                {
+                    Id = Guid.NewGuid(),
+                    PostId = post.Id,
+                    Order = i,
+                    MediaUrl = m.MediaUrl,
+                    MediaType = m.MediaType,
+                })
+                .ToList();
+        }
+
         _context.Posts.Add(post);
         await _context.SaveChangesAsync();
 
@@ -326,6 +381,7 @@ public class PostsController : ControllerBase
         // Reload navigation properties for the response
         await _context.Entry(post).Reference(p => p.TargetPage).LoadAsync();
         await _context.Entry(post).Reference(p => p.TargetInstagramAccount).LoadAsync();
+        await _context.Entry(post).Collection(p => p.MediaItems).LoadAsync();
 
         return CreatedAtAction(nameof(GetPost), new { id = post.Id }, PostDto.FromEntity(post));
     }
@@ -501,6 +557,12 @@ public class PostsController : ControllerBase
     }
 }
 
+public record CreatePostMediaItem(
+    string MediaUrl,
+    MediaType MediaType,
+    int Order
+);
+
 public record CreatePostRequest(
     string Content,
     string? MediaUrl,
@@ -510,7 +572,8 @@ public record CreatePostRequest(
     Guid? TargetPageId = null,
     Guid? TargetInstagramAccountId = null,
     string? SelectedThumbnailUrl = null,
-    List<Guid>? MediaAssetIds = null
+    List<Guid>? MediaAssetIds = null,
+    List<CreatePostMediaItem>? MediaItems = null
 );
 
 public record UpdatePostRequest(
@@ -535,6 +598,13 @@ public record PaginatedResponse<T>(
     public bool HasPreviousPage => Page > 1;
 }
 
+public record PostMediaItemDto(
+    Guid Id,
+    int Order,
+    string MediaUrl,
+    MediaType MediaType
+);
+
 public record PostDto(
     Guid Id,
     string Content,
@@ -555,7 +625,8 @@ public record PostDto(
     string? ErrorMessage,
     int RetryCount,
     string? SelectedThumbnailUrl,
-    string? InstagramMediaType
+    string? InstagramMediaType,
+    List<PostMediaItemDto>? MediaItems = null
 )
 {
     public static PostDto FromEntity(Post post) => new(
@@ -580,6 +651,9 @@ public record PostDto(
         post.ErrorMessage,
         post.RetryCount,
         post.SelectedThumbnailUrl,
-        post.InstagramMediaType?.ToString()
+        post.InstagramMediaType?.ToString(),
+        post.MediaItems?.Count > 0
+            ? post.MediaItems.OrderBy(m => m.Order).Select(m => new PostMediaItemDto(m.Id, m.Order, m.MediaUrl, m.MediaType)).ToList()
+            : null
     );
 }

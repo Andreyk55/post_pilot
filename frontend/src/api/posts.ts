@@ -6,6 +6,19 @@ export type Platform = 'Twitter' | 'Instagram' | 'Facebook' | 'LinkedIn'
 
 export type PostStatus = 'Pending' | 'Publishing' | 'Published' | 'Failed' | 'RetryPending'
 
+export interface PostMediaItem {
+  id: string
+  order: number
+  mediaUrl: string
+  mediaType: MediaType
+}
+
+export interface CreatePostMediaItem {
+  mediaUrl: string
+  mediaType: MediaType
+  order: number
+}
+
 export interface Post {
   id: string
   content: string
@@ -27,6 +40,7 @@ export interface Post {
   retryCount: number
   selectedThumbnailUrl: string | null
   instagramMediaType: string | null
+  mediaItems: PostMediaItem[] | null
 }
 
 export interface CreatePostRequest {
@@ -38,6 +52,7 @@ export interface CreatePostRequest {
   targetPageId?: string | null
   targetInstagramAccountId?: string | null
   selectedThumbnailUrl?: string | null
+  mediaItems?: CreatePostMediaItem[] | null
 }
 
 export interface PaginatedResponse<T> {
@@ -77,6 +92,7 @@ export interface PostDetails {
   engagement: PostEngagement | null
   externalPostUrl: string | null
   instagramMediaType: string | null
+  mediaItems: PostMediaItem[] | null
 }
 
 export const postsApi = {
