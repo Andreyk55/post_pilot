@@ -658,7 +658,10 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
               type="time"
               id="time"
               value={scheduledTime}
-              onChange={(e) => setScheduledTime(e.target.value)}
+              onChange={(e) => {
+                setScheduledTime(e.target.value)
+                e.target.blur()
+              }}
               disabled={!isComposerEnabled}
             />
           </div>
