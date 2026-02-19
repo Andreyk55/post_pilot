@@ -337,14 +337,6 @@ export function PostItem({ post, onCancel, onDelete, cachedDetails, onDetailsFet
                     {formatDateTime(details.createdAt).date} at {formatDateTime(details.createdAt).time}
                   </span>
                 </div>
-                {post.scheduledAt && (
-                  <div className="info-item">
-                    <span className="info-label">Scheduled</span>
-                    <span className="info-value">
-                      {formatDateTime(post.scheduledAt).date} at {formatDateTime(post.scheduledAt).time}
-                    </span>
-                  </div>
-                )}
                 {/* Story link logic */}
                 {post.postType === 'Story' ? (
                   <>
