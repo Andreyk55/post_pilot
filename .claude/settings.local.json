@@ -39,7 +39,8 @@
       "Bash(npx vite build:*)",
       "Bash(npm install:*)",
       "Bash(npm uninstall:*)",
-      "Bash(del \"d:\\\\dev\\\\projects\\\\post_pilot\\\\frontend\\\\src\\\\utils\\\\instagramMediaValidation.test.ts\")"
+      "Bash(del \"d:\\\\dev\\\\projects\\\\post_pilot\\\\frontend\\\\src\\\\utils\\\\instagramMediaValidation.test.ts\")",
+      "Bash(git add:*)"
     ]
   }
 }
