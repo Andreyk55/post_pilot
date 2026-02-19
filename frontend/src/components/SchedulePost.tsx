@@ -579,7 +579,8 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
           )}
           {isFacebookSelected && !mediaUrl && carouselItems.length === 0 && (
             <div className="ig-media-hint">
-              Upload 1 image/video, or 2-10 images for a multi-photo post.
+              <strong>Single:</strong> 1 photo (JPG/PNG) or 1 video (MP4)<br />
+              <strong>Multi-photo:</strong> 2–10 photos (JPG/PNG only)
             </div>
           )}
           {isInstagramSelected || isFacebookSelected ? (

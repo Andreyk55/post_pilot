@@ -7,6 +7,12 @@ import {
   getInstagramUploaderLabel,
   getInstagramFormatHint,
 } from '../utils/instagramMediaValidation'
+import {
+  validateFacebookSelection,
+  getFacebookMediaMode,
+  getFacebookUploaderLabel,
+  getFacebookFormatHint,
+} from '../utils/facebookMediaValidation'
 import type { PlatformId } from '../constants/validationLimits'
 import './MultiMediaUpload.css'
 
@@ -47,15 +53,22 @@ export function MultiMediaUpload({
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const isInstagram = selectedPlatform === 'instagram'
+  const isFacebook = selectedPlatform === 'facebook'
 
   // Instagram media mode for dynamic labels
   const igMediaMode = isInstagram
     ? getInstagramMediaMode(items.map(i => ({ name: i.fileName, type: i.mediaType === 'Video' ? 'video/mp4' : 'image/jpeg' })))
     : null
 
-  // For Instagram with a video selected, don't allow adding more
+  // Facebook media mode for dynamic labels
+  const fbMediaMode = isFacebook
+    ? getFacebookMediaMode(items.map(i => ({ name: i.fileName, type: i.mediaType === 'Video' ? 'video/mp4' : 'image/jpeg' })))
+    : null
+
+  // For Instagram/Facebook with a video selected, don't allow adding more
   const igHasVideo = isInstagram && items.length === 1 && items[0].mediaType === 'Video'
-  const canAddMore = igHasVideo ? false : items.length < maxItems
+  const fbHasVideo = isFacebook && items.length === 1 && items[0].mediaType === 'Video'
+  const canAddMore = (igHasVideo || fbHasVideo) ? false : items.length < maxItems
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
@@ -95,7 +108,35 @@ export function MultiMediaUpload({
       return
     }
 
-    // --- Facebook / other platform validation (original logic) ---
+    // --- Facebook-specific validation via pure function ---
+    if (isFacebook) {
+      const existingAsInfo = items.map(i => ({
+        name: i.fileName,
+        type: i.mediaType === 'Video' ? 'video/mp4' : 'image/jpeg',
+      }))
+      const newAsInfo = files.map(f => ({ name: f.name, type: f.type }))
+      const result = validateFacebookSelection(existingAsInfo, newAsInfo)
+
+      if (!result.ok) {
+        setUploadError(result.errorMessage)
+        return
+      }
+      if (result.errorMessage) {
+        setUploadError(result.errorMessage)
+      } else {
+        setUploadError(null)
+      }
+
+      const acceptedCount = result.nextFiles.length - items.length
+      const filesToUpload = files.slice(0, acceptedCount)
+
+      if (filesToUpload.length === 0) return
+
+      await uploadFiles(filesToUpload)
+      return
+    }
+
+    // --- Other platform validation (original logic) ---
     const remainingSlots = maxItems - items.length
     const filesToUpload = files.slice(0, remainingSlots)
 
@@ -103,22 +144,6 @@ export function MultiMediaUpload({
       setUploadError(`Can only add ${remainingSlots} more image(s). Max ${maxItems} total.`)
     } else {
       setUploadError(null)
-    }
-
-    // For multi-image: all items must be images (no videos)
-    const hasExistingImages = items.length > 0
-    const hasVideoInBatch = filesToUpload.some(f => f.type.startsWith('video/'))
-    const hasMultipleFiles = filesToUpload.length + items.length > 1
-
-    if (hasVideoInBatch && (hasExistingImages || hasMultipleFiles)) {
-      setUploadError('Multi-image posts only support images. Videos are not allowed. Remove existing images first or upload a single video.')
-      return
-    }
-
-    // If uploading images alongside an existing video, block it
-    if (items.length === 1 && items[0].mediaType === 'Video' && filesToUpload.some(f => f.type.startsWith('image/'))) {
-      setUploadError('Cannot mix video with images. Remove the video first to create a multi-image post.')
-      return
     }
 
     await uploadFiles(filesToUpload)
@@ -260,8 +285,10 @@ export function MultiMediaUpload({
       if (items.some(i => i.mediaType === 'Image')) return 'image/jpeg,image/png'
       return 'image/jpeg,image/png,video/mp4'
     }
-    // Facebook: accept video only when empty
-    if (selectedPlatform === 'facebook' && items.length === 0) {
+    // Facebook: accept video only when empty; images-only once images exist
+    if (isFacebook) {
+      if (items.length === 0) return 'image/jpeg,image/png,video/mp4,video/quicktime,video/x-msvideo'
+      if (items.some(i => i.mediaType === 'Image')) return 'image/jpeg,image/png'
       return 'image/jpeg,image/png,video/mp4,video/quicktime,video/x-msvideo'
     }
     return 'image/jpeg,image/png'
@@ -273,15 +300,18 @@ export function MultiMediaUpload({
     if (isInstagram && igMediaMode) {
       return getInstagramUploaderLabel(igMediaMode, itemCount)
     }
-    return `Add Images (2-10 for ${selectedPlatform === 'facebook' ? 'multi-photo' : 'carousel'})`
+    if (isFacebook && fbMediaMode) {
+      return getFacebookUploaderLabel(fbMediaMode, itemCount)
+    }
+    return `Add Images (2-10 for carousel)`
   }
 
   const getUploadHint = (): string => {
     if (isInstagram && igMediaMode) {
       return getInstagramFormatHint(igMediaMode)
     }
-    if (selectedPlatform === 'facebook') {
-      return 'JPEG, PNG images (or a single video). Select multiple files for multi-photo.'
+    if (isFacebook && fbMediaMode) {
+      return getFacebookFormatHint(fbMediaMode)
     }
     return 'JPEG, PNG only. Select multiple files.'
   }
@@ -290,6 +320,10 @@ export function MultiMediaUpload({
   const getStatusText = (): string => {
     if (isInstagram) {
       if (itemCount === 1 && items[0].mediaType === 'Video') return '1 Reel'
+      return `${itemCount} photo${itemCount !== 1 ? 's' : ''}`
+    }
+    if (isFacebook) {
+      if (itemCount === 1 && items[0].mediaType === 'Video') return '1 video'
       return `${itemCount} photo${itemCount !== 1 ? 's' : ''}`
     }
     return `${itemCount} image${itemCount !== 1 ? 's' : ''}`
@@ -308,7 +342,11 @@ export function MultiMediaUpload({
       if (items[0].mediaType === 'Video') return 'Will publish as Reel'
       return 'Add 1 more for carousel'
     }
-    return `Add 1 more for ${selectedPlatform === 'facebook' ? 'multi-photo' : 'carousel'}`
+    if (isFacebook) {
+      if (items[0].mediaType === 'Video') return 'Will publish as video post'
+      return 'Add 1 more for multi-photo'
+    }
+    return 'Add 1 more for carousel'
   }
 
   // For video items, show video preview differently
