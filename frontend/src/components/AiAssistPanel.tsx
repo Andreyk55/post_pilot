@@ -890,7 +890,7 @@ export function AiAssistPanel({
           {!isDisabled && hasMedia && (
             <div className="ai-media-info">
               <span className={`media-type-indicator ${isImage ? 'image' : 'video'}`}>
-                {isImage ? 'Image' : 'Video'}
+                {isImage ? 'Photo' : 'Video'}
               </span>
               <span className="media-filename">{getMediaFileName()}</span>
             </div>

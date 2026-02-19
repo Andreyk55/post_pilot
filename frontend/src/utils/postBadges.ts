@@ -18,7 +18,7 @@ function getEffectiveMediaType(post: Post): 'None' | 'Image' | 'Video' {
 }
 
 /**
- * Returns a short media label for thumbnail overlays (e.g. "Video", "Image", "Photos (2)").
+ * Returns a short media label for thumbnail overlays (e.g. "Video", "Photo", "Photos (2)").
  */
 export function getMediaLabel(post: Post): string {
   if (post.mediaItems && post.mediaItems.length >= 2) {
@@ -28,12 +28,12 @@ export function getMediaLabel(post: Post): string {
   if (post.platform === 'Instagram' && post.instagramMediaType) {
     switch (post.instagramMediaType) {
       case 'Reels': return 'Reel'
-      case 'Image': return 'Image'
+      case 'Image': return 'Photo'
       case 'CarouselAlbum': return 'Carousel'
       case 'Video': return 'Video'
     }
   }
-  return getEffectiveMediaType(post) === 'Video' ? 'Video' : 'Image'
+  return getEffectiveMediaType(post) === 'Video' ? 'Video' : 'Photo'
 }
 
 /**
@@ -52,7 +52,7 @@ export function getContentBadges(post: Post): ContentBadge[] {
     if (media === 'Video') {
       badges.push({ key: 'media', text: 'Video', dataType: 'video' })
     } else {
-      badges.push({ key: 'media', text: 'Image', dataType: 'image' })
+      badges.push({ key: 'media', text: 'Photo', dataType: 'image' })
     }
     return badges
   }
@@ -84,7 +84,7 @@ export function getContentBadges(post: Post): ContentBadge[] {
         badges.push({ key: 'media', text: 'Video', dataType: 'video' })
         return badges
       case 'Image':
-        badges.push({ key: 'media', text: 'Image', dataType: 'image' })
+        badges.push({ key: 'media', text: 'Photo', dataType: 'image' })
         return badges
     }
   }
@@ -95,7 +95,7 @@ export function getContentBadges(post: Post): ContentBadge[] {
     if (media === 'Video') {
       badges.push({ key: 'media', text: 'Video', dataType: 'video' })
     } else if (media === 'Image') {
-      badges.push({ key: 'media', text: 'Image', dataType: 'image' })
+      badges.push({ key: 'media', text: 'Photo', dataType: 'image' })
     }
     return badges
   }

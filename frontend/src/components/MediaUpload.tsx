@@ -320,7 +320,7 @@ export function MediaUpload({
             <div className="preview-overlay">
               <div className="preview-info">
                 <span className={`media-type-badge ${mediaType}`}>
-                  {mediaType === 'image' ? 'Image' : 'Video'}
+                  {mediaType === 'image' ? 'Photo' : 'Video'}
                 </span>
                 {getValidationBadge()}
                 <span className="preview-filename">{fileName}</span>
