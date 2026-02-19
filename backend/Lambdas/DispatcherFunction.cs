@@ -50,7 +50,7 @@ public class DispatcherFunction
             .Where(p =>
                 (p.Status == PostStatus.Scheduled && p.ScheduledAt <= now) ||
                 (p.Status == PostStatus.RetryPending && p.NextRetryAt != null && p.NextRetryAt <= now))
-            .Select(p => new { p.Id, p.Platform, p.Status })
+            .Select(p => new { p.Id, p.Platform, p.PostType, p.Status })
             .ToListAsync();
 
         context.Logger.LogInformation($"Found {duePosts.Count} due posts");
@@ -77,7 +77,8 @@ public class DispatcherFunction
             var message = new PublishPostMessage
             {
                 PostId = post.Id,
-                Platform = post.Platform.ToString()
+                Platform = post.Platform.ToString(),
+                PostType = post.PostType.ToString()
             };
 
             var sendRequest = new SendMessageRequest

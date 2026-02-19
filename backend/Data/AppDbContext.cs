@@ -22,9 +22,9 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Post>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.Content).IsRequired();
             entity.Property(e => e.Platform).HasConversion<string>();
             entity.Property(e => e.Status).HasConversion<string>();
+            entity.Property(e => e.PostType).HasConversion<string>().HasDefaultValue(PostPilot.Api.Enums.PostType.Feed);
 
             // Index for finding due posts efficiently
             entity.HasIndex(e => new { e.Status, e.ScheduledAt });

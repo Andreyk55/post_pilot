@@ -469,6 +469,11 @@
   color: #2dd4bf;
 }
 
+.media-type-badge[data-type="story"] {
+  background: rgba(236, 72, 153, 0.15);
+  color: #ec4899;
+}
+
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }

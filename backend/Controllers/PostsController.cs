@@ -34,7 +34,8 @@ public class PostsController : ControllerBase
     public async Task<ActionResult<PaginatedResponse<PostDto>>> GetPosts(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
-        [FromQuery] PostStatus? status = null)
+        [FromQuery] PostStatus? status = null,
+        [FromQuery] PostType? postType = null)
     {
         // Ensure valid pagination parameters
         page = Math.Max(1, page);
@@ -46,6 +47,12 @@ public class PostsController : ControllerBase
         if (status.HasValue)
         {
             query = query.Where(p => p.Status == status.Value);
+        }
+
+        // Apply post type filter if provided
+        if (postType.HasValue)
+        {
+            query = query.Where(p => p.PostType == postType.Value);
         }
 
         var totalCount = await query.CountAsync();
@@ -103,14 +110,35 @@ public class PostsController : ControllerBase
 
         // Fetch engagement metrics for published Facebook posts
         PostEngagementDto? engagement = null;
-        string? externalPostUrl = post.ExternalPostUrl; // Use stored permalink (e.g. from Instagram)
+        string? externalPostUrl = post.ExternalPostUrl; // Use stored permalink (e.g. from Instagram, FB stories)
+        string? profileUrl = post.ProfileUrl;
+        string? pageUrl = null;
+
+        // Compute profileUrl for Instagram stories (fallback when story permalink not available)
+        if (post.Platform == Platform.Instagram &&
+            post.PostType == PostType.Story &&
+            post.TargetInstagramAccount != null &&
+            string.IsNullOrEmpty(profileUrl))
+        {
+            profileUrl = $"https://www.instagram.com/{post.TargetInstagramAccount.Username}/";
+        }
+
+        // Compute pageUrl for Facebook posts/stories (fallback for stories when permalink unavailable)
+        if (post.Platform == Platform.Facebook && post.TargetPage != null)
+        {
+            pageUrl = $"https://www.facebook.com/{post.TargetPage.PageId}";
+        }
 
         if (post.Platform == Platform.Facebook &&
             post.Status == PostStatus.Published &&
             !string.IsNullOrEmpty(post.ExternalPostId))
         {
-            // Build external URL to the Facebook post
-            externalPostUrl = $"https://www.facebook.com/{post.ExternalPostId}";
+            // For FB stories, use the stored ExternalPostUrl (permalink_url fetched after publish)
+            // For FB feed posts, construct the URL if not already stored
+            if (post.PostType == PostType.Feed && string.IsNullOrEmpty(externalPostUrl))
+            {
+                externalPostUrl = $"https://www.facebook.com/{post.ExternalPostId}";
+            }
 
             // Try to get page access token - first from TargetPage, then look up by Facebook PageId
             string? pageAccessToken = post.TargetPage?.AccessToken;
@@ -180,6 +208,7 @@ public class PostsController : ControllerBase
             Content: post.Content,
             MediaUrl: post.MediaUrl,
             MediaType: post.MediaType.ToString(),
+            PostType: post.PostType.ToString(),
             Platform: post.Platform.ToString(),
             ScheduledAt: post.ScheduledAt,
             Status: post.Status.ToString(),
@@ -197,6 +226,8 @@ public class PostsController : ControllerBase
             RetryCount: post.RetryCount,
             Engagement: engagement,
             ExternalPostUrl: externalPostUrl,
+            ProfileUrl: profileUrl,
+            PageUrl: pageUrl,
             InstagramMediaType: post.InstagramMediaType?.ToString(),
             MediaItems: post.MediaItems?.Count > 0
                 ? post.MediaItems.OrderBy(m => m.Order)
@@ -350,15 +381,55 @@ public class PostsController : ControllerBase
             }
         }
 
+        // Story-specific validation
+        if (request.PostType == PostType.Story)
+        {
+            // Stories require media (no text-only stories)
+            var storyMediaType = request.MediaType ?? MediaType.None;
+            if (string.IsNullOrEmpty(request.MediaUrl) || (storyMediaType != MediaType.Image && storyMediaType != MediaType.Video))
+            {
+                return BadRequest(new ProblemDetails
+                {
+                    Title = "Invalid story",
+                    Detail = "Stories require exactly one media item (image or video).",
+                    Status = StatusCodes.Status400BadRequest,
+                });
+            }
+
+            // Stories don't support carousel/multi-media
+            if (request.MediaItems is { Count: > 0 })
+            {
+                return BadRequest(new ProblemDetails
+                {
+                    Title = "Invalid story",
+                    Detail = "Stories only support a single media item. Multi-image stories are not supported.",
+                    Status = StatusCodes.Status400BadRequest,
+                });
+            }
+
+            // Stories only supported on Facebook and Instagram
+            if (request.Platform != Platform.Facebook && request.Platform != Platform.Instagram)
+            {
+                return BadRequest(new ProblemDetails
+                {
+                    Title = "Unsupported platform",
+                    Detail = "Stories are only supported on Facebook and Instagram.",
+                    Status = StatusCodes.Status400BadRequest,
+                });
+            }
+        }
+
         // Note: Media validation is done client-side via POST /api/media/validate before submission.
         // The frontend blocks submission if media is invalid.
 
         var post = new Post
         {
             Id = Guid.NewGuid(),
-            Content = request.Content,
+            // Stories don't support captions — ignore any content sent by the client
+            Content = request.PostType == PostType.Story ? string.Empty : (request.Content ?? string.Empty),
             MediaUrl = request.MediaUrl,
             MediaType = request.MediaType ?? MediaType.None,
+            PostType = request.PostType,
             Platform = request.Platform,
             ScheduledAt = request.ScheduledAt,
             TargetPageId = request.TargetPageId,
@@ -526,6 +597,102 @@ public class PostsController : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("{id}/publish-now")]
+    public async Task<ActionResult<PostDto>> PublishNow(
+        Guid id,
+        [FromServices] IPostPublisherResolver publisherResolver,
+        [FromServices] IStoryPublisherResolver storyPublisherResolver)
+    {
+        var post = await _context.Posts
+            .Include(p => p.TargetPage)
+            .Include(p => p.TargetInstagramAccount)
+            .Include(p => p.MediaItems)
+            .FirstOrDefaultAsync(p => p.Id == id);
+
+        if (post == null)
+            return NotFound();
+
+        // Only Scheduled posts can be published immediately
+        if (post.Status != PostStatus.Scheduled)
+        {
+            return Conflict(new ProblemDetails
+            {
+                Title = "Cannot publish now",
+                Detail = $"Only scheduled posts can be published immediately. Current status: {post.Status}.",
+                Status = StatusCodes.Status409Conflict,
+            });
+        }
+
+        _logger.LogInformation(
+            "Publishing post {PostId} immediately (type={PostType}, platform={Platform})",
+            post.Id, post.PostType, post.Platform);
+
+        try
+        {
+            PublishResult result;
+
+            if (post.PostType == PostType.Story)
+            {
+                var publisher = storyPublisherResolver.GetPublisher(post.Platform);
+                if (publisher == null)
+                {
+                    return BadRequest(new ProblemDetails
+                    {
+                        Title = "Unsupported platform",
+                        Detail = $"Story publishing is not supported for {post.Platform}.",
+                        Status = StatusCodes.Status400BadRequest,
+                    });
+                }
+                result = await publisher.PublishAsync(post.Id);
+            }
+            else
+            {
+                var publisher = publisherResolver.GetPublisher(post.Platform);
+                if (publisher == null)
+                {
+                    return BadRequest(new ProblemDetails
+                    {
+                        Title = "Unsupported platform",
+                        Detail = $"Publishing is not supported for {post.Platform}.",
+                        Status = StatusCodes.Status400BadRequest,
+                    });
+                }
+                result = await publisher.PublishAsync(post.Id);
+            }
+
+            // Reload to get fresh state after publishing
+            await _context.Entry(post).ReloadAsync();
+            await _context.Entry(post).Reference(p => p.TargetPage).LoadAsync();
+            await _context.Entry(post).Reference(p => p.TargetInstagramAccount).LoadAsync();
+            await _context.Entry(post).Collection(p => p.MediaItems).LoadAsync();
+
+            if (result.Success)
+            {
+                return Ok(PostDto.FromEntity(post));
+            }
+            else
+            {
+                // Publishing failed — return the error but don't 500
+                return StatusCode(StatusCodes.Status502BadGateway, new ProblemDetails
+                {
+                    Title = "Publishing failed",
+                    Detail = result.ErrorMessage ?? "An error occurred while publishing to the platform.",
+                    Status = StatusCodes.Status502BadGateway,
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error during publish-now for post {PostId}", post.Id);
+            return StatusCode(StatusCodes.Status502BadGateway, new ProblemDetails
+            {
+                Title = "Publishing failed",
+                Detail = ex.Message,
+                Status = StatusCodes.Status502BadGateway,
+            });
+        }
+    }
+
     [HttpPost("{id}/cancel")]
     public async Task<IActionResult> CancelPost(Guid id)
     {
@@ -628,15 +795,15 @@ public class PostsController : ControllerBase
     {
         var errors = new Dictionary<string, string[]>();
 
-        var maxChars = ValidationLimits.GetPostTextMaxChars(request.Platform);
-        if (request.Content?.Length > maxChars)
+        // Content length validation (stories allow empty content)
+        if (!string.IsNullOrEmpty(request.Content))
         {
-            errors["content"] = [$"Text is too long for {request.Platform}. Max {maxChars} characters."];
+            var maxChars = ValidationLimits.GetPostTextMaxChars(request.Platform);
+            if (request.Content.Length > maxChars)
+            {
+                errors["content"] = [$"Text is too long for {request.Platform}. Max {maxChars} characters."];
+            }
         }
-
-        // Note: Media validation is handled in MediaController when generating upload URLs
-        // and file size is checked before upload. Here we could add additional validation
-        // if needed, but for now, rely on the media service limits.
 
         return errors;
     }
@@ -662,11 +829,12 @@ public record CreatePostMediaItem(
 );
 
 public record CreatePostRequest(
-    string Content,
+    string? Content,
     string? MediaUrl,
     MediaType? MediaType,
     Platform Platform,
     DateTime ScheduledAt,
+    PostType PostType = PostType.Feed,
     Guid? TargetPageId = null,
     Guid? TargetInstagramAccountId = null,
     string? SelectedThumbnailUrl = null,
@@ -708,6 +876,7 @@ public record PostDto(
     string Content,
     string? MediaUrl,
     MediaType MediaType,
+    PostType PostType,
     Platform Platform,
     DateTime ScheduledAt,
     PostStatus Status,
@@ -732,6 +901,7 @@ public record PostDto(
         post.Content,
         post.MediaUrl,
         post.MediaType,
+        post.PostType,
         post.Platform,
         post.ScheduledAt,
         post.Status,

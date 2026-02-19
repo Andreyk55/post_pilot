@@ -65,7 +65,7 @@ public class PublisherFunction
             return; // Don't retry malformed messages
         }
 
-        context.Logger.LogInformation($"Processing post {message.PostId} for platform {message.Platform}");
+        context.Logger.LogInformation($"Processing post {message.PostId} for platform {message.Platform} (type={message.PostType})");
 
         // Parse platform enum
         if (!Enum.TryParse<Platform>(message.Platform, out var platform))
@@ -74,22 +74,43 @@ public class PublisherFunction
             return; // Don't retry unknown platforms
         }
 
-        // Create a fresh scope for this message
-        using var scope = _serviceProvider.CreateScope();
-        var publisherResolver = scope.ServiceProvider.GetRequiredService<IPostPublisherResolver>();
-
-        var publisher = publisherResolver.GetPublisher(platform);
-        if (publisher == null)
+        // Parse post type enum (default to Feed for backward compatibility)
+        if (!Enum.TryParse<PostType>(message.PostType, out var postType))
         {
-            context.Logger.LogError($"No publisher available for platform {platform}");
-            return;
+            postType = PostType.Feed;
         }
 
-        // Publish the post - the publisher handles:
-        // - Idempotency (checks if already published)
-        // - Status updates (Published/Failed/RetryPending)
-        // - Retry scheduling (sets NextRetryAt for transient errors)
-        var result = await publisher.PublishAsync(message.PostId);
+        // Create a fresh scope for this message
+        using var scope = _serviceProvider.CreateScope();
+
+        PublishResult result;
+
+        if (postType == PostType.Story)
+        {
+            // Route stories to story publishers
+            var storyResolver = scope.ServiceProvider.GetRequiredService<IStoryPublisherResolver>();
+            var storyPublisher = storyResolver.GetPublisher(platform);
+            if (storyPublisher == null)
+            {
+                context.Logger.LogError($"No story publisher available for platform {platform}");
+                return;
+            }
+
+            result = await storyPublisher.PublishAsync(message.PostId);
+        }
+        else
+        {
+            // Route feed posts to feed publishers
+            var publisherResolver = scope.ServiceProvider.GetRequiredService<IPostPublisherResolver>();
+            var publisher = publisherResolver.GetPublisher(platform);
+            if (publisher == null)
+            {
+                context.Logger.LogError($"No publisher available for platform {platform}");
+                return;
+            }
+
+            result = await publisher.PublishAsync(message.PostId);
+        }
 
         if (result.Success)
         {

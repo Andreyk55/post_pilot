@@ -24,6 +24,7 @@ public record PostDetailsDto(
     string Content,
     string? MediaUrl,
     string MediaType,
+    string PostType,
     string Platform,
     DateTime ScheduledAt,
     string Status,
@@ -39,6 +40,8 @@ public record PostDetailsDto(
     int RetryCount,
     PostEngagementDto? Engagement,
     string? ExternalPostUrl,
+    string? ProfileUrl,
+    string? PageUrl,
     string? InstagramMediaType,
     List<PostDetailsMediaItemDto>? MediaItems = null
 );

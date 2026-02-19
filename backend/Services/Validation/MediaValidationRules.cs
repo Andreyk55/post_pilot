@@ -73,7 +73,48 @@ public static class MediaValidationRules
         },
 
         // ============================================
-        // INSTAGRAM - FEED (for future implementation)
+        // FACEBOOK PAGE - STORY
+        // ============================================
+        // Facebook Story Image Rules
+        // Source: https://developers.facebook.com/docs/graph-api/reference/page/photo_stories/
+        [(Platform.Facebook, Placement.Story, MediaType.Image)] = new MediaValidationRule
+        {
+            AllowedMimeTypes = ["image/jpeg", "image/png", "image/gif", "image/bmp", "image/tiff", "image/webp"],
+            MaxBytes = 4L * 1024 * 1024, // 4MB
+            MinWidth = 320,
+            MinHeight = 320,
+            MaxWidth = 1080,
+            MaxHeight = 1920,
+            AspectRatioMin = 0.5625, // 9:16 (full vertical)
+            AspectRatioMax = 0.5625, // 9:16 (stories are vertical)
+            RecommendedWidth = 1080,
+            RecommendedHeight = 1920,
+        },
+
+        // Facebook Story Video Rules
+        // Source: https://developers.facebook.com/docs/graph-api/reference/page/video_stories/
+        [(Platform.Facebook, Placement.Story, MediaType.Video)] = new MediaValidationRule
+        {
+            AllowedMimeTypes = ["video/mp4", "video/quicktime"],
+            AllowedContainers = ["mp4", "mov"],
+            AllowedVideoCodecs = ["h264", "hevc"],
+            AllowedAudioCodecs = ["aac"],
+            MaxBytes = 1024L * 1024 * 1024, // 1GB
+            MinWidth = 320,
+            MinHeight = 320,
+            MaxWidth = 1080,
+            MaxHeight = 1920,
+            AspectRatioMin = 0.5625, // 9:16
+            AspectRatioMax = 0.5625,
+            DurationMinSeconds = 1,
+            DurationMaxSeconds = 120, // 2 minutes for FB stories
+            MaxFps = 60,
+            RecommendedWidth = 1080,
+            RecommendedHeight = 1920,
+        },
+
+        // ============================================
+        // INSTAGRAM - FEED
         // ============================================
         // Instagram Feed Image Rules
         [(Platform.Instagram, Placement.Feed, MediaType.Image)] = new MediaValidationRule
@@ -110,6 +151,47 @@ public static class MediaValidationRules
             MaxFps = 60,
             RecommendedWidth = 1080,
             RecommendedHeight = 1080,
+        },
+
+        // ============================================
+        // INSTAGRAM - STORY
+        // ============================================
+        // Instagram Story Image Rules
+        // Source: https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media
+        [(Platform.Instagram, Placement.Story, MediaType.Image)] = new MediaValidationRule
+        {
+            AllowedMimeTypes = ["image/jpeg", "image/png"],
+            MaxBytes = 8L * 1024 * 1024, // 8MB
+            MinWidth = 320,
+            MinHeight = 320,
+            MaxWidth = 1080,
+            MaxHeight = 1920,
+            AspectRatioMin = 0.5625, // 9:16 (full vertical)
+            AspectRatioMax = 0.5625,
+            RecommendedWidth = 1080,
+            RecommendedHeight = 1920,
+        },
+
+        // Instagram Story Video Rules
+        [(Platform.Instagram, Placement.Story, MediaType.Video)] = new MediaValidationRule
+        {
+            AllowedMimeTypes = ["video/mp4", "video/quicktime"],
+            AllowedContainers = ["mp4", "mov"],
+            AllowedVideoCodecs = ["h264"],
+            AllowedAudioCodecs = ["aac"],
+            MaxBytes = 100L * 1024 * 1024, // 100MB
+            MinWidth = 320,
+            MinHeight = 320,
+            MaxWidth = 1080,
+            MaxHeight = 1920,
+            AspectRatioMin = 0.5625, // 9:16
+            AspectRatioMax = 0.5625,
+            DurationMinSeconds = 3,
+            DurationMaxSeconds = 60, // 60 seconds for IG stories
+            MinFps = 23,
+            MaxFps = 60,
+            RecommendedWidth = 1080,
+            RecommendedHeight = 1920,
         },
 
         // ============================================

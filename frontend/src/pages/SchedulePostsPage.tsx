@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { postsApi, type Post, type CreatePostRequest, type CreatePostMediaItem, type Platform } from '../api/posts'
+import { postsApi, type Post, type CreatePostRequest, type CreatePostMediaItem, type Platform, type PostType } from '../api/posts'
 import type { MediaType } from '../api/media'
 import { SchedulePost } from '../components/SchedulePost'
 import { ScheduledPosts } from '../components/ScheduledPosts'
@@ -88,6 +88,7 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
     scheduledDate: string
     scheduledTime: string
     platforms: string[]
+    postType: PostType
     targetPageId?: string
     targetInstagramAccountId?: string
     mediaUrl?: string
@@ -106,6 +107,7 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
 
         const request: CreatePostRequest = {
           content: formData.content,
+          postType: formData.postType,
           platform,
           scheduledAt,
           // Include targetPageId for Facebook posts
@@ -117,8 +119,8 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
           mediaType: formData.mediaType,
           // Include selected thumbnail URL for video posts
           selectedThumbnailUrl: formData.selectedThumbnailUrl,
-          // Include media items for multi-image posts (Instagram carousel, Facebook multi-photo)
-          mediaItems: (platform === 'Instagram' || platform === 'Facebook') ? formData.mediaItems : undefined,
+          // Include media items for multi-image posts (Instagram carousel, Facebook multi-photo) - not for stories
+          mediaItems: formData.postType !== 'Story' && (platform === 'Instagram' || platform === 'Facebook') ? formData.mediaItems : undefined,
         }
         const post = await postsApi.create(request)
         newPosts.push(post)
@@ -148,6 +150,44 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
     setError(null)
   }
 
+  const handlePublishNow = async (formData: {
+    content: string
+    platforms: string[]
+    postType: PostType
+    targetPageId?: string
+    targetInstagramAccountId?: string
+    mediaUrl?: string
+    mediaType?: MediaType
+    selectedThumbnailUrl?: string
+    mediaItems?: CreatePostMediaItem[]
+  }) => {
+    const scheduledAt = new Date().toISOString()
+
+    for (const platformId of formData.platforms) {
+      const platform = platformMap[platformId]
+      if (!platform) continue
+
+      const request: CreatePostRequest = {
+        content: formData.content,
+        postType: formData.postType,
+        platform,
+        scheduledAt,
+        targetPageId: platform === 'Facebook' ? formData.targetPageId : undefined,
+        targetInstagramAccountId: platform === 'Instagram' ? formData.targetInstagramAccountId : undefined,
+        mediaUrl: formData.mediaUrl,
+        mediaType: formData.mediaType,
+        selectedThumbnailUrl: formData.selectedThumbnailUrl,
+        mediaItems: formData.postType !== 'Story' && (platform === 'Instagram' || platform === 'Facebook') ? formData.mediaItems : undefined,
+      }
+      // Create the post first, then immediately publish
+      const post = await postsApi.create(request)
+      const publishedPost = await postsApi.publishNow(post.id)
+      setPosts(prev => [publishedPost, ...prev])
+      setTotalCount(prev => prev + 1)
+    }
+    setError(null)
+  }
+
   const handleProfileSaved = () => {
     // Refresh the list
     loadVoiceProfiles()
@@ -173,6 +213,7 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
       <div className="schedule-content">
         <SchedulePost
           onSchedule={handleSchedule}
+          onPublishNow={handlePublishNow}
           voiceProfiles={voiceProfiles}
           onVoiceProfileModalOpen={handleVoiceProfileModalOpen}
           onNavigate={onNavigate}

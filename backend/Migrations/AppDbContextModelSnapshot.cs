@@ -240,6 +240,9 @@ namespace PostPilot.Api.Migrations
                     b.Property<string>("ExternalPostUrl")
                         .HasColumnType("text");
 
+                    b.Property<string>("FacebookStoryMediaId")
+                        .HasColumnType("text");
+
                     b.Property<string>("InstagramCarouselCreationId")
                         .HasColumnType("text");
 
@@ -268,8 +271,17 @@ namespace PostPilot.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("PostType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("Feed");
+
                     b.Property<int>("ProcessingPollCount")
                         .HasColumnType("integer");
+
+                    b.Property<string>("ProfileUrl")
+                        .HasColumnType("text");
 
                     b.Property<DateTime?>("PublishedAt")
                         .HasColumnType("timestamp with time zone");

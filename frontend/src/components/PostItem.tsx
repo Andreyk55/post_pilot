@@ -364,24 +364,100 @@ export function PostItem({ post, onCancel, onDelete, cachedDetails, onDetailsFet
                     {formatDateTime(details.createdAt).date} at {formatDateTime(details.createdAt).time}
                   </span>
                 </div>
-                {details.externalPostUrl && (
-                  <div className="info-item">
-                    <span className="info-label">View on {post.platform}</span>
-                    <a
-                      href={details.externalPostUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="external-link"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      Open post
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                        <polyline points="15 3 21 3 21 9"/>
-                        <line x1="10" y1="14" x2="21" y2="3"/>
-                      </svg>
-                    </a>
-                  </div>
+                {/* Story link logic */}
+                {post.postType === 'Story' ? (
+                  <>
+                    {/* Facebook Story: show link only after published with permalink_url */}
+                    {post.platform === 'Facebook' && (
+                      <>
+                        {(post.status === 'Publishing' || post.status === 'RetryPending') && (
+                          <div className="info-item">
+                            <span className="info-label">Story status</span>
+                            <span className="info-value">Processing...</span>
+                          </div>
+                        )}
+                        {post.status === 'Published' && details.externalPostUrl && (
+                          <div className="info-item">
+                            <span className="info-label">View Story (24h)</span>
+                            <a
+                              href={details.externalPostUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="external-link"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              Open story
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                                <polyline points="15 3 21 3 21 9"/>
+                                <line x1="10" y1="14" x2="21" y2="3"/>
+                              </svg>
+                            </a>
+                          </div>
+                        )}
+                        {details.pageUrl && (
+                          <div className="info-item">
+                            <span className="info-label">View Page</span>
+                            <a
+                              href={details.pageUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="external-link"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              Open page
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                                <polyline points="15 3 21 3 21 9"/>
+                                <line x1="10" y1="14" x2="21" y2="3"/>
+                              </svg>
+                            </a>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {/* Instagram Story: show profile link fallback (no story permalink) */}
+                    {post.platform === 'Instagram' && details.profileUrl && (
+                      <div className="info-item">
+                        <span className="info-label">View on Instagram</span>
+                        <a
+                          href={details.profileUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="external-link"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          Open profile
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                            <polyline points="15 3 21 3 21 9"/>
+                            <line x1="10" y1="14" x2="21" y2="3"/>
+                          </svg>
+                        </a>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  /* Feed post link */
+                  details.externalPostUrl && (
+                    <div className="info-item">
+                      <span className="info-label">View on {post.platform}</span>
+                      <a
+                        href={details.externalPostUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="external-link"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Open post
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                          <polyline points="15 3 21 3 21 9"/>
+                          <line x1="10" y1="14" x2="21" y2="3"/>
+                        </svg>
+                      </a>
+                    </div>
+                  )
                 )}
                 {details.retryCount > 0 && (
                   <div className="info-item">

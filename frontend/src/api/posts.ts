@@ -6,6 +6,8 @@ export type Platform = 'Twitter' | 'Instagram' | 'Facebook' | 'LinkedIn'
 
 export type PostStatus = 'Scheduled' | 'Publishing' | 'Published' | 'Failed' | 'RetryPending' | 'Canceled'
 
+export type PostType = 'Feed' | 'Story'
+
 export interface PostMediaItem {
   id: string
   order: number
@@ -24,6 +26,7 @@ export interface Post {
   content: string
   mediaUrl: string | null
   mediaType: MediaType
+  postType: PostType
   platform: Platform
   scheduledAt: string
   status: PostStatus
@@ -36,6 +39,7 @@ export interface Post {
   publishedAt: string | null
   externalPostId: string | null
   externalPostUrl: string | null
+  profileUrl: string | null
   errorMessage: string | null
   retryCount: number
   selectedThumbnailUrl: string | null
@@ -44,9 +48,10 @@ export interface Post {
 }
 
 export interface CreatePostRequest {
-  content: string
+  content?: string
   mediaUrl?: string | null
   mediaType?: MediaType | null
+  postType?: PostType
   platform: Platform
   scheduledAt: string
   targetPageId?: string | null
@@ -76,6 +81,7 @@ export interface PostDetails {
   content: string
   mediaUrl: string | null
   mediaType: string
+  postType: string
   platform: Platform
   scheduledAt: string
   status: PostStatus
@@ -91,6 +97,8 @@ export interface PostDetails {
   retryCount: number
   engagement: PostEngagement | null
   externalPostUrl: string | null
+  profileUrl: string | null
+  pageUrl: string | null
   instagramMediaType: string | null
   mediaItems: PostMediaItem[] | null
 }
@@ -103,13 +111,16 @@ export const postsApi = {
     return data.items
   },
 
-  async getPaginated(page: number = 1, pageSize: number = 10, status?: PostStatus): Promise<PaginatedResponse<Post>> {
+  async getPaginated(page: number = 1, pageSize: number = 10, status?: PostStatus, postType?: PostType): Promise<PaginatedResponse<Post>> {
     const params = new URLSearchParams({
       page: page.toString(),
       pageSize: pageSize.toString(),
     })
     if (status) {
       params.append('status', status)
+    }
+    if (postType) {
+      params.append('postType', postType)
     }
     const response = await fetch(`${API_URL}/posts?${params}`)
     if (!response.ok) throw new Error('Failed to fetch posts')
@@ -123,6 +134,23 @@ export const postsApi = {
       body: JSON.stringify(post),
     })
     if (!response.ok) throw new Error('Failed to create post')
+    return response.json()
+  },
+
+  async publishNow(id: string): Promise<Post> {
+    const response = await fetch(`${API_URL}/posts/${id}/publish-now`, {
+      method: 'POST',
+    })
+    if (!response.ok) {
+      const body = await response.json().catch(() => null)
+      if (response.status === 409) {
+        throw new Error(body?.detail || 'This post can no longer be published because its status has changed.')
+      }
+      if (response.status === 502) {
+        throw new Error(body?.detail || 'Publishing to the platform failed. Please try again.')
+      }
+      throw new Error(body?.detail || 'Failed to publish post')
+    }
     return response.json()
   },
 

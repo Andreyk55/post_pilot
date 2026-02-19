@@ -274,21 +274,24 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
             const mediaType = getEffectiveMediaType(post)
             return (
               <div key={post.id} className="post-card">
-                <div
-                  className={`post-content ${expandedPostId === post.id ? 'expanded' : ''}`}
-                  onClick={() => overflowingPosts.has(post.id) && toggleExpand(post.id)}
-                >
-                  <p ref={el => { if (el) contentRefs.current.set(post.id, el) }}>{post.content}</p>
-                  {(overflowingPosts.has(post.id) || expandedPostId === post.id) && (
-                    <span className="expand-indicator">
-                      {expandedPostId === post.id ? (
-                        <><ChevronUpIcon /> Less</>
-                      ) : (
-                        <><ChevronDownIcon /> More</>
-                      )}
-                    </span>
-                  )}
-                </div>
+                {/* Caption — hidden for Story posts */}
+                {post.postType !== 'Story' && (
+                  <div
+                    className={`post-content ${expandedPostId === post.id ? 'expanded' : ''}`}
+                    onClick={() => overflowingPosts.has(post.id) && toggleExpand(post.id)}
+                  >
+                    <p ref={el => { if (el) contentRefs.current.set(post.id, el) }}>{post.content}</p>
+                    {(overflowingPosts.has(post.id) || expandedPostId === post.id) && (
+                      <span className="expand-indicator">
+                        {expandedPostId === post.id ? (
+                          <><ChevronUpIcon /> Less</>
+                        ) : (
+                          <><ChevronDownIcon /> More</>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                )}
 
                 {/* Carousel preview (multiple images) */}
                 {post.mediaItems && post.mediaItems.length >= 2 && (
@@ -361,6 +364,11 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
                     >
                       {platformIcons[post.platform] || post.platform.charAt(0)}
                     </span>
+                    {post.postType === 'Story' && (
+                      <span className="media-type-badge" data-type="story">
+                        Story
+                      </span>
+                    )}
                     {(post.targetPageName || post.targetInstagramAccountName) && (
                       <span className="page-badge" title={post.targetPageName || post.targetInstagramAccountName || ''}>
                         {post.targetPageName || post.targetInstagramAccountName}

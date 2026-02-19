@@ -5,7 +5,7 @@ import type { MediaType, ValidationStatus, MediaValidationError, MediaValidation
 import type { ConnectedPage, ConnectedInstagramAccount } from '../types/meta'
 import { MediaUpload } from './MediaUpload'
 import { MultiMediaUpload, type UploadedMediaItem } from './MultiMediaUpload'
-import type { CreatePostMediaItem } from '../api/posts'
+import type { CreatePostMediaItem, PostType } from '../api/posts'
 import { AiAssistPanel, type StickyLanguageState } from './AiAssistPanel'
 import { SuggestedTimes } from './SuggestedTimes'
 import { type VoiceProfileSummary } from '../api/voiceProfiles'
@@ -24,6 +24,7 @@ interface SchedulePostProps {
     scheduledDate: string
     scheduledTime: string
     platforms: string[]
+    postType: PostType
     targetPageId?: string
     targetInstagramAccountId?: string
     mediaUrl?: string
@@ -31,6 +32,17 @@ interface SchedulePostProps {
     selectedThumbnailUrl?: string
     mediaItems?: CreatePostMediaItem[]
   }) => void
+  onPublishNow?: (data: {
+    content: string
+    platforms: string[]
+    postType: PostType
+    targetPageId?: string
+    targetInstagramAccountId?: string
+    mediaUrl?: string
+    mediaType?: MediaType
+    selectedThumbnailUrl?: string
+    mediaItems?: CreatePostMediaItem[]
+  }) => Promise<void>
   voiceProfiles: VoiceProfileSummary[]
   onVoiceProfileModalOpen: (profileId?: string | null) => void
   /** Optional callback for navigating to other pages (e.g., Connected Accounts) */
@@ -59,8 +71,9 @@ function getAiPlatform(platformIds: string[]): AiPlatform | null {
   return mapping[first] || null
 }
 
-export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpen, onNavigate }: SchedulePostProps) {
+export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceProfileModalOpen, onNavigate }: SchedulePostProps) {
   const [content, setContent] = useState('')
+  const [postType, setPostType] = useState<PostType>('Feed')
   const [scheduledDate, setScheduledDate] = useState('')
   const [scheduledTime, setScheduledTime] = useState('')
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([])
@@ -75,6 +88,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploadKey, setUploadKey] = useState(0)
   const [isUploading, setIsUploading] = useState(false)
+  const [isPublishingNow, setIsPublishingNow] = useState(false)
   const [aiPanelKey, setAiPanelKey] = useState(0)
   const [suggestedTimesKey, setSuggestedTimesKey] = useState(0)
   const [selectedThumbnailUrl, setSelectedThumbnailUrl] = useState<string | null>(null)
@@ -191,6 +205,10 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
 
   const isFacebookSelected = selectedPlatforms.includes('facebook')
   const isInstagramSelected = selectedPlatforms.includes('instagram')
+  const isStory = postType === 'Story'
+
+  // Stories are only supported on Facebook and Instagram
+  const isStoryPlatformSelected = isFacebookSelected || isInstagramSelected
 
   // Determine if composer should be enabled based on platform and connection state
   const composerState = useComposerEnabled({
@@ -272,9 +290,9 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
     }
   }
 
-  // Multi-image detection: Instagram carousel or Facebook multi-photo
-  const isInstagramCarousel = isInstagramSelected && carouselItems.length >= 2
-  const isFacebookMultiPhoto = isFacebookSelected && carouselItems.length >= 2
+  // Multi-image detection: Instagram carousel or Facebook multi-photo (not available for stories)
+  const isInstagramCarousel = isInstagramSelected && !isStory && carouselItems.length >= 2
+  const isFacebookMultiPhoto = isFacebookSelected && !isStory && carouselItems.length >= 2
   const isMultiImage = isInstagramCarousel || isFacebookMultiPhoto
 
   // Instagram media validation: single image/video OR carousel (2+ images)
@@ -285,11 +303,16 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
-    const hasCarousel = (isInstagramSelected || isFacebookSelected) && carouselItems.length >= 2
+    const hasCarousel = !isStory && (isInstagramSelected || isFacebookSelected) && carouselItems.length >= 2
     const hasMedia = mediaUrl || hasCarousel
 
-    // Require either content or media, plus date/time/platform
-    if ((!content && !hasMedia) || !scheduledDate || !scheduledTime || selectedPlatforms.length === 0) {
+    // Stories require media (no text-only stories)
+    if (isStory && !mediaUrl) {
+      return
+    }
+
+    // Feed posts require either content or media, plus date/time/platform
+    if (!isStory && (!content && !hasMedia) || !scheduledDate || !scheduledTime || selectedPlatforms.length === 0) {
       return
     }
 
@@ -303,12 +326,12 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
       return
     }
 
-    // Instagram requires media: either carousel (2+ images) or single image/video
-    if (isInstagramSelected && !hasCarousel && (!mediaUrl || (mediaType !== 'Image' && mediaType !== 'Video'))) {
+    // Instagram feed requires media: either carousel (2+ images) or single image/video
+    if (!isStory && isInstagramSelected && !hasCarousel && (!mediaUrl || (mediaType !== 'Image' && mediaType !== 'Video'))) {
       return
     }
 
-    // Build media items for carousel
+    // Build media items for carousel (feed posts only)
     const mediaItemsPayload: CreatePostMediaItem[] | undefined = hasCarousel
       ? carouselItems.map((item, index) => ({
           mediaUrl: item.s3Key,
@@ -318,10 +341,11 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
       : undefined
 
     onSchedule({
-      content,
+      content: isStory ? '' : content,
       scheduledDate,
       scheduledTime,
       platforms: selectedPlatforms,
+      postType,
       targetPageId: isFacebookSelected ? selectedPageId : undefined,
       targetInstagramAccountId: isInstagramSelected ? selectedInstagramAccountId : undefined,
       mediaUrl: hasCarousel ? undefined : (mediaUrl || undefined),
@@ -332,6 +356,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
 
     // Reset form including language
     setContent('')
+    setPostType('Feed')
     setScheduledDate('')
     setScheduledTime('')
     setSelectedPlatforms([])
@@ -359,21 +384,73 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
   const hasInvalidCarouselItems = carouselItems.some(item => item.validationStatus === 'Invalid')
 
   // Form is valid if there's content OR media, plus date/time/platform, not uploading, text within limits, and no invalid media
-  const isFormValid = (content || mediaUrl || isMultiImage) && scheduledDate && scheduledTime &&
-    selectedPlatforms.length > 0 &&
-    (!isFacebookSelected || selectedPageId) &&
-    (!isInstagramSelected || selectedInstagramAccountId) &&
-    isInstagramMediaValid &&
-    !isUploading &&
-    !isTextTooLong &&
-    !hasInvalidMedia &&
-    !hasInvalidCarouselItems
+  // Stories: require media, content is optional; stories only on FB/IG
+  const isFormValid = isStory
+    ? (mediaUrl && scheduledDate && scheduledTime &&
+       selectedPlatforms.length > 0 && isStoryPlatformSelected &&
+       (!isFacebookSelected || selectedPageId) &&
+       (!isInstagramSelected || selectedInstagramAccountId) &&
+       !isUploading && !isTextTooLong && !hasInvalidMedia)
+    : ((content || mediaUrl || isMultiImage) && scheduledDate && scheduledTime &&
+       selectedPlatforms.length > 0 &&
+       (!isFacebookSelected || selectedPageId) &&
+       (!isInstagramSelected || selectedInstagramAccountId) &&
+       isInstagramMediaValid &&
+       !isUploading && !isTextTooLong && !hasInvalidMedia && !hasInvalidCarouselItems)
+
+  // Publish Now valid: same as isFormValid but without requiring date/time
+  const isPublishNowValid = isStory
+    ? (mediaUrl &&
+       selectedPlatforms.length > 0 && isStoryPlatformSelected &&
+       (!isFacebookSelected || selectedPageId) &&
+       (!isInstagramSelected || selectedInstagramAccountId) &&
+       !isUploading && !isPublishingNow && !isTextTooLong && !hasInvalidMedia)
+    : ((content || mediaUrl || isMultiImage) &&
+       selectedPlatforms.length > 0 &&
+       (!isFacebookSelected || selectedPageId) &&
+       (!isInstagramSelected || selectedInstagramAccountId) &&
+       isInstagramMediaValid &&
+       !isUploading && !isPublishingNow && !isTextTooLong && !hasInvalidMedia && !hasInvalidCarouselItems)
+
+  const handlePublishNow = async () => {
+    if (!onPublishNow || !isPublishNowValid) return
+
+    const hasCarousel = !isStory && (isInstagramSelected || isFacebookSelected) && carouselItems.length >= 2
+    const mediaItemsPayload: CreatePostMediaItem[] | undefined = hasCarousel
+      ? carouselItems.map((item, index) => ({
+          mediaUrl: item.s3Key,
+          mediaType: item.mediaType,
+          order: index,
+        }))
+      : undefined
+
+    setIsPublishingNow(true)
+    try {
+      await onPublishNow({
+        content: isStory ? '' : content,
+        platforms: selectedPlatforms,
+        postType,
+        targetPageId: isFacebookSelected ? selectedPageId : undefined,
+        targetInstagramAccountId: isInstagramSelected ? selectedInstagramAccountId : undefined,
+        mediaUrl: hasCarousel ? undefined : (mediaUrl || undefined),
+        mediaType: hasCarousel ? undefined : (mediaType || undefined),
+        selectedThumbnailUrl: selectedThumbnailUrl || undefined,
+        mediaItems: mediaItemsPayload,
+      })
+
+      // Reset form on success
+      handleReset()
+    } finally {
+      setIsPublishingNow(false)
+    }
+  }
 
   // Check if there's any data in the form to show reset button
-  const hasFormData = content || mediaUrl || carouselItems.length > 0 || scheduledDate || scheduledTime || selectedPlatforms.length > 0
+  const hasFormData = content || mediaUrl || carouselItems.length > 0 || scheduledDate || scheduledTime || selectedPlatforms.length > 0 || isStory
 
   const handleReset = () => {
     setContent('')
+    setPostType('Feed')
     setScheduledDate('')
     setScheduledTime('')
     setSelectedPlatforms([])
@@ -462,6 +539,43 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
           </div>
         </div>
 
+        {/* Post Type Toggle - Feed/Story (only for FB/IG) */}
+        {isStoryPlatformSelected && (
+          <div className="form-group">
+            <label>Post Type</label>
+            <div className="post-type-toggle">
+              <button
+                type="button"
+                className={`post-type-btn ${postType === 'Feed' ? 'selected' : ''}`}
+                onClick={() => {
+                  setPostType('Feed')
+                  // Clear single media when switching (carousel may need different setup)
+                  setMediaUrl(null)
+                  setMediaType(null)
+                  setUploadKey(k => k + 1)
+                  setCarouselItems([])
+                }}
+              >
+                Feed Post
+              </button>
+              <button
+                type="button"
+                className={`post-type-btn ${postType === 'Story' ? 'selected' : ''}`}
+                onClick={() => {
+                  setPostType('Story')
+                  // Clear carousel when switching to story (stories are single media)
+                  setMediaUrl(null)
+                  setMediaType(null)
+                  setUploadKey(k => k + 1)
+                  setCarouselItems([])
+                }}
+              >
+                Story
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Facebook Page Selector - shown when Facebook is selected */}
         {isFacebookSelected && connectedPages.length > 0 && (
           <div className="form-group">
@@ -491,7 +605,7 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
         {isInstagramSelected && connectedInstagramAccounts.length > 0 && (
           <div className="form-group">
             <label htmlFor="instagramAccount">Instagram Account</label>
-            <span className="hint-text">Instagram Feed</span>
+            <span className="hint-text">Instagram {isStory ? 'Story' : 'Feed'}</span>
             {loadingPages ? (
               <div className="loading-pages">Loading accounts...</div>
             ) : (
@@ -513,77 +627,109 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
           </div>
         )}
 
-        <div className="form-group">
-          <label htmlFor="content">
-            {isInstagramSelected ? 'Caption' : 'Post Content'}
-            {isInstagramSelected && <span className="hint-text" style={{ marginLeft: '8px' }}>Include #hashtags in caption</span>}
-          </label>
-          <textarea
-            id="content"
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder={isInstagramSelected ? "Write your caption... #hashtags welcome" : "What do you want to share?"}
-            rows={4}
-            className={isTextTooLong ? 'error' : ''}
-            disabled={!isComposerEnabled}
-          />
-          <div className="char-counter-row">
-            <span className={`char-count ${isTextTooLong ? 'error' : ''}`}>
-              {content.length}/{maxChars}
-            </span>
-            {isTextTooLong && (
-              <span className="char-error">
-                Text is too long for {platformDisplayName}. Max {maxChars} characters.
+        {/* Caption / Post Content — hidden entirely for stories */}
+        {!isStory && (
+          <div className="form-group">
+            <label htmlFor="content">
+              {isInstagramSelected
+                ? <>Caption<span className="hint-text" style={{ marginLeft: '8px' }}>Include #hashtags in caption</span></>
+                : 'Post Content'
+              }
+            </label>
+            <textarea
+              id="content"
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder={isInstagramSelected ? "Write your caption... #hashtags welcome" : "What do you want to share?"}
+              rows={4}
+              className={isTextTooLong ? 'error' : ''}
+              disabled={!isComposerEnabled}
+            />
+            <div className="char-counter-row">
+              <span className={`char-count ${isTextTooLong ? 'error' : ''}`}>
+                {content.length}/{maxChars}
               </span>
-            )}
-          </div>
+              {isTextTooLong && (
+                <span className="char-error">
+                  Text is too long for {platformDisplayName}. Max {maxChars} characters.
+                </span>
+              )}
+            </div>
 
-          <AiAssistPanel
-            key={aiPanelKey}
-            text={content}
-            stickyLanguage={stickyLanguage}
-            ensureLanguageDetected={ensureLanguageDetected}
-            resetLanguage={resetLanguage}
-            platform={getAiPlatform(selectedPlatforms)}
-            onApplyText={(newText, newLanguageCode) => {
-              // Only update if content actually changes
-              if (content !== newText) {
-                setContent(newText)
-              }
-              // If a new language was provided (from translation), set it
-              if (newLanguageCode) {
-                setLanguage(newLanguageCode)
-              }
-            }}
-            onAppendText={(text) => setContent((prev) => prev + text)}
-            mediaUrl={mediaUrl}
-            mediaType={mediaType}
-            onSelectThumbnail={(url) => setSelectedThumbnailUrl(url)}
-            voiceProfiles={voiceProfiles}
-            onVoiceProfileModalOpen={onVoiceProfileModalOpen}
-            goal={goal}
-            onGoalChange={setGoal}
-            disabled={!isComposerEnabled}
-          />
-        </div>
+            <AiAssistPanel
+              key={aiPanelKey}
+              text={content}
+              stickyLanguage={stickyLanguage}
+              ensureLanguageDetected={ensureLanguageDetected}
+              resetLanguage={resetLanguage}
+              platform={getAiPlatform(selectedPlatforms)}
+              onApplyText={(newText, newLanguageCode) => {
+                // Only update if content actually changes
+                if (content !== newText) {
+                  setContent(newText)
+                }
+                // If a new language was provided (from translation), set it
+                if (newLanguageCode) {
+                  setLanguage(newLanguageCode)
+                }
+              }}
+              onAppendText={(text) => setContent((prev) => prev + text)}
+              mediaUrl={mediaUrl}
+              mediaType={mediaType}
+              onSelectThumbnail={(url) => setSelectedThumbnailUrl(url)}
+              voiceProfiles={voiceProfiles}
+              onVoiceProfileModalOpen={onVoiceProfileModalOpen}
+              goal={goal}
+              onGoalChange={setGoal}
+              disabled={!isComposerEnabled}
+            />
+          </div>
+        )}
 
         <div className="form-group">
           <label>
-            {isInstagramSelected ? 'Media (required)' : 'Media (optional)'}
+            {isStory ? 'Media (required)' : isInstagramSelected ? 'Media (required)' : 'Media (optional)'}
           </label>
-          {isInstagramSelected && !mediaUrl && carouselItems.length === 0 && (
+          {isStory && !mediaUrl && (
+            <div className="ig-media-hint">
+              <strong>Story:</strong> 1 photo (JPG/PNG) or 1 video (MP4) — vertical 9:16 recommended
+            </div>
+          )}
+          {!isStory && isInstagramSelected && !mediaUrl && carouselItems.length === 0 && (
             <div className="ig-media-hint">
               <strong>Single:</strong> 1 photo (JPG/PNG) or 1 video (MP4, published as Reel)<br />
               <strong>Carousel:</strong> 2–10 photos (JPG/PNG only)
             </div>
           )}
-          {isFacebookSelected && !mediaUrl && carouselItems.length === 0 && (
+          {!isStory && isFacebookSelected && !mediaUrl && carouselItems.length === 0 && (
             <div className="ig-media-hint">
               <strong>Single:</strong> 1 photo (JPG/PNG) or 1 video (MP4)<br />
               <strong>Multi-photo:</strong> 2–10 photos (JPG/PNG only)
             </div>
           )}
-          {isInstagramSelected || isFacebookSelected ? (
+          {isStory ? (
+            /* Stories: single media upload with Story placement for validation */
+            <MediaUpload
+              key={uploadKey}
+              onUploadComplete={(s3Key, type) => {
+                setMediaUrl(s3Key)
+                setMediaType(type)
+                setUploadError(null)
+              }}
+              onUploadError={(error) => setUploadError(error)}
+              onClear={() => {
+                setMediaUrl(null)
+                setMediaType(null)
+                setMediaValidationStatus(null)
+                setMediaValidationErrors([])
+              }}
+              onUploadingChange={setIsUploading}
+              onValidationChange={handleMediaValidationChange}
+              selectedPlatform={selectedPlatformId}
+              placement="Story"
+              disabled={!isComposerEnabled}
+            />
+          ) : (isInstagramSelected || isFacebookSelected) ? (
             <MultiMediaUpload
               key={uploadKey}
               items={carouselItems}
@@ -669,20 +815,22 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
           </div>
         </div>
 
-        {/* AI-powered time suggestions */}
-        <SuggestedTimes
-          key={suggestedTimesKey}
-          postText={content}
-          selectedDate={scheduledDate}
-          platform={getAiPlatform(selectedPlatforms)}
-          goal={goal}
-          audienceLocation={audienceLocation}
-          country={audienceCountry || null}
-          onAudienceLocationChange={setAudienceLocation}
-          onCountryChange={setAudienceCountry}
-          onSelectTime={(time) => setScheduledTime(time)}
-          disabled={!isComposerEnabled || isUploading}
-        />
+        {/* AI-powered time suggestions - hidden for stories */}
+        {!isStory && (
+          <SuggestedTimes
+            key={suggestedTimesKey}
+            postText={content}
+            selectedDate={scheduledDate}
+            platform={getAiPlatform(selectedPlatforms)}
+            goal={goal}
+            audienceLocation={audienceLocation}
+            country={audienceCountry || null}
+            onAudienceLocationChange={setAudienceLocation}
+            onCountryChange={setAudienceCountry}
+            onSelectTime={(time) => setScheduledTime(time)}
+            disabled={!isComposerEnabled || isUploading}
+          />
+        )}
 
         <div className="form-actions">
           <button
@@ -690,8 +838,18 @@ export function SchedulePost({ onSchedule, voiceProfiles, onVoiceProfileModalOpe
             className="submit-btn"
             disabled={!isFormValid}
           >
-            Schedule Post
+            {isStory ? 'Schedule Story' : 'Schedule Post'}
           </button>
+          {onPublishNow && (
+            <button
+              type="button"
+              className="publish-now-btn"
+              disabled={!isPublishNowValid || isPublishingNow}
+              onClick={handlePublishNow}
+            >
+              {isPublishingNow ? 'Publishing…' : (isStory ? 'Publish Story Now' : 'Publish Now')}
+            </button>
+          )}
           {hasFormData && (
             <button
               type="button"

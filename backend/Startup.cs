@@ -94,6 +94,15 @@ public class Startup
 
         services.AddScoped<IPostPublisherResolver, PostPublisherResolver>();
 
+        // Configure story publishers
+        services.AddHttpClient<InstagramStoryPublisher>();
+        services.AddScoped<IStoryPublisher>(sp => sp.GetRequiredService<InstagramStoryPublisher>());
+
+        services.AddHttpClient<FacebookStoryPublisher>();
+        services.AddScoped<IStoryPublisher>(sp => sp.GetRequiredService<FacebookStoryPublisher>());
+
+        services.AddScoped<IStoryPublisherResolver, StoryPublisherResolver>();
+
         // Configure feature settings
         var featureSettings = Configuration.GetSection("Features").Get<FeatureSettings>() ?? new FeatureSettings();
         services.AddSingleton(featureSettings);

@@ -5,13 +5,18 @@ namespace PostPilot.Api.Entities;
 public class Post
 {
     public Guid Id { get; set; }
-    public required string Content { get; set; }
+    public string Content { get; set; } = string.Empty;
     public string? MediaUrl { get; set; }
 
     /// <summary>
     /// Type of media attached to this post (None, Image, or Video).
     /// </summary>
     public MediaType MediaType { get; set; } = MediaType.None;
+
+    /// <summary>
+    /// Whether this is a feed post or a story.
+    /// </summary>
+    public PostType PostType { get; set; } = PostType.Feed;
 
     public Platform Platform { get; set; }
     public DateTime ScheduledAt { get; set; }
@@ -32,9 +37,16 @@ public class Post
     public Guid? TargetInstagramAccountId { get; set; }
 
     /// <summary>
-    /// External URL to the published post (e.g., Instagram permalink)
+    /// External URL to the published post (e.g., Instagram permalink, Facebook story permalink_url).
+    /// For stories: fetched from Graph API after publish. For feed posts: constructed or fetched.
     /// </summary>
     public string? ExternalPostUrl { get; set; }
+
+    /// <summary>
+    /// Profile URL for Instagram stories (fallback when story permalink is not available).
+    /// Computed as https://www.instagram.com/{username}/ if username is available.
+    /// </summary>
+    public string? ProfileUrl { get; set; }
 
     /// <summary>
     /// Timestamp when the post was actually published
@@ -121,6 +133,12 @@ public class Post
     /// Used for stateful carousel publishing: create children → create carousel → poll → publish.
     /// </summary>
     public string? InstagramCarouselCreationId { get; set; }
+
+    /// <summary>
+    /// Facebook photo/video ID used for story creation (two-step flow: upload media, then create story).
+    /// Persisted for idempotency so retries can skip the upload step if the media was already uploaded.
+    /// </summary>
+    public string? FacebookStoryMediaId { get; set; }
 
     // Navigation properties
     public ConnectedPage? TargetPage { get; set; }

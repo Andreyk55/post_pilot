@@ -100,6 +100,32 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
     durationMaxSeconds: 240 * 60, // 4 hours
   },
 
+  // Facebook Story Image
+  'facebook:story:image': {
+    allowedMimeTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/bmp', 'image/tiff', 'image/webp'],
+    maxBytes: 4 * 1024 * 1024, // 4MB
+    minWidth: 320,
+    minHeight: 320,
+    maxWidth: 1080,
+    maxHeight: 1920,
+    aspectRatioMin: 0.5625, // 9:16
+    aspectRatioMax: 0.5625,
+  },
+
+  // Facebook Story Video
+  'facebook:story:video': {
+    allowedMimeTypes: ['video/mp4', 'video/quicktime'],
+    maxBytes: 1024 * 1024 * 1024, // 1GB
+    minWidth: 320,
+    minHeight: 320,
+    maxWidth: 1080,
+    maxHeight: 1920,
+    aspectRatioMin: 0.5625,
+    aspectRatioMax: 0.5625,
+    durationMinSeconds: 1,
+    durationMaxSeconds: 120, // 2 minutes
+  },
+
   // Instagram Feed Image
   'instagram:feed:image': {
     allowedMimeTypes: ['image/jpeg', 'image/png'],
@@ -122,6 +148,32 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
     maxHeight: 1920,
     aspectRatioMin: 0.8,
     aspectRatioMax: 1.91,
+    durationMinSeconds: 3,
+    durationMaxSeconds: 60, // 60 seconds
+  },
+
+  // Instagram Story Image
+  'instagram:story:image': {
+    allowedMimeTypes: ['image/jpeg', 'image/png'],
+    maxBytes: 8 * 1024 * 1024, // 8MB
+    minWidth: 320,
+    minHeight: 320,
+    maxWidth: 1080,
+    maxHeight: 1920,
+    aspectRatioMin: 0.5625, // 9:16
+    aspectRatioMax: 0.5625,
+  },
+
+  // Instagram Story Video
+  'instagram:story:video': {
+    allowedMimeTypes: ['video/mp4', 'video/quicktime'],
+    maxBytes: 100 * 1024 * 1024, // 100MB
+    minWidth: 320,
+    minHeight: 320,
+    maxWidth: 1080,
+    maxHeight: 1920,
+    aspectRatioMin: 0.5625,
+    aspectRatioMax: 0.5625,
     durationMinSeconds: 3,
     durationMaxSeconds: 60, // 60 seconds
   },

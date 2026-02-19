@@ -47,7 +47,7 @@ public class LocalSchedulerBackgroundService : BackgroundService
 
     private async Task ProcessDuePostsAsync(CancellationToken cancellationToken)
     {
-        List<(Guid Id, Platform Platform)> duePosts;
+        List<(Guid Id, Platform Platform, PostType PostType)> duePosts;
 
         // First scope: just query for due posts
         using (var scope = _serviceProvider.CreateScope())
@@ -76,10 +76,10 @@ public class LocalSchedulerBackgroundService : BackgroundService
                 .Where(p =>
                     (p.Status == PostStatus.Scheduled && p.ScheduledAt <= now) ||
                     (p.Status == PostStatus.RetryPending && p.NextRetryAt != null && p.NextRetryAt <= now))
-                .Select(p => new { p.Id, p.Platform })
+                .Select(p => new { p.Id, p.Platform, p.PostType })
                 .AsNoTracking()
                 .ToListAsync(cancellationToken)
-                .ContinueWith(t => t.Result.Select(p => (p.Id, p.Platform)).ToList(), cancellationToken);
+                .ContinueWith(t => t.Result.Select(p => (p.Id, p.Platform, p.PostType)).ToList(), cancellationToken);
         }
 
         if (duePosts.Count == 0)
@@ -92,22 +92,39 @@ public class LocalSchedulerBackgroundService : BackgroundService
         // Process each post in its own scope
         foreach (var duePost in duePosts)
         {
-            _logger.LogInformation("Processing due post {PostId}", duePost.Id);
+            _logger.LogInformation("Processing due post {PostId} (type={PostType})", duePost.Id, duePost.PostType);
 
             try
             {
                 // Create a fresh scope for each publish operation
                 using var publishScope = _serviceProvider.CreateScope();
-                var publisherResolver = publishScope.ServiceProvider.GetRequiredService<IPostPublisherResolver>();
 
-                var publisher = publisherResolver.GetPublisher(duePost.Platform);
-                if (publisher == null)
+                if (duePost.PostType == PostType.Story)
                 {
-                    _logger.LogWarning("No publisher available for platform {Platform}", duePost.Platform);
-                    continue;
-                }
+                    // Route stories to story publishers
+                    var storyResolver = publishScope.ServiceProvider.GetRequiredService<IStoryPublisherResolver>();
+                    var storyPublisher = storyResolver.GetPublisher(duePost.Platform);
+                    if (storyPublisher == null)
+                    {
+                        _logger.LogWarning("No story publisher available for platform {Platform}", duePost.Platform);
+                        continue;
+                    }
 
-                await publisher.PublishAsync(duePost.Id, cancellationToken);
+                    await storyPublisher.PublishAsync(duePost.Id, cancellationToken);
+                }
+                else
+                {
+                    // Route feed posts to feed publishers
+                    var publisherResolver = publishScope.ServiceProvider.GetRequiredService<IPostPublisherResolver>();
+                    var publisher = publisherResolver.GetPublisher(duePost.Platform);
+                    if (publisher == null)
+                    {
+                        _logger.LogWarning("No publisher available for platform {Platform}", duePost.Platform);
+                        continue;
+                    }
+
+                    await publisher.PublishAsync(duePost.Id, cancellationToken);
+                }
             }
             catch (Exception ex)
             {
