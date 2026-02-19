@@ -4,6 +4,7 @@ import { getMediaUrl, getMediaTypeFromFile } from '../api/media'
 import { VideoThumbnail } from './VideoThumbnail'
 import { ConfirmDialog } from './ConfirmDialog'
 import { Toast } from './Toast'
+import { getContentBadges, getMediaLabel } from '../utils/postBadges'
 import './ScheduledPosts.css'
 
 // Helper to get effective media type (use mediaType if set, otherwise detect from URL)
@@ -15,32 +16,6 @@ function getEffectiveMediaType(post: Post): 'None' | 'Image' | 'Video' {
     return getMediaTypeFromFile(post.mediaUrl)
   }
   return 'None'
-}
-
-// Helper to get the display label for the media badge
-function getMediaBadgeLabel(post: Post): string {
-  // Multi-image detection: IG carousel or FB multi-photo
-  if (post.mediaItems && post.mediaItems.length >= 2) {
-    if (post.platform === 'Facebook') return `Photos (${post.mediaItems.length})`
-    return 'Carousel'
-  }
-  if (post.platform === 'Instagram' && post.instagramMediaType) {
-    switch (post.instagramMediaType) {
-      case 'Reels': return 'Reel'
-      case 'Image': return 'Image Post'
-      case 'CarouselAlbum': return 'Carousel'
-      case 'Video': return 'Video'
-      default: return getEffectiveMediaType(post) === 'Video' ? 'Video' : 'Image'
-    }
-  }
-  return getEffectiveMediaType(post) === 'Video' ? 'Video' : 'Image'
-}
-
-// Returns the CSS data-type value for badge coloring
-function getMediaBadgeType(post: Post): string {
-  if (post.mediaItems && post.mediaItems.length >= 2) return 'carouselalbum'
-  if (post.instagramMediaType) return post.instagramMediaType.toLowerCase()
-  return getEffectiveMediaType(post) === 'Video' ? 'video' : 'image'
 }
 
 interface ScheduledPostsProps {
@@ -321,7 +296,7 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
                     />
                     <span className="media-indicator">
                       <ImageIcon />
-                      {getMediaBadgeLabel(post)}
+                      {getMediaLabel(post)}
                     </span>
                   </div>
                 )}
@@ -343,7 +318,7 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
                     )}
                     <span className="media-indicator">
                       <VideoIcon />
-                      {getMediaBadgeLabel(post)}
+                      {getMediaLabel(post)}
                     </span>
                   </div>
                 )}
@@ -364,11 +339,11 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
                     >
                       {platformIcons[post.platform] || post.platform.charAt(0)}
                     </span>
-                    {post.postType === 'Story' && (
-                      <span className="media-type-badge" data-type="story">
-                        Story
+                    {getContentBadges(post).map(badge => (
+                      <span key={badge.key} className="media-type-badge" data-type={badge.dataType}>
+                        {badge.text}
                       </span>
-                    )}
+                    ))}
                     {(post.targetPageName || post.targetInstagramAccountName) && (
                       <span className="page-badge" title={post.targetPageName || post.targetInstagramAccountName || ''}>
                         {post.targetPageName || post.targetInstagramAccountName}
@@ -378,11 +353,6 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
                       <span className="status-dot" />
                       {post.status}
                     </span>
-                    {(post.platform === 'Instagram' || (post.platform === 'Facebook' && post.mediaItems && post.mediaItems.length >= 2)) && (
-                      <span className="media-type-badge" data-type={getMediaBadgeType(post)}>
-                        {getMediaBadgeLabel(post)}
-                      </span>
-                    )}
                     {canRemove(post.status) && (
                       <button
                         className="remove-btn"

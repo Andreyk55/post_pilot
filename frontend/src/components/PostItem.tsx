@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { postsApi, type Post, type PostDetails, type PostStatus } from '../api/posts'
 import { getMediaUrl, getMediaTypeFromFile } from '../api/media'
 import { VideoThumbnail } from './VideoThumbnail'
+import { getContentBadges, getMediaLabel } from '../utils/postBadges'
 import './PostItem.css'
 
 // Helper to get effective media type (use mediaType if set, otherwise detect from URL)
@@ -13,32 +14,6 @@ function getEffectiveMediaType(post: Post): 'None' | 'Image' | 'Video' {
     return getMediaTypeFromFile(post.mediaUrl)
   }
   return 'None'
-}
-
-// Helper to get the display label for the media badge
-function getMediaBadgeLabel(post: Post): string {
-  // Multi-image detection: IG carousel or FB multi-photo
-  if (post.mediaItems && post.mediaItems.length >= 2) {
-    if (post.platform === 'Facebook') return `Photos (${post.mediaItems.length})`
-    return 'Carousel'
-  }
-  if (post.platform === 'Instagram' && post.instagramMediaType) {
-    switch (post.instagramMediaType) {
-      case 'Reels': return 'Reel'
-      case 'Image': return 'Image Post'
-      case 'CarouselAlbum': return 'Carousel'
-      case 'Video': return 'Video'
-      default: return getEffectiveMediaType(post) === 'Video' ? 'Video' : 'Image'
-    }
-  }
-  return getEffectiveMediaType(post) === 'Video' ? 'Video' : 'Image'
-}
-
-// Returns the CSS data-type value for badge coloring
-function getMediaBadgeType(post: Post): string {
-  if (post.mediaItems && post.mediaItems.length >= 2) return 'carouselalbum'
-  if (post.instagramMediaType) return post.instagramMediaType.toLowerCase()
-  return getEffectiveMediaType(post) === 'Video' ? 'video' : 'image'
 }
 
 interface PostItemProps {
@@ -176,11 +151,11 @@ export function PostItem({ post, onCancel, onDelete, cachedDetails, onDetailsFet
             <span className={`status-indicator ${statusConfig.className}`}>
               {statusConfig.label}
             </span>
-            {(post.platform === 'Instagram' || (post.platform === 'Facebook' && post.mediaItems && post.mediaItems.length >= 2)) && (
-              <span className="media-type-badge" data-type={getMediaBadgeType(post)}>
-                {getMediaBadgeLabel(post)}
+            {getContentBadges(post).map(badge => (
+              <span key={badge.key} className="media-type-badge" data-type={badge.dataType}>
+                {badge.text}
               </span>
-            )}
+            ))}
             {(post.targetPageName || post.targetInstagramAccountName) && (
               <span className="target-page">{post.targetPageName || post.targetInstagramAccountName}</span>
             )}
@@ -239,13 +214,13 @@ export function PostItem({ post, onCancel, onDelete, cachedDetails, onDetailsFet
             post.selectedThumbnailUrl ? (
               <div className="post-video-thumbnail custom-thumbnail">
                 <img src={post.selectedThumbnailUrl} alt="Video thumbnail" />
-                <span className="video-badge">{getMediaBadgeLabel(post)}</span>
+                <span className="video-badge">{getMediaLabel(post)}</span>
               </div>
             ) : (
               <VideoThumbnail
                 videoUrl={getMediaUrl(post.mediaUrl) || ''}
                 className="post-video-thumbnail"
-                badgeLabel={getMediaBadgeLabel(post)}
+                badgeLabel={getMediaLabel(post)}
               />
             )
           )}
