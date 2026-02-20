@@ -36,8 +36,9 @@ public class InstagramVideoCarouselValidationTests
     }
 
     [Fact]
-    public void IgOnly_TwoVideos_OneImage_FailsMixedMedia()
+    public void IgOnly_TwoVideos_OneImage_IsMixedCarousel()
     {
+        // Mixed media is now allowed for Instagram-only carousels
         var items = new List<PostMediaItem>
         {
             new() { MediaUrl = "vid1.mp4", Order = 0, MediaType = MediaType.Video },
@@ -48,8 +49,10 @@ public class InstagramVideoCarouselValidationTests
         var imagesCount = items.Count(i => i.MediaType == MediaType.Image);
         var videosCount = items.Count(i => i.MediaType == MediaType.Video);
         var isMixed = imagesCount > 0 && videosCount > 0;
+        var isCarousel = items.Count >= 2 && items.Count <= 10;
 
         Assert.True(isMixed);
+        Assert.True(isCarousel); // Valid for IG-only
     }
 
     [Theory]

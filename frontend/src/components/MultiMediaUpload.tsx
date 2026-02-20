@@ -278,11 +278,7 @@ export function MultiMediaUpload({
   // Determine accepted file types for the <input>
   const getAcceptTypes = (): string => {
     if (isInstagram) {
-      if (items.length === 0) return 'image/jpeg,image/png,video/mp4'
-      // If existing items are images, only allow more images (no mixing)
-      if (items.some(i => i.mediaType === 'Image')) return 'image/jpeg,image/png'
-      // If existing items are videos, only allow more videos (video carousel)
-      if (items.some(i => i.mediaType === 'Video')) return 'video/mp4'
+      // Instagram supports mixed media carousels — always allow both images and videos
       return 'image/jpeg,image/png,video/mp4'
     }
     // Facebook: accept video only when empty; images-only once images exist
@@ -319,6 +315,11 @@ export function MultiMediaUpload({
   // Dynamic status bar text
   const getStatusText = (): string => {
     if (isInstagram) {
+      const imageCount = items.filter(i => i.mediaType === 'Image').length
+      const videoCount = items.filter(i => i.mediaType === 'Video').length
+      if (imageCount > 0 && videoCount > 0) {
+        return `${imageCount} photo${imageCount !== 1 ? 's' : ''} + ${videoCount} video${videoCount !== 1 ? 's' : ''}`
+      }
       if (items.every(i => i.mediaType === 'Video')) {
         return `${itemCount} video${itemCount !== 1 ? 's' : ''}`
       }
@@ -334,6 +335,9 @@ export function MultiMediaUpload({
   const getStatusBadge = (): string | null => {
     if (itemCount < minItems) return null
     if (isInstagram) {
+      const hasImages = items.some(i => i.mediaType === 'Image')
+      const hasVideos = items.some(i => i.mediaType === 'Video')
+      if (hasImages && hasVideos) return 'Mixed Carousel'
       if (items.every(i => i.mediaType === 'Video')) return 'Video Carousel'
       return 'Carousel'
     }
@@ -344,8 +348,8 @@ export function MultiMediaUpload({
   const getStatusHint = (): string | null => {
     if (itemCount !== 1) return null
     if (isInstagram) {
-      if (items[0].mediaType === 'Video') return 'Add more for video carousel, or publish as Reel'
-      return 'Add 1 more for carousel'
+      if (items[0].mediaType === 'Video') return 'Add more photos or videos for carousel, or publish as Reel'
+      return 'Add 1 more photo or video for carousel'
     }
     if (isFacebook) {
       if (items[0].mediaType === 'Video') return 'Will publish as video post'
@@ -375,7 +379,10 @@ export function MultiMediaUpload({
           {items.map((item, index) => (
             <div key={item.id} className={`carousel-item ${item.validationStatus === 'Invalid' ? 'invalid' : ''}`}>
               {isItemVideo(item) ? (
-                <video src={item.previewUrl} className="carousel-thumbnail" muted />
+                <>
+                  <video src={item.previewUrl} className="carousel-thumbnail" muted />
+                  <span className="carousel-video-indicator">&#9654;</span>
+                </>
               ) : (
                 <img src={item.previewUrl} alt={`Image ${index + 1}`} className="carousel-thumbnail" />
               )}

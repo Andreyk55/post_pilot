@@ -379,7 +379,7 @@ public class PostsController : ControllerBase
                 });
             }
 
-            // Instagram carousel: 2-10 items via MediaItems (all images OR all videos, no mixing)
+            // Instagram carousel: 2-10 items via MediaItems (images, videos, or mixed)
             var hasMultipleMediaItems = request.MediaItems is { Count: > 0 };
             if (hasMultipleMediaItems)
             {
@@ -388,34 +388,19 @@ public class PostsController : ControllerBase
                 {
                     return BadRequest(new ProblemDetails
                     {
-                        Title = "Invalid carousel",
+                        Title = request.MediaItems.Count > 10 ? "Too many carousel items" : "Invalid carousel",
                         Detail = "Instagram carousel requires 2 to 10 items.",
-                        Status = StatusCodes.Status400BadRequest,
-                    });
-                }
-
-                var imagesCount = request.MediaItems.Count(m => m.MediaType == MediaType.Image);
-                var videosCount = request.MediaItems.Count(m => m.MediaType == MediaType.Video);
-
-                // No mixed media
-                if (imagesCount > 0 && videosCount > 0)
-                {
-                    return BadRequest(new ProblemDetails
-                    {
-                        Title = "Unsupported media combination",
-                        Detail = "Mixed image+video posts aren't supported yet. Choose only images or only videos.",
                         Status = StatusCodes.Status400BadRequest,
                         Extensions =
                         {
-                            ["code"] = "UNSUPPORTED_MEDIA_COMBINATION",
-                            ["imagesCount"] = imagesCount,
-                            ["videosCount"] = videosCount,
+                            ["code"] = request.MediaItems.Count > 10 ? "TOO_MANY_CAROUSEL_ITEMS" : "INVALID_CAROUSEL",
+                            ["totalCount"] = request.MediaItems.Count,
                             ["platforms"] = new[] { "Instagram" },
                         }
                     });
                 }
 
-                // All items must be images or all videos
+                // All items must be images or videos (no other types)
                 if (request.MediaItems.Any(m => m.MediaType != MediaType.Image && m.MediaType != MediaType.Video))
                 {
                     return BadRequest(new ProblemDetails
@@ -425,6 +410,8 @@ public class PostsController : ControllerBase
                         Status = StatusCodes.Status400BadRequest,
                     });
                 }
+
+                // Mixed media (images + videos) is allowed for Instagram-only carousels
             }
             else
             {

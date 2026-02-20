@@ -156,14 +156,26 @@ public class InstagramPublisher : IPostPublisher
                 ErrorMessage: "Post was canceled");
         }
 
-        // Step 6: Route to image, video, carousel (images), or carousel (videos) flow
+        // Step 6: Route to image, video, carousel (images), carousel (videos), or mixed carousel flow
         var isCarousel = post.MediaItems?.Count >= 2;
         var isVideoCarousel = isCarousel && post.MediaItems!.All(m => m.MediaType == Enums.MediaType.Video);
+        var isImageCarousel = isCarousel && post.MediaItems!.All(m => m.MediaType == Enums.MediaType.Image);
+        var isMixedCarousel = isCarousel && !isVideoCarousel && !isImageCarousel;
         try
         {
             PublishResult result;
 
-            if (isVideoCarousel)
+            if (isMixedCarousel)
+            {
+                result = await PublishMixedCarouselToInstagramAsync(post, accessToken, cancellationToken);
+
+                // Mixed carousel flow handles its own state transitions for processing retries.
+                if (result.Success && string.IsNullOrEmpty(result.ExternalPostId))
+                {
+                    return result;
+                }
+            }
+            else if (isVideoCarousel)
             {
                 result = await PublishVideoCarouselToInstagramAsync(post, accessToken, cancellationToken);
 
@@ -689,6 +701,176 @@ public class InstagramPublisher : IPostPublisher
                 return new PublishResult(false,
                     ErrorType: PublishErrorType.Transient,
                     ErrorMessage: $"Unknown video carousel container status: {statusResult.Status}");
+        }
+    }
+
+    // ──────────────────────────────────────────────
+    //  MIXED CAROUSEL FLOW (stateful, multi-attempt)
+    // ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Stateful Instagram mixed carousel publishing flow (images + videos in any order).
+    /// Same structure as video carousel, but each child uses image_url or video_url depending on its type.
+    /// Video children may take time to process, so all children are polled before creating the parent.
+    ///
+    /// Steps:
+    ///   1. Create child containers for each asset (image or video) with is_carousel_item=true, no caption
+    ///   2. Check if all children are FINISHED (video children may still be processing)
+    ///   3. Create carousel container (media_type=CAROUSEL, children=..., caption=...)
+    ///   4. Poll carousel container status
+    ///   5. Publish carousel container
+    /// </summary>
+    private async Task<PublishResult> PublishMixedCarouselToInstagramAsync(
+        Post post, string accessToken, CancellationToken cancellationToken)
+    {
+        var igUserId = post.TargetInstagramAccount!.IgBusinessId;
+        var mediaItems = post.MediaItems!.OrderBy(m => m.Order).ToList();
+
+        _logger.LogInformation(
+            "Starting mixed carousel publish for post {PostId} with {Count} items ({Images} images, {Videos} videos)",
+            post.Id, mediaItems.Count,
+            mediaItems.Count(m => m.MediaType == Enums.MediaType.Image),
+            mediaItems.Count(m => m.MediaType == Enums.MediaType.Video));
+
+        // Step 1: Create child containers (idempotent — skip if already created)
+        var childIds = DeserializeChildIds(post.InstagramChildCreationIds);
+
+        if (childIds.Count < mediaItems.Count)
+        {
+            for (int i = childIds.Count; i < mediaItems.Count; i++)
+            {
+                var item = mediaItems[i];
+                PublishResult childResult;
+
+                if (item.MediaType == Enums.MediaType.Video)
+                {
+                    var videoUrl = ResolveMediaUrlForItem(item, TimeSpan.FromHours(2));
+                    childResult = await CreateCarouselVideoChildContainerAsync(
+                        igUserId, videoUrl, accessToken, cancellationToken);
+                }
+                else
+                {
+                    var imageUrl = ResolveMediaUrlForItem(item);
+                    childResult = await CreateCarouselChildContainerAsync(
+                        igUserId, imageUrl, accessToken, cancellationToken);
+                }
+
+                if (!childResult.Success)
+                {
+                    _logger.LogWarning(
+                        "Failed to create mixed carousel child {Index} ({Type}) for post {PostId}: {Error}",
+                        i, item.MediaType, post.Id, childResult.ErrorMessage);
+                    return childResult;
+                }
+
+                childIds.Add(childResult.ExternalPostId!);
+
+                // Persist after each child so we don't recreate on retry
+                post.InstagramChildCreationIds = SerializeChildIds(childIds);
+                post.UpdatedAt = DateTime.UtcNow;
+                await _dbContext.SaveChangesAsync(cancellationToken);
+
+                _logger.LogInformation(
+                    "Created mixed carousel child {Index}/{Total} ({Type}): {ChildId} for post {PostId}",
+                    i + 1, mediaItems.Count, item.MediaType, childResult.ExternalPostId, post.Id);
+            }
+        }
+
+        // Step 2: Before creating parent container, check all children are FINISHED
+        // (Video children may still be processing)
+        if (string.IsNullOrEmpty(post.InstagramCarouselCreationId))
+        {
+            for (int i = 0; i < childIds.Count; i++)
+            {
+                var childStatus = await CheckContainerStatusAsync(
+                    childIds[i], accessToken, cancellationToken);
+
+                switch (childStatus.Status)
+                {
+                    case IgContainerStatus.Finished:
+                        continue; // This child is ready
+
+                    case IgContainerStatus.InProgress:
+                        _logger.LogInformation(
+                            "Mixed carousel child {Index} ({ChildId}) still processing for post {PostId}",
+                            i, childIds[i], post.Id);
+                        return await ScheduleProcessingRetryAsync(post, cancellationToken);
+
+                    case IgContainerStatus.Error:
+                        return new PublishResult(false,
+                            ErrorType: PublishErrorType.Permanent,
+                            ErrorMessage: $"Mixed carousel child {i} processing failed: {childStatus.ErrorMessage}");
+
+                    case IgContainerStatus.Expired:
+                        // Child expired; clear all children to start over
+                        post.InstagramChildCreationIds = null;
+                        post.UpdatedAt = DateTime.UtcNow;
+                        await _dbContext.SaveChangesAsync(cancellationToken);
+                        return new PublishResult(false,
+                            ErrorType: PublishErrorType.Transient,
+                            ErrorMessage: $"Mixed carousel child {i} expired before publishing");
+
+                    default:
+                        return new PublishResult(false,
+                            ErrorType: PublishErrorType.Transient,
+                            ErrorMessage: $"Unknown mixed carousel child status: {childStatus.Status}");
+                }
+            }
+        }
+
+        // Step 3: Create carousel container (idempotent)
+        if (string.IsNullOrEmpty(post.InstagramCarouselCreationId))
+        {
+            var carouselResult = await CreateCarouselContainerAsync(
+                igUserId, childIds, post.Content, accessToken, cancellationToken);
+
+            if (!carouselResult.Success)
+                return carouselResult;
+
+            post.InstagramCarouselCreationId = carouselResult.ExternalPostId!;
+            post.UpdatedAt = DateTime.UtcNow;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "Created mixed carousel container {CarouselId} for post {PostId}",
+                post.InstagramCarouselCreationId, post.Id);
+        }
+
+        // Step 4: Check carousel container status (single check, no blocking loop)
+        var statusResult = await CheckContainerStatusAsync(
+            post.InstagramCarouselCreationId!, accessToken, cancellationToken);
+
+        switch (statusResult.Status)
+        {
+            case IgContainerStatus.Finished:
+                _logger.LogInformation(
+                    "Mixed carousel container {CarouselId} is FINISHED, publishing for post {PostId}",
+                    post.InstagramCarouselCreationId, post.Id);
+
+                return await PublishMediaContainerAsync(
+                    igUserId, post.InstagramCarouselCreationId!, accessToken, cancellationToken);
+
+            case IgContainerStatus.InProgress:
+                return await ScheduleProcessingRetryAsync(post, cancellationToken);
+
+            case IgContainerStatus.Error:
+                return new PublishResult(false,
+                    ErrorType: PublishErrorType.Permanent,
+                    ErrorMessage: $"Mixed carousel container processing failed: {statusResult.ErrorMessage}");
+
+            case IgContainerStatus.Expired:
+                post.InstagramCarouselCreationId = null;
+                post.UpdatedAt = DateTime.UtcNow;
+                await _dbContext.SaveChangesAsync(cancellationToken);
+
+                return new PublishResult(false,
+                    ErrorType: PublishErrorType.Transient,
+                    ErrorMessage: "Mixed carousel container expired before publishing");
+
+            default:
+                return new PublishResult(false,
+                    ErrorType: PublishErrorType.Transient,
+                    ErrorMessage: $"Unknown mixed carousel container status: {statusResult.Status}");
         }
     }
 
