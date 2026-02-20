@@ -9,6 +9,7 @@ import type { CreatePostMediaItem, PostType } from '../api/posts'
 import { AiAssistPanel, type StickyLanguageState } from './AiAssistPanel'
 import { SuggestedTimes } from './SuggestedTimes'
 import { type VoiceProfileSummary } from '../api/voiceProfiles'
+import { InstagramMention } from './InstagramMention'
 import {
   getPostTextMaxChars,
   getPlatformDisplayName,
@@ -121,6 +122,9 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
   // Use ref to hold latest content to avoid stale closures
   const contentRef = useRef<string>(content)
   contentRef.current = content
+
+  // Ref for caption textarea (used by InstagramMention for cursor position)
+  const captionTextareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Ensure we have a detected language - only calls API if language is unknown
   const ensureLanguageDetected = useCallback(async (): Promise<StickyLanguageState> => {
@@ -638,9 +642,10 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
             </label>
             <textarea
               id="content"
+              ref={captionTextareaRef}
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder={isInstagramSelected ? "Write your caption... #hashtags welcome" : "What do you want to share?"}
+              placeholder={isInstagramSelected ? "Write your caption... #hashtags and @mentions welcome" : "What do you want to share?"}
               rows={4}
               className={isTextTooLong ? 'error' : ''}
               disabled={!isComposerEnabled}
@@ -655,6 +660,15 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
                 </span>
               )}
             </div>
+
+            {isInstagramSelected && (
+              <InstagramMention
+                caption={content}
+                onCaptionChange={setContent}
+                textareaRef={captionTextareaRef}
+                disabled={!isComposerEnabled}
+              />
+            )}
 
             <AiAssistPanel
               key={aiPanelKey}
