@@ -58,7 +58,7 @@ export function getPostTypeBadge(post: Post): ContentBadge {
   if (post.instagramMediaType === 'Reels') {
     return { key: 'postType', text: 'Reel', dataType: 'reel' }
   }
-  if ((post.mediaItems?.length ?? 0) >= 2 || post.instagramMediaType === 'CarouselAlbum') {
+  if (post.platform !== 'Facebook' && ((post.mediaItems?.length ?? 0) >= 2 || post.instagramMediaType === 'CarouselAlbum')) {
     return { key: 'postType', text: 'Carousel', dataType: 'carousel' }
   }
   return { key: 'postType', text: 'Post', dataType: 'post' }

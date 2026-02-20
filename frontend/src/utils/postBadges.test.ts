@@ -96,6 +96,19 @@ describe('getPostTypeBadge', () => {
     expect(badge.dataType).toBe('carousel')
   })
 
+  it('returns Post for Facebook even with multiple media items', () => {
+    const badge = getPostTypeBadge(makePost({
+      platform: 'Facebook',
+      mediaItems: [
+        { id: '1', order: 0, mediaUrl: 'a.jpg', mediaType: 'Image' },
+        { id: '2', order: 1, mediaUrl: 'b.jpg', mediaType: 'Image' },
+        { id: '3', order: 2, mediaUrl: 'c.jpg', mediaType: 'Image' },
+      ],
+    }))
+    expect(badge.text).toBe('Post')
+    expect(badge.dataType).toBe('post')
+  })
+
   it('returns Post for feed even when instagramMediaType is Image', () => {
     const badge = getPostTypeBadge(makePost({ instagramMediaType: 'Image' }))
     expect(badge.text).toBe('Post')
