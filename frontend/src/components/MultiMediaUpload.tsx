@@ -65,10 +65,10 @@ export function MultiMediaUpload({
     ? getFacebookMediaMode(items.map(i => ({ name: i.fileName, type: i.mediaType === 'Video' ? 'video/mp4' : 'image/jpeg' })))
     : null
 
-  // For Instagram/Facebook with a video selected, don't allow adding more
-  const igHasVideo = isInstagram && items.length === 1 && items[0].mediaType === 'Video'
+  // For Facebook with a video selected, don't allow adding more (FB = 1 video max)
+  // For Instagram with videos, allow adding more videos (IG video carousel)
   const fbHasVideo = isFacebook && items.length === 1 && items[0].mediaType === 'Video'
-  const canAddMore = (igHasVideo || fbHasVideo) ? false : items.length < maxItems
+  const canAddMore = fbHasVideo ? false : items.length < maxItems
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
@@ -278,11 +278,11 @@ export function MultiMediaUpload({
   // Determine accepted file types for the <input>
   const getAcceptTypes = (): string => {
     if (isInstagram) {
-      // When empty or with images only: accept both images and video (validation handles the rest)
-      // When a video is already selected: nothing more can be added (canAddMore = false)
       if (items.length === 0) return 'image/jpeg,image/png,video/mp4'
-      // If existing items are images, only allow more images
+      // If existing items are images, only allow more images (no mixing)
       if (items.some(i => i.mediaType === 'Image')) return 'image/jpeg,image/png'
+      // If existing items are videos, only allow more videos (video carousel)
+      if (items.some(i => i.mediaType === 'Video')) return 'video/mp4'
       return 'image/jpeg,image/png,video/mp4'
     }
     // Facebook: accept video only when empty; images-only once images exist
@@ -316,10 +316,12 @@ export function MultiMediaUpload({
     return 'JPEG, PNG only. Select multiple files.'
   }
 
-  // Instagram: dynamic status bar text
+  // Dynamic status bar text
   const getStatusText = (): string => {
     if (isInstagram) {
-      if (itemCount === 1 && items[0].mediaType === 'Video') return '1 Reel'
+      if (items.every(i => i.mediaType === 'Video')) {
+        return `${itemCount} video${itemCount !== 1 ? 's' : ''}`
+      }
       return `${itemCount} photo${itemCount !== 1 ? 's' : ''}`
     }
     if (isFacebook) {
@@ -331,7 +333,10 @@ export function MultiMediaUpload({
 
   const getStatusBadge = (): string | null => {
     if (itemCount < minItems) return null
-    if (isInstagram) return 'Carousel'
+    if (isInstagram) {
+      if (items.every(i => i.mediaType === 'Video')) return 'Video Carousel'
+      return 'Carousel'
+    }
     if (selectedPlatform === 'facebook') return 'Multi-photo'
     return 'Carousel'
   }
@@ -339,7 +344,7 @@ export function MultiMediaUpload({
   const getStatusHint = (): string | null => {
     if (itemCount !== 1) return null
     if (isInstagram) {
-      if (items[0].mediaType === 'Video') return 'Will publish as Reel'
+      if (items[0].mediaType === 'Video') return 'Add more for video carousel, or publish as Reel'
       return 'Add 1 more for carousel'
     }
     if (isFacebook) {
@@ -361,7 +366,7 @@ export function MultiMediaUpload({
         onChange={handleFileSelect}
         disabled={uploading || disabled || !canAddMore}
         className="file-input-hidden"
-        multiple={!(isInstagram && items.length === 0)}
+        multiple
       />
 
       {/* Media grid */}

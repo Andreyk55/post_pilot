@@ -4,7 +4,8 @@
  * Rules:
  * - Single photo (JPG/PNG): allowed
  * - Single video (MP4): allowed (published as Reel)
- * - Carousel: 2–10 images only (JPG/PNG), NO videos, NO mixed media
+ * - Carousel (images): 2–10 images only (JPG/PNG), NO mixed media
+ * - Carousel (videos): 2–10 videos only (MP4), NO mixed media
  */
 
 export interface MediaFileInfo {
@@ -58,55 +59,44 @@ export function validateInstagramSelection(
     }
   }
 
-  // Rule: video cannot be mixed with anything
-  if (newHasVideo) {
-    // Can't select multiple files if any is video
-    if (newFiles.length > 1) {
-      return {
-        ok: false,
-        errorMessage: 'Carousel supports photos only. To post a Reel, upload a single MP4.',
-        nextFiles: [...existingFiles],
-      }
-    }
-
-    // Can't add video when images already exist
-    if (existingHasImage) {
-      return {
-        ok: false,
-        errorMessage: 'Carousel supports photos only. To post a Reel, upload a single MP4.',
-        nextFiles: [...existingFiles],
-      }
-    }
-
-    // Can't add video when a video already exists
-    if (existingHasVideo) {
-      return {
-        ok: false,
-        errorMessage: 'Only one Reel allowed. Remove the existing video first.',
-        nextFiles: [...existingFiles],
-      }
-    }
-
-    // Single video, no existing files - ok
-    return { ok: true, errorMessage: null, nextFiles: [newFiles[0]] }
-  }
-
-  // Rule: can't add images when a video exists
-  if (existingHasVideo) {
+  // Rule: no mixed media (images + videos)
+  if ((newHasVideo && existingHasImage) || (newHasImage && existingHasVideo)) {
     return {
       ok: false,
-      errorMessage: 'Cannot mix Reel with photos. Remove the video first to create a carousel.',
+      errorMessage: "Mixed image+video posts aren't supported yet. Choose only images or only videos.",
       nextFiles: [...existingFiles],
     }
   }
 
-  // Rule: mixed media in new files (shouldn't happen after video check above, but defensive)
+  // Rule: new selection itself can't mix images and videos
   if (newHasVideo && newHasImage) {
     return {
       ok: false,
-      errorMessage: 'Carousel supports photos only. To post a Reel, upload a single MP4.',
+      errorMessage: "Mixed image+video posts aren't supported yet. Choose only images or only videos.",
       nextFiles: [...existingFiles],
     }
+  }
+
+  // Videos: allow multi-video carousel (2-10 videos)
+  if (newHasVideo) {
+    const totalVideoCount = existingFiles.filter(f => isVideoFile(f)).length + newFiles.filter(f => isVideoFile(f)).length
+    if (totalVideoCount > 10) {
+      const remaining = 10 - existingFiles.length
+      if (remaining <= 0) {
+        return {
+          ok: false,
+          errorMessage: 'Maximum 10 videos for carousel. Remove some videos first.',
+          nextFiles: [...existingFiles],
+        }
+      }
+      return {
+        ok: true,
+        errorMessage: `Only ${remaining} more video(s) can be added. Max 10 total.`,
+        nextFiles: [...existingFiles, ...newFiles.slice(0, remaining)],
+      }
+    }
+
+    return { ok: true, errorMessage: null, nextFiles: [...existingFiles, ...newFiles] }
   }
 
   // Images only from here on
@@ -136,12 +126,13 @@ export function validateInstagramSelection(
 }
 
 /** Describes the current IG media state for UI labeling */
-export type InstagramMediaMode = 'empty' | 'single_image' | 'single_video' | 'carousel'
+export type InstagramMediaMode = 'empty' | 'single_image' | 'single_video' | 'carousel' | 'carousel_videos'
 
 export function getInstagramMediaMode(files: MediaFileInfo[]): InstagramMediaMode {
   if (files.length === 0) return 'empty'
   if (files.length === 1 && isVideoFile(files[0])) return 'single_video'
   if (files.length === 1 && isImageFile(files[0])) return 'single_image'
+  if (files.every(f => isVideoFile(f))) return 'carousel_videos'
   return 'carousel'
 }
 
@@ -152,6 +143,7 @@ export function getInstagramUploaderLabel(mode: InstagramMediaMode, count: numbe
     case 'single_video': return 'Reel selected'
     case 'single_image': return '1 photo selected'
     case 'carousel': return `${count} photos selected (carousel)`
+    case 'carousel_videos': return `${count} videos selected (carousel)`
   }
 }
 
@@ -159,8 +151,9 @@ export function getInstagramUploaderLabel(mode: InstagramMediaMode, count: numbe
 export function getInstagramFormatHint(mode: InstagramMediaMode): string {
   switch (mode) {
     case 'empty': return 'Photos (JPG/PNG) or Reel (MP4)'
-    case 'single_video': return 'Reel (MP4)'
+    case 'single_video': return 'Reel (MP4) — add more for video carousel'
     case 'single_image': return 'Photo (JPG/PNG)'
     case 'carousel': return 'Carousel photos only (JPG/PNG)'
+    case 'carousel_videos': return 'Carousel videos only (MP4)'
   }
 }

@@ -41,7 +41,9 @@
       "Bash(npm uninstall:*)",
       "Bash(del \"d:\\\\dev\\\\projects\\\\post_pilot\\\\frontend\\\\src\\\\utils\\\\instagramMediaValidation.test.ts\")",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "WebFetch(domain:developers.facebook.com)",
+      "WebFetch(domain:n8n.io)"
     ]
   }
 }

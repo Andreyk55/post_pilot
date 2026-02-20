@@ -290,10 +290,10 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
     }
   }
 
-  // Multi-image detection: Instagram carousel or Facebook multi-photo (not available for stories)
+  // Multi-media detection: Instagram carousel (images or videos) or Facebook multi-photo (not available for stories)
   const isInstagramCarousel = isInstagramSelected && !isStory && carouselItems.length >= 2
-  const isFacebookMultiPhoto = isFacebookSelected && !isStory && carouselItems.length >= 2
-  const isMultiImage = isInstagramCarousel || isFacebookMultiPhoto
+  const isFacebookMultiPhoto = isFacebookSelected && !isStory && carouselItems.length >= 2 && carouselItems.every(i => i.mediaType === 'Image')
+  const isMultiMedia = isInstagramCarousel || isFacebookMultiPhoto
 
   // Instagram media validation: single image/video OR carousel (2+ images)
   const isInstagramMediaValid = !isInstagramSelected ||
@@ -391,7 +391,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
        (!isFacebookSelected || selectedPageId) &&
        (!isInstagramSelected || selectedInstagramAccountId) &&
        !isUploading && !isTextTooLong && !hasInvalidMedia)
-    : ((content || mediaUrl || isMultiImage) && scheduledDate && scheduledTime &&
+    : ((content || mediaUrl || isMultiMedia) && scheduledDate && scheduledTime &&
        selectedPlatforms.length > 0 &&
        (!isFacebookSelected || selectedPageId) &&
        (!isInstagramSelected || selectedInstagramAccountId) &&
@@ -405,7 +405,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
        (!isFacebookSelected || selectedPageId) &&
        (!isInstagramSelected || selectedInstagramAccountId) &&
        !isUploading && !isPublishingNow && !isTextTooLong && !hasInvalidMedia)
-    : ((content || mediaUrl || isMultiImage) &&
+    : ((content || mediaUrl || isMultiMedia) &&
        selectedPlatforms.length > 0 &&
        (!isFacebookSelected || selectedPageId) &&
        (!isInstagramSelected || selectedInstagramAccountId) &&
@@ -698,13 +698,13 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
           {!isStory && isInstagramSelected && !mediaUrl && carouselItems.length === 0 && (
             <div className="ig-media-hint">
               <strong>Single:</strong> 1 photo (JPG/PNG) or 1 video (MP4, published as Reel)<br />
-              <strong>Carousel:</strong> 2–10 photos (JPG/PNG only)
+              <strong>Carousel:</strong> multiple images OR multiple videos (no mixing yet)
             </div>
           )}
           {!isStory && isFacebookSelected && !mediaUrl && carouselItems.length === 0 && (
             <div className="ig-media-hint">
               <strong>Single:</strong> 1 photo (JPG/PNG) or 1 video (MP4)<br />
-              <strong>Multi-photo:</strong> 2–10 photos (JPG/PNG only)
+              <strong>Multi-photo:</strong> 2–10 photos (JPG/PNG only). Video: 1 per post.
             </div>
           )}
           {isStory ? (
@@ -744,9 +744,9 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
                   setMediaUrl(null)
                   setMediaType(null)
                 } else {
-                  // Multi-image: set first image for AI preview
+                  // Multi-media: set first item for AI preview
                   setMediaUrl(items[0].s3Key)
-                  setMediaType('Image')
+                  setMediaType(items[0].mediaType)
                 }
               }}
               onUploadingChange={setIsUploading}

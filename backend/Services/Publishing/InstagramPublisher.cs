@@ -156,13 +156,24 @@ public class InstagramPublisher : IPostPublisher
                 ErrorMessage: "Post was canceled");
         }
 
-        // Step 6: Route to image, video, or carousel flow
+        // Step 6: Route to image, video, carousel (images), or carousel (videos) flow
         var isCarousel = post.MediaItems?.Count >= 2;
+        var isVideoCarousel = isCarousel && post.MediaItems!.All(m => m.MediaType == Enums.MediaType.Video);
         try
         {
             PublishResult result;
 
-            if (isCarousel)
+            if (isVideoCarousel)
+            {
+                result = await PublishVideoCarouselToInstagramAsync(post, accessToken, cancellationToken);
+
+                // Video carousel flow handles its own state transitions for processing retries.
+                if (result.Success && string.IsNullOrEmpty(result.ExternalPostId))
+                {
+                    return result;
+                }
+            }
+            else if (isCarousel)
             {
                 result = await PublishCarouselToInstagramAsync(post, accessToken, cancellationToken);
 
@@ -523,6 +534,193 @@ public class InstagramPublisher : IPostPublisher
         }
     }
 
+    // ──────────────────────────────────────────────
+    //  VIDEO CAROUSEL FLOW (stateful, multi-attempt)
+    // ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Stateful Instagram video carousel publishing flow.
+    /// Same structure as image carousel, but children use video_url instead of image_url.
+    /// Video children may take time to process, so each child is polled via the stateful retry mechanism.
+    ///
+    /// Steps:
+    ///   1. Create child containers for each video (video_url, is_carousel_item=true, no caption)
+    ///   2. Check if all children are FINISHED (poll one-by-one)
+    ///   3. Create carousel container (media_type=CAROUSEL, children=..., caption=...)
+    ///   4. Poll carousel container status
+    ///   5. Publish carousel container
+    /// </summary>
+    private async Task<PublishResult> PublishVideoCarouselToInstagramAsync(
+        Post post, string accessToken, CancellationToken cancellationToken)
+    {
+        var igUserId = post.TargetInstagramAccount!.IgBusinessId;
+        var mediaItems = post.MediaItems!.OrderBy(m => m.Order).ToList();
+
+        _logger.LogInformation(
+            "Starting video carousel publish for post {PostId} with {Count} videos",
+            post.Id, mediaItems.Count);
+
+        // Step 1: Create child containers (idempotent — skip if already created)
+        var childIds = DeserializeChildIds(post.InstagramChildCreationIds);
+
+        if (childIds.Count < mediaItems.Count)
+        {
+            for (int i = childIds.Count; i < mediaItems.Count; i++)
+            {
+                var item = mediaItems[i];
+                var videoUrl = ResolveMediaUrlForItem(item, TimeSpan.FromHours(2));
+
+                var childResult = await CreateCarouselVideoChildContainerAsync(
+                    igUserId, videoUrl, accessToken, cancellationToken);
+
+                if (!childResult.Success)
+                {
+                    _logger.LogWarning(
+                        "Failed to create video carousel child {Index} for post {PostId}: {Error}",
+                        i, post.Id, childResult.ErrorMessage);
+                    return childResult;
+                }
+
+                childIds.Add(childResult.ExternalPostId!);
+
+                // Persist after each child so we don't recreate on retry
+                post.InstagramChildCreationIds = SerializeChildIds(childIds);
+                post.UpdatedAt = DateTime.UtcNow;
+                await _dbContext.SaveChangesAsync(cancellationToken);
+
+                _logger.LogInformation(
+                    "Created video carousel child {Index}/{Total}: {ChildId} for post {PostId}",
+                    i + 1, mediaItems.Count, childResult.ExternalPostId, post.Id);
+            }
+        }
+
+        // Step 2: Before creating parent container, check all children are FINISHED
+        // (Video children may still be processing)
+        if (string.IsNullOrEmpty(post.InstagramCarouselCreationId))
+        {
+            for (int i = 0; i < childIds.Count; i++)
+            {
+                var childStatus = await CheckContainerStatusAsync(
+                    childIds[i], accessToken, cancellationToken);
+
+                switch (childStatus.Status)
+                {
+                    case IgContainerStatus.Finished:
+                        continue; // This child is ready
+
+                    case IgContainerStatus.InProgress:
+                        _logger.LogInformation(
+                            "Video carousel child {Index} ({ChildId}) still processing for post {PostId}",
+                            i, childIds[i], post.Id);
+                        return await ScheduleProcessingRetryAsync(post, cancellationToken);
+
+                    case IgContainerStatus.Error:
+                        return new PublishResult(false,
+                            ErrorType: PublishErrorType.Permanent,
+                            ErrorMessage: $"Video carousel child {i} processing failed: {childStatus.ErrorMessage}");
+
+                    case IgContainerStatus.Expired:
+                        // Child expired; clear all children to start over
+                        post.InstagramChildCreationIds = null;
+                        post.UpdatedAt = DateTime.UtcNow;
+                        await _dbContext.SaveChangesAsync(cancellationToken);
+                        return new PublishResult(false,
+                            ErrorType: PublishErrorType.Transient,
+                            ErrorMessage: $"Video carousel child {i} expired before publishing");
+
+                    default:
+                        return new PublishResult(false,
+                            ErrorType: PublishErrorType.Transient,
+                            ErrorMessage: $"Unknown video carousel child status: {childStatus.Status}");
+                }
+            }
+        }
+
+        // Step 3: Create carousel container (idempotent)
+        if (string.IsNullOrEmpty(post.InstagramCarouselCreationId))
+        {
+            var carouselResult = await CreateCarouselContainerAsync(
+                igUserId, childIds, post.Content, accessToken, cancellationToken);
+
+            if (!carouselResult.Success)
+                return carouselResult;
+
+            post.InstagramCarouselCreationId = carouselResult.ExternalPostId!;
+            post.UpdatedAt = DateTime.UtcNow;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "Created video carousel container {CarouselId} for post {PostId}",
+                post.InstagramCarouselCreationId, post.Id);
+        }
+
+        // Step 4: Check carousel container status (single check, no blocking loop)
+        var statusResult = await CheckContainerStatusAsync(
+            post.InstagramCarouselCreationId!, accessToken, cancellationToken);
+
+        switch (statusResult.Status)
+        {
+            case IgContainerStatus.Finished:
+                _logger.LogInformation(
+                    "Video carousel container {CarouselId} is FINISHED, publishing for post {PostId}",
+                    post.InstagramCarouselCreationId, post.Id);
+
+                return await PublishMediaContainerAsync(
+                    igUserId, post.InstagramCarouselCreationId!, accessToken, cancellationToken);
+
+            case IgContainerStatus.InProgress:
+                return await ScheduleProcessingRetryAsync(post, cancellationToken);
+
+            case IgContainerStatus.Error:
+                return new PublishResult(false,
+                    ErrorType: PublishErrorType.Permanent,
+                    ErrorMessage: $"Video carousel container processing failed: {statusResult.ErrorMessage}");
+
+            case IgContainerStatus.Expired:
+                post.InstagramCarouselCreationId = null;
+                post.UpdatedAt = DateTime.UtcNow;
+                await _dbContext.SaveChangesAsync(cancellationToken);
+
+                return new PublishResult(false,
+                    ErrorType: PublishErrorType.Transient,
+                    ErrorMessage: "Video carousel container expired before publishing");
+
+            default:
+                return new PublishResult(false,
+                    ErrorType: PublishErrorType.Transient,
+                    ErrorMessage: $"Unknown video carousel container status: {statusResult.Status}");
+        }
+    }
+
+    /// <summary>
+    /// POST /{ig-user-id}/media with media_type=VIDEO, video_url, and is_carousel_item=true (no caption on children).
+    /// Used for video carousel items. media_type=VIDEO is required — without it the API defaults to
+    /// an image container and returns error 100 "The parameter image_url is required".
+    /// </summary>
+    private async Task<PublishResult> CreateCarouselVideoChildContainerAsync(
+        string igUserId, string videoUrl,
+        string accessToken, CancellationToken cancellationToken)
+    {
+        var url = $"{GraphApiBaseUrl}/{igUserId}/media";
+        var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["media_type"] = "VIDEO",
+            ["video_url"] = videoUrl,
+            ["is_carousel_item"] = "true",
+            ["access_token"] = accessToken,
+        });
+
+        _logger.LogInformation("Creating IG video carousel child container: POST {Url}", url);
+
+        var response = await _httpClient.PostAsync(url, content, cancellationToken);
+        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        _logger.LogInformation("IG video carousel child container response: {StatusCode} - {Body}",
+            response.StatusCode, RedactToken(responseBody));
+
+        return ParseMetaIdResponse(response, responseBody, "video carousel child container creation");
+    }
+
     /// <summary>
     /// POST /{ig-user-id}/media with image_url and is_carousel_item=true (no caption on children).
     /// </summary>
@@ -580,11 +778,11 @@ public class InstagramPublisher : IPostPublisher
     /// <summary>
     /// Resolves a public URL for a PostMediaItem (generates pre-signed URL if S3 key).
     /// </summary>
-    private string ResolveMediaUrlForItem(PostMediaItem item)
+    private string ResolveMediaUrlForItem(PostMediaItem item, TimeSpan? expiration = null)
     {
         if (_mediaService.IsS3Key(item.MediaUrl))
         {
-            return _mediaService.GenerateDownloadUrl(item.MediaUrl, MediaDownloadUrlExpiration);
+            return _mediaService.GenerateDownloadUrl(item.MediaUrl, expiration ?? MediaDownloadUrlExpiration);
         }
         return item.MediaUrl;
     }

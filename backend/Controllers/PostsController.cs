@@ -289,6 +289,45 @@ public class PostsController : ControllerBase
             // Facebook multi-photo validation: 2-10 images via MediaItems
             if (request.MediaItems is { Count: > 0 })
             {
+                var fbVideosCount = request.MediaItems.Count(m => m.MediaType == MediaType.Video);
+                var fbImagesCount = request.MediaItems.Count(m => m.MediaType == MediaType.Image);
+
+                // Facebook does not support multi-video
+                if (fbVideosCount > 1)
+                {
+                    return BadRequest(new ProblemDetails
+                    {
+                        Title = "Unsupported media combination",
+                        Detail = "Facebook supports 1 video per post. Remove extra videos or use Instagram for video carousel.",
+                        Status = StatusCodes.Status400BadRequest,
+                        Extensions =
+                        {
+                            ["code"] = "UNSUPPORTED_MEDIA_COMBINATION",
+                            ["imagesCount"] = fbImagesCount,
+                            ["videosCount"] = fbVideosCount,
+                            ["platforms"] = new[] { "Facebook" },
+                        }
+                    });
+                }
+
+                // No mixed media
+                if (fbImagesCount > 0 && fbVideosCount > 0)
+                {
+                    return BadRequest(new ProblemDetails
+                    {
+                        Title = "Unsupported media combination",
+                        Detail = "Mixed image+video posts aren't supported. Choose only images or a single video.",
+                        Status = StatusCodes.Status400BadRequest,
+                        Extensions =
+                        {
+                            ["code"] = "UNSUPPORTED_MEDIA_COMBINATION",
+                            ["imagesCount"] = fbImagesCount,
+                            ["videosCount"] = fbVideosCount,
+                            ["platforms"] = new[] { "Facebook" },
+                        }
+                    });
+                }
+
                 if (request.MediaItems.Count < 2 || request.MediaItems.Count > 10)
                 {
                     return BadRequest(new ProblemDetails
@@ -299,13 +338,13 @@ public class PostsController : ControllerBase
                     });
                 }
 
-                // All items must be images (no videos in multi-photo)
+                // All items must be images (videos handled above)
                 if (request.MediaItems.Any(m => m.MediaType != MediaType.Image))
                 {
                     return BadRequest(new ProblemDetails
                     {
                         Title = "Invalid multi-photo media",
-                        Detail = "Facebook multi-photo posts only support images. Videos are not allowed in multi-photo posts.",
+                        Detail = "Facebook multi-photo posts only support images.",
                         Status = StatusCodes.Status400BadRequest,
                     });
                 }
@@ -340,7 +379,7 @@ public class PostsController : ControllerBase
                 });
             }
 
-            // Instagram carousel: 2-10 images via MediaItems
+            // Instagram carousel: 2-10 items via MediaItems (all images OR all videos, no mixing)
             var hasMultipleMediaItems = request.MediaItems is { Count: > 0 };
             if (hasMultipleMediaItems)
             {
@@ -350,18 +389,39 @@ public class PostsController : ControllerBase
                     return BadRequest(new ProblemDetails
                     {
                         Title = "Invalid carousel",
-                        Detail = "Instagram carousel requires 2 to 10 images.",
+                        Detail = "Instagram carousel requires 2 to 10 items.",
                         Status = StatusCodes.Status400BadRequest,
                     });
                 }
 
-                // All items must be images
-                if (request.MediaItems.Any(m => m.MediaType != MediaType.Image))
+                var imagesCount = request.MediaItems.Count(m => m.MediaType == MediaType.Image);
+                var videosCount = request.MediaItems.Count(m => m.MediaType == MediaType.Video);
+
+                // No mixed media
+                if (imagesCount > 0 && videosCount > 0)
+                {
+                    return BadRequest(new ProblemDetails
+                    {
+                        Title = "Unsupported media combination",
+                        Detail = "Mixed image+video posts aren't supported yet. Choose only images or only videos.",
+                        Status = StatusCodes.Status400BadRequest,
+                        Extensions =
+                        {
+                            ["code"] = "UNSUPPORTED_MEDIA_COMBINATION",
+                            ["imagesCount"] = imagesCount,
+                            ["videosCount"] = videosCount,
+                            ["platforms"] = new[] { "Instagram" },
+                        }
+                    });
+                }
+
+                // All items must be images or all videos
+                if (request.MediaItems.Any(m => m.MediaType != MediaType.Image && m.MediaType != MediaType.Video))
                 {
                     return BadRequest(new ProblemDetails
                     {
                         Title = "Invalid carousel media",
-                        Detail = "Instagram carousel only supports images. Videos are not allowed in carousel posts.",
+                        Detail = "Instagram carousel only supports images or videos.",
                         Status = StatusCodes.Status400BadRequest,
                     });
                 }
@@ -441,11 +501,13 @@ public class PostsController : ControllerBase
             UpdatedAt = DateTime.UtcNow
         };
 
-        // Add media items for carousel posts
+        // Add media items for carousel/multi-media posts
         if (request.MediaItems is { Count: > 0 })
         {
-            post.MediaType = MediaType.Image; // Carousel is image-based
-            post.MediaUrl = request.MediaItems.OrderBy(m => m.Order).First().MediaUrl; // First image as legacy preview
+            // Set media type based on what the carousel contains
+            var firstItemType = request.MediaItems.OrderBy(m => m.Order).First().MediaType;
+            post.MediaType = firstItemType;
+            post.MediaUrl = request.MediaItems.OrderBy(m => m.Order).First().MediaUrl; // First item as legacy preview
             post.MediaItems = request.MediaItems
                 .OrderBy(m => m.Order)
                 .Select((m, i) => new PostMediaItem
