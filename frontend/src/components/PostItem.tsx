@@ -66,6 +66,13 @@ const formatDateTime = (isoString: string) => {
   }
 }
 
+const getRightDateInfo = (post: Post, details: PostDetails): { label: string; value: string | null } => {
+  if (post.status === 'Published') {
+    return { label: 'Published', value: details.publishedAt }
+  }
+  return { label: 'Scheduled at', value: details.scheduledAt }
+}
+
 const formatNumber = (num: number | null | undefined): string => {
   if (num === null || num === undefined) return '-'
   if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`
@@ -323,20 +330,25 @@ export function PostItem({ post, onCancel, onDelete, cachedDetails, onDetailsFet
             <div className="info-section">
               <h4 className="section-title">Post Info</h4>
               <div className="info-grid">
-                {details.publishedAt && (
-                  <div className="info-item">
-                    <span className="info-label">Published</span>
-                    <span className="info-value">
-                      {formatDateTime(details.publishedAt).date} at {formatDateTime(details.publishedAt).time}
-                    </span>
-                  </div>
-                )}
                 <div className="info-item">
                   <span className="info-label">Created</span>
                   <span className="info-value">
                     {formatDateTime(details.createdAt).date} at {formatDateTime(details.createdAt).time}
                   </span>
                 </div>
+                {(() => {
+                  const right = getRightDateInfo(post, details)
+                  return (
+                    <div className="info-item">
+                      <span className="info-label">{right.label}</span>
+                      <span className="info-value">
+                        {right.value
+                          ? `${formatDateTime(right.value).date} at ${formatDateTime(right.value).time}`
+                          : '—'}
+                      </span>
+                    </div>
+                  )
+                })()}
                 {/* Story link logic */}
                 {post.postType === 'Story' ? (
                   <>
