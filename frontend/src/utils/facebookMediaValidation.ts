@@ -64,7 +64,7 @@ export function validateFacebookSelection(
     if (newFiles.length > 1) {
       return {
         ok: false,
-        errorMessage: 'Multi-photo supports photos only. For video, upload a single MP4.',
+        errorMessage: 'Facebook carousel supports photos only. For video, upload a single MP4.',
         nextFiles: [...existingFiles],
       }
     }
@@ -73,7 +73,7 @@ export function validateFacebookSelection(
     if (existingHasImage) {
       return {
         ok: false,
-        errorMessage: 'Multi-photo supports photos only. For video, upload a single MP4.',
+        errorMessage: 'Facebook carousel supports photos only. For video, upload a single MP4.',
         nextFiles: [...existingFiles],
       }
     }
@@ -95,7 +95,7 @@ export function validateFacebookSelection(
   if (existingHasVideo) {
     return {
       ok: false,
-      errorMessage: 'Cannot mix video with photos. Remove the video first to create a multi-photo post.',
+      errorMessage: 'Mixed carousel (photos + videos) is not supported for Facebook. Remove the video first to create a photos-only carousel.',
       nextFiles: [...existingFiles],
     }
   }
@@ -104,7 +104,7 @@ export function validateFacebookSelection(
   if (newHasVideo && newHasImage) {
     return {
       ok: false,
-      errorMessage: 'Multi-photo supports photos only. For video, upload a single MP4.',
+      errorMessage: 'Facebook carousel supports photos only. For video, upload a single MP4.',
       nextFiles: [...existingFiles],
     }
   }
@@ -116,7 +116,7 @@ export function validateFacebookSelection(
     if (remaining <= 0) {
       return {
         ok: false,
-        errorMessage: 'Maximum 10 photos for multi-photo. Remove some photos first.',
+        errorMessage: 'Maximum 10 photos for carousel. Remove some photos first.',
         nextFiles: [...existingFiles],
       }
     }
@@ -151,7 +151,7 @@ export function getFacebookUploaderLabel(mode: FacebookMediaMode, count: number)
     case 'empty': return 'Add photo or video'
     case 'single_video': return 'Video selected'
     case 'single_image': return '1 photo selected'
-    case 'multi_photo': return `${count} photos selected (multi-photo)`
+    case 'multi_photo': return `${count} photos selected (carousel)`
   }
 }
 
@@ -161,6 +161,6 @@ export function getFacebookFormatHint(mode: FacebookMediaMode): string {
     case 'empty': return 'JPG, PNG, or MP4'
     case 'single_video': return 'MP4 only'
     case 'single_image': return 'JPG/PNG'
-    case 'multi_photo': return 'JPG/PNG only (multi-photo)'
+    case 'multi_photo': return 'JPG/PNG only (carousel)'
   }
 }

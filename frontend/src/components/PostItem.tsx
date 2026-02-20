@@ -200,10 +200,7 @@ export function PostItem({ post, onCancel, onDelete, cachedDetails, onDetailsFet
                 alt="Carousel preview"
               />
               <span className="video-badge">
-                {post.platform === 'Facebook'
-                  ? `Photos (${post.mediaItems.length})`
-                  : `Carousel (${post.mediaItems.length})`
-                }
+                {getMediaLabel(post)}
               </span>
             </div>
           )}

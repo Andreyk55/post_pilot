@@ -437,11 +437,10 @@
   background: #94a3b8;
 }
 
-/* Instagram media type badge */
+/* Content badge (post type + media summary) */
 .media-type-badge {
   font-size: 0.625rem;
   font-weight: 600;
-  text-transform: uppercase;
   letter-spacing: 0.02em;
   padding: 0.125rem 0.375rem;
   border-radius: 3px;
@@ -449,11 +448,28 @@
   color: #94a3b8;
 }
 
-.media-type-badge[data-type="reels"] {
+/* Post type chips */
+.media-type-badge[data-type="post"] {
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+}
+
+.media-type-badge[data-type="carousel"] {
+  background: rgba(45, 212, 191, 0.15);
+  color: #2dd4bf;
+}
+
+.media-type-badge[data-type="reel"] {
   background: rgba(131, 58, 180, 0.15);
   color: #c084fc;
 }
 
+.media-type-badge[data-type="story"] {
+  background: rgba(236, 72, 153, 0.15);
+  color: #ec4899;
+}
+
+/* Media summary chips */
 .media-type-badge[data-type="image"] {
   background: rgba(56, 189, 248, 0.15);
   color: #38bdf8;
@@ -467,11 +483,6 @@
 .media-type-badge[data-type="carouselalbum"] {
   background: rgba(45, 212, 191, 0.15);
   color: #2dd4bf;
-}
-
-.media-type-badge[data-type="story"] {
-  background: rgba(236, 72, 153, 0.15);
-  color: #ec4899;
 }
 
 .media-type-badge[data-type="text"] {

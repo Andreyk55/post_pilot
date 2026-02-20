@@ -704,7 +704,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
           {!isStory && isFacebookSelected && !mediaUrl && carouselItems.length === 0 && (
             <div className="ig-media-hint">
               <strong>Single:</strong> 1 photo (JPG/PNG) or 1 video (MP4)<br />
-              <strong>Multi-photo:</strong> 2–10 photos only. No mixed posts.
+              <strong>Carousel:</strong> 2–10 photos only. Mixed photos + videos not supported.
             </div>
           )}
           {isStory ? (

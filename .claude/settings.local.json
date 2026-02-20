@@ -43,7 +43,9 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "WebFetch(domain:developers.facebook.com)",
-      "WebFetch(domain:n8n.io)"
+      "WebFetch(domain:n8n.io)",
+      "Bash(npx vitest:*)",
+      "Bash(find:*)"
     ]
   }
 }

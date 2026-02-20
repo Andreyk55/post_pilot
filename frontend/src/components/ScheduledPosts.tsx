@@ -278,10 +278,7 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
                     />
                     <span className="media-indicator">
                       <ImageIcon />
-                      {post.platform === 'Facebook'
-                        ? `Photos (${post.mediaItems.length})`
-                        : `Carousel (${post.mediaItems.length})`
-                      }
+                      {getMediaLabel(post)}
                     </span>
                   </div>
                 )}
@@ -339,6 +336,10 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
                     >
                       {platformIcons[post.platform] || post.platform.charAt(0)}
                     </span>
+                    <span className="status-badge" data-status={post.status.toLowerCase()}>
+                      <span className="status-dot" />
+                      {post.status}
+                    </span>
                     {getContentBadges(post).map(badge => (
                       <span key={badge.key} className="media-type-badge" data-type={badge.dataType}>
                         {badge.text}
@@ -349,10 +350,6 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
                         {post.targetPageName || post.targetInstagramAccountName}
                       </span>
                     )}
-                    <span className="status-badge" data-status={post.status.toLowerCase()}>
-                      <span className="status-dot" />
-                      {post.status}
-                    </span>
                     {canRemove(post.status) && (
                       <button
                         className="remove-btn"
