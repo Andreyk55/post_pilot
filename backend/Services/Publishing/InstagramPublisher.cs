@@ -271,15 +271,59 @@ public class InstagramPublisher : IPostPublisher
         // Generate a public URL for the image
         var mediaUrl = ResolveMediaUrl(post);
 
-        // Create image container
+        // Pre-validate user_tags before sending to Meta
+        var userTagsJson = post.InstagramUserTags;
+        if (!string.IsNullOrEmpty(userTagsJson))
+        {
+            _logger.LogInformation(
+                "[USER_TAGS] Post {PostId}: user_tags present on entity, raw value: {UserTags}",
+                post.Id, userTagsJson);
+
+            // Warn if any tag is missing x/y coordinates (IMAGE-only field)
+            try
+            {
+                var tags = JsonSerializer.Deserialize<List<Dictionary<string, JsonElement>>>(userTagsJson);
+                if (tags != null)
+                {
+                    var missingCoords = tags
+                        .Where(t => !t.ContainsKey("x") || !t.ContainsKey("y"))
+                        .Select(t => t.TryGetValue("username", out var u) ? u.GetString() : "(unknown)")
+                        .ToList();
+
+                    if (missingCoords.Count > 0)
+                    {
+                        _logger.LogWarning(
+                            "[IG_DEBUG] user_tags WARNING: {Count} tag(s) missing x/y coordinates — usernames: {Usernames}. " +
+                            "Meta may silently ignore tags without coordinates.",
+                            missingCoords.Count, string.Join(", ", missingCoords));
+                    }
+                }
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogWarning(ex,
+                    "[IG_DEBUG] user_tags WARNING: failed to parse user_tags for validation — raw: {UserTags}",
+                    userTagsJson);
+            }
+        }
+        else
+        {
+            _logger.LogInformation(
+                "[USER_TAGS] Post {PostId}: no user_tags on entity (null/empty)",
+                post.Id);
+        }
+
+        // Create image container (include user_tags if present)
         var containerResult = await CreateImageContainerAsync(
-            igUserId, mediaUrl, post.Content, accessToken, cancellationToken);
+            igUserId, mediaUrl, post.Content, accessToken, cancellationToken,
+            userTagsJson: userTagsJson);
 
         if (!containerResult.Success)
             return containerResult;
 
         var creationId = containerResult.ExternalPostId!;
-        _logger.LogInformation("Created IG image container {CreationId} for post {PostId}",
+        _logger.LogInformation(
+            "[IG_PUBLISH] Step 1 DONE — IG container created. creation_id={CreationId} for post {PostId}",
             creationId, post.Id);
 
         // Poll for container to be ready (images are fast)
@@ -290,7 +334,16 @@ public class InstagramPublisher : IPostPublisher
             return pollResult;
 
         // Publish the container
-        return await PublishMediaContainerAsync(igUserId, creationId, accessToken, cancellationToken);
+        var publishResult = await PublishMediaContainerAsync(igUserId, creationId, accessToken, cancellationToken);
+
+        if (publishResult.Success)
+        {
+            _logger.LogInformation(
+                "[IG_PUBLISH] Step 2 DONE — IG media published. ig_media_id={IgMediaId} for post {PostId} (container creation_id={CreationId})",
+                publishResult.ExternalPostId, post.Id, creationId);
+        }
+
+        return publishResult;
     }
 
     // ──────────────────────────────────────────────
@@ -307,6 +360,15 @@ public class InstagramPublisher : IPostPublisher
         Post post, string accessToken, CancellationToken cancellationToken)
     {
         var igUserId = post.TargetInstagramAccount!.IgBusinessId;
+
+        // Warn if user_tags were set on a non-IMAGE post (IG only supports user_tags on images)
+        if (!string.IsNullOrEmpty(post.InstagramUserTags))
+        {
+            _logger.LogWarning(
+                "[IG_DEBUG] user_tags WARNING: ignoring user_tags (MVP) — user_tags are only supported on IMAGE media, " +
+                "but this post is VIDEO. Post {PostId}, user_tags={UserTags}",
+                post.Id, post.InstagramUserTags);
+        }
 
         // Step A: Create container if we don't have one yet
         if (string.IsNullOrEmpty(post.InstagramCreationId))
@@ -892,13 +954,13 @@ public class InstagramPublisher : IPostPublisher
             ["access_token"] = accessToken,
         });
 
-        _logger.LogInformation("Creating IG video carousel child container: POST {Url}", url);
+        _logger.LogInformation("[IG_DEBUG] Creating IG video carousel child container: POST {Url}", url);
 
         var response = await _httpClient.PostAsync(url, content, cancellationToken);
         var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
-        _logger.LogInformation("IG video carousel child container response: {StatusCode} - {Body}",
-            response.StatusCode, RedactToken(responseBody));
+        _logger.LogInformation("[IG_DEBUG] IG video carousel child container response: {StatusCode} - {Body}",
+            response.StatusCode, SanitizeForLog(responseBody));
 
         return ParseMetaIdResponse(response, responseBody, "video carousel child container creation");
     }
@@ -918,13 +980,13 @@ public class InstagramPublisher : IPostPublisher
             ["access_token"] = accessToken,
         });
 
-        _logger.LogInformation("Creating IG carousel child container: POST {Url}", url);
+        _logger.LogInformation("[IG_DEBUG] Creating IG carousel child container: POST {Url}", url);
 
         var response = await _httpClient.PostAsync(url, content, cancellationToken);
         var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
-        _logger.LogInformation("IG carousel child container response: {StatusCode} - {Body}",
-            response.StatusCode, RedactToken(responseBody));
+        _logger.LogInformation("[IG_DEBUG] IG carousel child container response: {StatusCode} - {Body}",
+            response.StatusCode, SanitizeForLog(responseBody));
 
         return ParseMetaIdResponse(response, responseBody, "carousel child container creation");
     }
@@ -945,14 +1007,14 @@ public class InstagramPublisher : IPostPublisher
             ["access_token"] = accessToken,
         });
 
-        _logger.LogInformation("Creating IG carousel container: POST {Url} with {Count} children",
+        _logger.LogInformation("[IG_DEBUG] Creating IG carousel container: POST {Url} with {Count} children",
             url, childCreationIds.Count);
 
         var response = await _httpClient.PostAsync(url, content, cancellationToken);
         var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
-        _logger.LogInformation("IG carousel container response: {StatusCode} - {Body}",
-            response.StatusCode, RedactToken(responseBody));
+        _logger.LogInformation("[IG_DEBUG] IG carousel container response: {StatusCode} - {Body}",
+            response.StatusCode, SanitizeForLog(responseBody));
 
         return ParseMetaIdResponse(response, responseBody, "carousel container creation");
     }
@@ -1031,28 +1093,64 @@ public class InstagramPublisher : IPostPublisher
 
     /// <summary>
     /// POST /{ig-user-id}/media with image_url and caption (image container).
+    /// Optionally includes user_tags for tagging people on the image.
+    ///
+    /// user_tags format: JSON array string, e.g. [{"username":"nike","x":0.5,"y":0.5}]
+    /// Sent as form-urlencoded field — Meta expects the JSON string as the value.
     /// </summary>
     private async Task<PublishResult> CreateImageContainerAsync(
         string igUserId, string imageUrl, string caption,
-        string accessToken, CancellationToken cancellationToken)
+        string accessToken, CancellationToken cancellationToken,
+        string? userTagsJson = null)
     {
         var url = $"{GraphApiBaseUrl}/{igUserId}/media";
-        var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        var formFields = new Dictionary<string, string>
         {
             ["image_url"] = imageUrl,
             ["caption"] = caption ?? "",
             ["access_token"] = accessToken,
-        });
+        };
 
-        _logger.LogInformation("Creating IG image container: POST {Url}", url);
+        if (!string.IsNullOrEmpty(userTagsJson))
+        {
+            formFields["user_tags"] = userTagsJson;
+        }
+
+        var content = new FormUrlEncodedContent(formFields);
+        var contentType = content.Headers.ContentType?.ToString() ?? "unknown";
+
+        // ── IG CREATE CONTAINER start (image) ──
+        _logger.LogInformation(
+            "[IG_DEBUG] IG CREATE CONTAINER start | igUserId={IgUserId} | content-type={ContentType} | url={Url}",
+            igUserId, contentType, url);
+
+        _logger.LogInformation(
+            "[IG_DEBUG] CREATE CONTAINER params | image_url={ImageUrl} | caption={Caption} | media_type=IMAGE | user_tags={UserTags}",
+            imageUrl,
+            TruncateCaption(caption),
+            userTagsJson ?? "(none)");
+
+        // Log the full form body (sanitized)
+        var debugBody = await content.ReadAsStringAsync(cancellationToken);
+        _logger.LogInformation(
+            "[IG_DEBUG] CREATE CONTAINER full body (url-encoded, sanitized): {Body}",
+            SanitizeForLog(debugBody));
 
         var response = await _httpClient.PostAsync(url, content, cancellationToken);
         var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
-        _logger.LogInformation("IG image container response: {StatusCode} - {Body}",
-            response.StatusCode, RedactToken(responseBody));
+        // ── IG CREATE CONTAINER response ──
+        _logger.LogInformation(
+            "[IG_DEBUG] CREATE CONTAINER response | HTTP {StatusCode} | body={Body}",
+            (int)response.StatusCode, SanitizeForLog(responseBody));
 
-        return ParseMetaIdResponse(response, responseBody, "image container creation");
+        var parsed = ParseMetaIdResponse(response, responseBody, "image container creation");
+
+        _logger.LogInformation(
+            "[IG_DEBUG] CREATE CONTAINER parsed | success={Success} | creation_id={CreationId}",
+            parsed.Success, parsed.ExternalPostId ?? "(null)");
+
+        return parsed;
     }
 
     /// <summary>
@@ -1063,23 +1161,47 @@ public class InstagramPublisher : IPostPublisher
         string accessToken, CancellationToken cancellationToken)
     {
         var url = $"{GraphApiBaseUrl}/{igUserId}/media";
-        var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        var formFields = new Dictionary<string, string>
         {
             ["media_type"] = "REELS",
             ["video_url"] = videoUrl,
             ["caption"] = caption ?? "",
             ["access_token"] = accessToken,
-        });
+        };
 
-        _logger.LogInformation("Creating IG video container: POST {Url}", url);
+        var content = new FormUrlEncodedContent(formFields);
+        var contentType = content.Headers.ContentType?.ToString() ?? "unknown";
+
+        // ── IG CREATE CONTAINER start (video) ──
+        _logger.LogInformation(
+            "[IG_DEBUG] IG CREATE CONTAINER start | igUserId={IgUserId} | content-type={ContentType} | url={Url}",
+            igUserId, contentType, url);
+
+        _logger.LogInformation(
+            "[IG_DEBUG] CREATE CONTAINER params | video_url={VideoUrl} | caption={Caption} | media_type=REELS | user_tags=(none, video)",
+            videoUrl, TruncateCaption(caption));
+
+        // Log the full form body (sanitized)
+        var debugBody = await content.ReadAsStringAsync(cancellationToken);
+        _logger.LogInformation(
+            "[IG_DEBUG] CREATE CONTAINER full body (url-encoded, sanitized): {Body}",
+            SanitizeForLog(debugBody));
 
         var response = await _httpClient.PostAsync(url, content, cancellationToken);
         var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
-        _logger.LogInformation("IG video container response: {StatusCode} - {Body}",
-            response.StatusCode, RedactToken(responseBody));
+        // ── IG CREATE CONTAINER response ──
+        _logger.LogInformation(
+            "[IG_DEBUG] CREATE CONTAINER response | HTTP {StatusCode} | body={Body}",
+            (int)response.StatusCode, SanitizeForLog(responseBody));
 
-        return ParseMetaIdResponse(response, responseBody, "video container creation");
+        var parsed = ParseMetaIdResponse(response, responseBody, "video container creation");
+
+        _logger.LogInformation(
+            "[IG_DEBUG] CREATE CONTAINER parsed | success={Success} | creation_id={CreationId}",
+            parsed.Success, parsed.ExternalPostId ?? "(null)");
+
+        return parsed;
     }
 
     /// <summary>
@@ -1097,7 +1219,7 @@ public class InstagramPublisher : IPostPublisher
         if (!response.IsSuccessStatusCode)
         {
             _logger.LogWarning("IG container status check failed: {StatusCode} - {Body}",
-                response.StatusCode, RedactToken(responseBody));
+                response.StatusCode, SanitizeForLog(responseBody));
 
             // Treat HTTP errors on status check as transient (may recover on next poll)
             return new ContainerStatusResult(IgContainerStatus.Unknown,
@@ -1181,16 +1303,31 @@ public class InstagramPublisher : IPostPublisher
             ["access_token"] = accessToken,
         });
 
-        _logger.LogInformation("Publishing IG container: POST {Url} creation_id={CreationId}",
+        // ── IG PUBLISH start ──
+        _logger.LogInformation(
+            "[IG_DEBUG] IG PUBLISH start | url={Url} | creation_id={CreationId}",
             url, creationId);
+
+        var debugBody = await content.ReadAsStringAsync(cancellationToken);
+        _logger.LogInformation(
+            "[IG_DEBUG] PUBLISH body (sanitized): {Body}",
+            SanitizeForLog(debugBody));
 
         var response = await _httpClient.PostAsync(url, content, cancellationToken);
         var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
-        _logger.LogInformation("IG publish response: {StatusCode} - {Body}",
-            response.StatusCode, RedactToken(responseBody));
+        // ── IG PUBLISH response ──
+        _logger.LogInformation(
+            "[IG_DEBUG] PUBLISH response | HTTP {StatusCode} | body={Body}",
+            (int)response.StatusCode, SanitizeForLog(responseBody));
 
-        return ParseMetaIdResponse(response, responseBody, "media publish");
+        var parsed = ParseMetaIdResponse(response, responseBody, "media publish");
+
+        _logger.LogInformation(
+            "[IG_DEBUG] PUBLISH parsed | success={Success} | ig_media_id={IgMediaId}",
+            parsed.Success, parsed.ExternalPostId ?? "(null)");
+
+        return parsed;
     }
 
     /// <summary>
@@ -1432,13 +1569,36 @@ public class InstagramPublisher : IPostPublisher
         return result;
     }
 
+    // ──────────────────────────────────────────────
+    //  SANITIZATION HELPERS (for debug logging)
+    // ──────────────────────────────────────────────
+
     /// <summary>
-    /// Redacts access tokens from response bodies for safe logging.
+    /// Redacts access_token values from URL-encoded bodies (access_token=...) and
+    /// JSON properties ("access_token":"...") so tokens are never written to logs.
     /// </summary>
-    private static string RedactToken(string text)
+    private static string SanitizeForLog(string raw)
     {
-        if (string.IsNullOrEmpty(text)) return text;
-        return text.Length > 500 ? text[..500] + "..." : text;
+        if (string.IsNullOrEmpty(raw)) return raw;
+
+        // URL-encoded form: access_token=XXXXX& or access_token=XXXXX (at end)
+        var result = System.Text.RegularExpressions.Regex.Replace(
+            raw, @"access_token=[^&\s]+", "access_token=***REDACTED***");
+
+        // JSON property: "access_token":"XXXXX"  (with or without spaces around colon)
+        result = System.Text.RegularExpressions.Regex.Replace(
+            result, @"""access_token""\s*:\s*""[^""]*""", "\"access_token\":\"***REDACTED***\"");
+
+        return result;
+    }
+
+    /// <summary>
+    /// Truncates a caption to maxLen characters for safe, readable log output.
+    /// </summary>
+    private static string TruncateCaption(string? caption, int maxLen = 200)
+    {
+        if (string.IsNullOrEmpty(caption)) return "(empty)";
+        return caption.Length <= maxLen ? caption : caption[..maxLen] + "…(truncated)";
     }
 }
 

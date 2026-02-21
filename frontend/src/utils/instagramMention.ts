@@ -121,3 +121,28 @@ export function captionContainsMention(caption: string, username: string): boole
   const mention = '@' + username
   return caption.toLowerCase().includes(mention.toLowerCase())
 }
+
+/**
+ * Extract unique @mentions from caption text.
+ * Returns an array of usernames (without the '@' prefix), de-duplicated (case-insensitive).
+ *
+ * Matches @username where username is 1-30 chars of [A-Za-z0-9._],
+ * but NOT preceded by a word character or dot (to avoid matching emails).
+ */
+export function extractMentionsFromCaption(caption: string): string[] {
+  const regex = /(?<![A-Za-z0-9_.])@([A-Za-z0-9._]{1,30})/g
+  const seen = new Set<string>()
+  const result: string[] = []
+  let match: RegExpExecArray | null
+
+  while ((match = regex.exec(caption)) !== null) {
+    const username = match[1]
+    const lower = username.toLowerCase()
+    if (!seen.has(lower)) {
+      seen.add(lower)
+      result.push(username)
+    }
+  }
+
+  return result
+}

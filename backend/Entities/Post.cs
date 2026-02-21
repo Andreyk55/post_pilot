@@ -140,6 +140,13 @@ public class Post
     /// </summary>
     public string? FacebookStoryMediaId { get; set; }
 
+    /// <summary>
+    /// JSON array of Instagram user tags (people tagged on the image).
+    /// Format: [{"username":"nike","x":0.52,"y":0.33}, ...]
+    /// Only applicable for Instagram Feed Image posts. Null if no tags.
+    /// </summary>
+    public string? InstagramUserTags { get; set; }
+
     // Navigation properties
     public ConnectedPage? TargetPage { get; set; }
     public ConnectedInstagramAccount? TargetInstagramAccount { get; set; }

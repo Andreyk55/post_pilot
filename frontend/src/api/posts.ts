@@ -47,6 +47,12 @@ export interface Post {
   mediaItems: PostMediaItem[] | null
 }
 
+export interface InstagramUserTag {
+  username: string
+  x: number
+  y: number
+}
+
 export interface CreatePostRequest {
   content?: string
   mediaUrl?: string | null
@@ -58,6 +64,7 @@ export interface CreatePostRequest {
   targetInstagramAccountId?: string | null
   selectedThumbnailUrl?: string | null
   mediaItems?: CreatePostMediaItem[] | null
+  instagramUserTags?: InstagramUserTag[] | null
 }
 
 export interface PaginatedResponse<T> {

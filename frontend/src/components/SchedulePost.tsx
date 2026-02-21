@@ -5,11 +5,12 @@ import type { MediaType, ValidationStatus, MediaValidationError, MediaValidation
 import type { ConnectedPage, ConnectedInstagramAccount } from '../types/meta'
 import { MediaUpload } from './MediaUpload'
 import { MultiMediaUpload, type UploadedMediaItem } from './MultiMediaUpload'
-import type { CreatePostMediaItem, PostType } from '../api/posts'
+import type { CreatePostMediaItem, PostType, InstagramUserTag } from '../api/posts'
 import { AiAssistPanel, type StickyLanguageState } from './AiAssistPanel'
 import { SuggestedTimes } from './SuggestedTimes'
 import { type VoiceProfileSummary } from '../api/voiceProfiles'
 import { InstagramMention } from './InstagramMention'
+import { InstagramMediaTags, type MediaTag } from './InstagramMediaTags'
 import {
   getPostTextMaxChars,
   getPlatformDisplayName,
@@ -32,6 +33,7 @@ interface SchedulePostProps {
     mediaType?: MediaType
     selectedThumbnailUrl?: string
     mediaItems?: CreatePostMediaItem[]
+    instagramUserTags?: InstagramUserTag[]
   }) => void
   onPublishNow?: (data: {
     content: string
@@ -43,6 +45,7 @@ interface SchedulePostProps {
     mediaType?: MediaType
     selectedThumbnailUrl?: string
     mediaItems?: CreatePostMediaItem[]
+    instagramUserTags?: InstagramUserTag[]
   }) => Promise<void>
   voiceProfiles: VoiceProfileSummary[]
   onVoiceProfileModalOpen: (profileId?: string | null) => void
@@ -98,6 +101,9 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
 
   // Carousel (multi-image) state for Instagram
   const [carouselItems, setCarouselItems] = useState<UploadedMediaItem[]>([])
+
+  // Instagram media tags (tag people on image)
+  const [mediaTags, setMediaTags] = useState<MediaTag[]>([])
 
   // AI state (shared between AiAssistPanel and time suggestions)
   const [goal, setGoal] = useState<AiGoal>('Engage')
@@ -356,6 +362,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
       mediaType: hasCarousel ? undefined : (mediaType || undefined),
       selectedThumbnailUrl: selectedThumbnailUrl || undefined,
       mediaItems: mediaItemsPayload,
+      instagramUserTags: placedUserTags,
     })
 
     // Reset form including language
@@ -374,6 +381,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
     setMediaValidationStatus(null)
     setMediaValidationErrors([])
     setCarouselItems([])
+    setMediaTags([])
     setStickyLanguage({ languageCode: 'unknown', confidence: 0, isReliable: false })
   }
 
@@ -386,6 +394,16 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
   // Media validation status check - invalid media blocks submission
   const hasInvalidMedia = mediaUrl && mediaValidationStatus === 'Invalid'
   const hasInvalidCarouselItems = carouselItems.some(item => item.validationStatus === 'Invalid')
+
+  // Instagram media tags: show only for IG Feed + single image (not carousel, not video)
+  const showMediaTags = isInstagramSelected && !isStory && mediaType === 'Image' && !isMultiMedia && !!mediaUrl
+  const hasUnplacedTags = mediaTags.length > 0 && mediaTags.some(t => t.x === undefined || t.y === undefined)
+  // Build placed tags payload for submission
+  const placedUserTags: InstagramUserTag[] | undefined = showMediaTags && mediaTags.length > 0
+    ? mediaTags
+        .filter(t => t.x !== undefined && t.y !== undefined)
+        .map(t => ({ username: t.username, x: t.x!, y: t.y! }))
+    : undefined
 
   // Form is valid if there's content OR media, plus date/time/platform, not uploading, text within limits, and no invalid media
   // Stories: require media, content is optional; stories only on FB/IG
@@ -400,7 +418,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
        (!isFacebookSelected || selectedPageId) &&
        (!isInstagramSelected || selectedInstagramAccountId) &&
        isInstagramMediaValid &&
-       !isUploading && !isTextTooLong && !hasInvalidMedia && !hasInvalidCarouselItems)
+       !isUploading && !isTextTooLong && !hasInvalidMedia && !hasInvalidCarouselItems && !hasUnplacedTags)
 
   // Publish Now valid: same as isFormValid but without requiring date/time
   const isPublishNowValid = isStory
@@ -414,7 +432,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
        (!isFacebookSelected || selectedPageId) &&
        (!isInstagramSelected || selectedInstagramAccountId) &&
        isInstagramMediaValid &&
-       !isUploading && !isPublishingNow && !isTextTooLong && !hasInvalidMedia && !hasInvalidCarouselItems)
+       !isUploading && !isPublishingNow && !isTextTooLong && !hasInvalidMedia && !hasInvalidCarouselItems && !hasUnplacedTags)
 
   const handlePublishNow = async () => {
     if (!onPublishNow || !isPublishNowValid) return
@@ -440,6 +458,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
         mediaType: hasCarousel ? undefined : (mediaType || undefined),
         selectedThumbnailUrl: selectedThumbnailUrl || undefined,
         mediaItems: mediaItemsPayload,
+        instagramUserTags: placedUserTags,
       })
 
       // Reset form on success
@@ -450,7 +469,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
   }
 
   // Check if there's any data in the form to show reset button
-  const hasFormData = content || mediaUrl || carouselItems.length > 0 || scheduledDate || scheduledTime || selectedPlatforms.length > 0 || isStory
+  const hasFormData = content || mediaUrl || carouselItems.length > 0 || mediaTags.length > 0 || scheduledDate || scheduledTime || selectedPlatforms.length > 0 || isStory
 
   const handleReset = () => {
     setContent('')
@@ -470,6 +489,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
     setMediaValidationStatus(null)
     setMediaValidationErrors([])
     setCarouselItems([])
+    setMediaTags([])
     setStickyLanguage({ languageCode: 'unknown', confidence: 0, isReliable: false })
   }
 
@@ -801,6 +821,24 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
             </div>
           )}
         </div>
+
+        {/* Instagram Media Tags — tag people on the image (IG Feed + single image only) */}
+        {showMediaTags && (
+          <div className="form-group">
+            <InstagramMediaTags
+              caption={content}
+              mediaTags={mediaTags}
+              onMediaTagsChange={setMediaTags}
+              mediaS3Key={mediaUrl}
+              disabled={!isComposerEnabled}
+            />
+            {hasUnplacedTags && (
+              <div className="media-tags-validation-warning">
+                Place all tags on the image (click the image to position each tag).
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="form-row">
           <div className="form-group">

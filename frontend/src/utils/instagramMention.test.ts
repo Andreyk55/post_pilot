@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseInstagramUsername, insertMentionAtCursor, captionContainsMention } from './instagramMention'
+import { parseInstagramUsername, insertMentionAtCursor, captionContainsMention, extractMentionsFromCaption } from './instagramMention'
 
 describe('parseInstagramUsername', () => {
   // Valid URLs
@@ -163,5 +163,57 @@ describe('captionContainsMention', () => {
     // @natgeotravel contains @natgeo as substring — this is acceptable per spec
     // (exact string match, not word boundary)
     expect(captionContainsMention('@natgeotravel', 'natgeo')).toBe(true)
+  })
+})
+
+describe('extractMentionsFromCaption', () => {
+  it('extracts single mention', () => {
+    expect(extractMentionsFromCaption('Check out @nike today')).toEqual(['nike'])
+  })
+
+  it('extracts multiple mentions', () => {
+    expect(extractMentionsFromCaption('@nike and @adidas are great')).toEqual(['nike', 'adidas'])
+  })
+
+  it('deduplicates case-insensitively', () => {
+    const result = extractMentionsFromCaption('@Nike @nike @NIKE')
+    expect(result).toHaveLength(1)
+    expect(result[0]).toBe('Nike') // keeps first occurrence
+  })
+
+  it('returns empty array for no mentions', () => {
+    expect(extractMentionsFromCaption('No mentions here')).toEqual([])
+  })
+
+  it('handles mentions with dots and underscores', () => {
+    expect(extractMentionsFromCaption('Follow @john_doe.99')).toEqual(['john_doe.99'])
+  })
+
+  it('ignores email addresses', () => {
+    expect(extractMentionsFromCaption('Email user@gmail.com')).toEqual([])
+  })
+
+  it('handles mention at start of string', () => {
+    expect(extractMentionsFromCaption('@nike rocks')).toEqual(['nike'])
+  })
+
+  it('handles mention after newline', () => {
+    expect(extractMentionsFromCaption('Line one\n@nike line two')).toEqual(['nike'])
+  })
+
+  it('handles mention after hashtag', () => {
+    expect(extractMentionsFromCaption('#sport @nike')).toEqual(['nike'])
+  })
+
+  it('limits username to 30 chars', () => {
+    const long = 'a'.repeat(31)
+    // Should extract only up to 30 chars
+    const result = extractMentionsFromCaption(`@${long}`)
+    expect(result).toHaveLength(1)
+    expect(result[0]).toBe('a'.repeat(30))
+  })
+
+  it('returns empty for empty string', () => {
+    expect(extractMentionsFromCaption('')).toEqual([])
   })
 })

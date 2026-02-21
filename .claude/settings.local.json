@@ -45,7 +45,11 @@
       "WebFetch(domain:developers.facebook.com)",
       "WebFetch(domain:n8n.io)",
       "Bash(npx vitest:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "WebFetch(domain:getlate.dev)",
+      "WebFetch(domain:gist.github.com)",
+      "WebFetch(domain:dailydevsblog.com)",
+      "WebFetch(domain:code.peren.gouv.fr)"
     ]
   }
 }

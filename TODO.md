@@ -2,7 +2,7 @@
 
 <!-- This file is maintained manually. Do not auto-edit. -->
 
-# mentions for FB
+# mentions / taagging for FB
 # align mutiple media choice
 # fix labels and text in media chooser
 # fix all validations for media and all

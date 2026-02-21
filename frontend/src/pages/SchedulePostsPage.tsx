@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { postsApi, type Post, type CreatePostRequest, type CreatePostMediaItem, type Platform, type PostType } from '../api/posts'
+import { postsApi, type Post, type CreatePostRequest, type CreatePostMediaItem, type InstagramUserTag, type Platform, type PostType } from '../api/posts'
 import type { MediaType } from '../api/media'
 import { SchedulePost } from '../components/SchedulePost'
 import { ScheduledPosts } from '../components/ScheduledPosts'
@@ -95,6 +95,7 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
     mediaType?: MediaType
     selectedThumbnailUrl?: string
     mediaItems?: CreatePostMediaItem[]
+    instagramUserTags?: InstagramUserTag[]
   }) => {
     try {
       const scheduledAt = new Date(`${formData.scheduledDate}T${formData.scheduledTime}`).toISOString()
@@ -121,6 +122,8 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
           selectedThumbnailUrl: formData.selectedThumbnailUrl,
           // Include media items for multi-image posts (Instagram carousel, Facebook multi-photo) - not for stories
           mediaItems: formData.postType !== 'Story' && (platform === 'Instagram' || platform === 'Facebook') ? formData.mediaItems : undefined,
+          // Include Instagram user tags (media tags) for single-image IG feed posts
+          instagramUserTags: platform === 'Instagram' ? formData.instagramUserTags : undefined,
         }
         const post = await postsApi.create(request)
         newPosts.push(post)
@@ -160,6 +163,7 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
     mediaType?: MediaType
     selectedThumbnailUrl?: string
     mediaItems?: CreatePostMediaItem[]
+    instagramUserTags?: InstagramUserTag[]
   }) => {
     const scheduledAt = new Date().toISOString()
 
@@ -178,6 +182,7 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
         mediaType: formData.mediaType,
         selectedThumbnailUrl: formData.selectedThumbnailUrl,
         mediaItems: formData.postType !== 'Story' && (platform === 'Instagram' || platform === 'Facebook') ? formData.mediaItems : undefined,
+        instagramUserTags: platform === 'Instagram' ? formData.instagramUserTags : undefined,
       }
       // Create the post first, then immediately publish
       const post = await postsApi.create(request)

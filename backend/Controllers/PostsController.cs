@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PostPilot.Api.Data;
@@ -467,6 +469,62 @@ public class PostsController : ControllerBase
             }
         }
 
+        // Instagram user tags validation
+        string? serializedUserTags = null;
+        if (request.InstagramUserTags is { Count: > 0 })
+        {
+            if (request.Platform != Platform.Instagram || request.PostType != PostType.Feed)
+            {
+                // Silently ignore tags for non-Instagram or non-Feed posts
+                _logger.LogWarning("Instagram user tags provided for non-IG-Feed post (Platform={Platform}, PostType={PostType}). Ignoring.",
+                    request.Platform, request.PostType);
+            }
+            else
+            {
+                var usernameRegex = new Regex(@"^[A-Za-z0-9._]{1,30}$");
+                foreach (var tag in request.InstagramUserTags)
+                {
+                    if (!usernameRegex.IsMatch(tag.Username))
+                    {
+                        return BadRequest(new ProblemDetails
+                        {
+                            Title = "Invalid user tag",
+                            Detail = $"Invalid Instagram username: '{tag.Username}'. Must be 1-30 characters of letters, digits, dots, or underscores.",
+                            Status = StatusCodes.Status400BadRequest,
+                        });
+                    }
+                    if (tag.X < 0 || tag.X > 1 || tag.Y < 0 || tag.Y > 1)
+                    {
+                        return BadRequest(new ProblemDetails
+                        {
+                            Title = "Invalid user tag position",
+                            Detail = $"Tag position for @{tag.Username} is out of bounds. X and Y must be between 0 and 1.",
+                            Status = StatusCodes.Status400BadRequest,
+                        });
+                    }
+                }
+
+                // Only include tags for image posts (MVP: single image only)
+                var mediaType = request.MediaType ?? MediaType.None;
+                if (mediaType == MediaType.Image && request.MediaItems is not { Count: > 0 })
+                {
+                    serializedUserTags = JsonSerializer.Serialize(
+                        request.InstagramUserTags.Select(t => new { username = t.Username, x = t.X, y = t.Y }),
+                        new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                    _logger.LogInformation(
+                        "Instagram user tags: {Count} tags ({Usernames}) | Serialized JSON: {Json}",
+                        request.InstagramUserTags.Count,
+                        string.Join(", ", request.InstagramUserTags.Select(t => "@" + t.Username)),
+                        serializedUserTags);
+                }
+                else
+                {
+                    _logger.LogWarning("Instagram user tags provided for non-single-image post (MediaType={MediaType}). Ignoring.",
+                        mediaType);
+                }
+            }
+        }
+
         // Note: Media validation is done client-side via POST /api/media/validate before submission.
         // The frontend blocks submission if media is invalid.
 
@@ -483,6 +541,7 @@ public class PostsController : ControllerBase
             TargetPageId = request.TargetPageId,
             TargetInstagramAccountId = request.TargetInstagramAccountId,
             SelectedThumbnailUrl = request.SelectedThumbnailUrl,
+            InstagramUserTags = serializedUserTags,
             Status = PostStatus.Scheduled,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
@@ -841,6 +900,73 @@ public class PostsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// DEBUG ONLY — Test IG user_tags by publishing an existing scheduled post's image
+    /// with a hardcoded tag. Call: POST /api/posts/{id}/test-user-tags?username=sometestaccount
+    /// This creates a new IG container with the tag and publishes it, logging everything.
+    /// Remove this endpoint after debugging is done.
+    /// </summary>
+    [HttpPost("{id}/test-user-tags")]
+    public async Task<IActionResult> TestUserTags(
+        Guid id,
+        [FromQuery] string username,
+        [FromQuery] double x = 0.5,
+        [FromQuery] double y = 0.5,
+        [FromServices] IPostPublisherResolver publisherResolver = null!)
+    {
+        var post = await _context.Posts
+            .Include(p => p.TargetInstagramAccount)
+            .FirstOrDefaultAsync(p => p.Id == id);
+
+        if (post == null) return NotFound("Post not found");
+        if (post.Platform != Platform.Instagram) return BadRequest("Not an Instagram post");
+        if (string.IsNullOrWhiteSpace(username)) return BadRequest("username query param required");
+
+        // Clean username
+        var cleanUsername = username.TrimStart('@').Trim();
+
+        // Build user_tags JSON
+        var userTags = JsonSerializer.Serialize(new[]
+        {
+            new { username = cleanUsername, x, y }
+        });
+
+        _logger.LogInformation(
+            "[TEST_USER_TAGS] Post {PostId} | username={Username} x={X} y={Y} | JSON: {Json}",
+            id, cleanUsername, x, y, userTags);
+
+        // Overwrite the post's InstagramUserTags with our test value
+        post.InstagramUserTags = userTags;
+        post.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "[TEST_USER_TAGS] Updated post {PostId} InstagramUserTags in DB. Now publishing...",
+            id);
+
+        // Publish it
+        var publisher = publisherResolver.GetPublisher(post.Platform);
+        if (publisher == null) return BadRequest("No publisher for Instagram");
+
+        // Reset status so it can be published
+        post.Status = PostStatus.Scheduled;
+        await _context.SaveChangesAsync();
+
+        var result = await publisher.PublishAsync(post.Id);
+
+        await _context.Entry(post).ReloadAsync();
+
+        return Ok(new
+        {
+            success = result.Success,
+            externalPostId = result.ExternalPostId,
+            errorMessage = result.ErrorMessage,
+            userTagsSent = userTags,
+            postStatus = post.Status.ToString(),
+            externalPostUrl = post.ExternalPostUrl,
+        });
+    }
+
     private static Dictionary<string, string[]> ValidateCreatePostRequest(CreatePostRequest request)
     {
         var errors = new Dictionary<string, string[]>();
@@ -878,6 +1004,12 @@ public record CreatePostMediaItem(
     int Order
 );
 
+public record InstagramUserTagDto(
+    string Username,
+    double X,
+    double Y
+);
+
 public record CreatePostRequest(
     string? Content,
     string? MediaUrl,
@@ -889,7 +1021,8 @@ public record CreatePostRequest(
     Guid? TargetInstagramAccountId = null,
     string? SelectedThumbnailUrl = null,
     List<Guid>? MediaAssetIds = null,
-    List<CreatePostMediaItem>? MediaItems = null
+    List<CreatePostMediaItem>? MediaItems = null,
+    List<InstagramUserTagDto>? InstagramUserTags = null
 );
 
 public record UpdatePostRequest(
