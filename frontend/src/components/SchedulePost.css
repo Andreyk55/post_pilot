@@ -88,6 +88,25 @@
   text-align: right;
 }
 
+.caption-summary-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-top: 0.35rem;
+}
+
+.caption-summary {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.4);
+  white-space: nowrap;
+}
+
+.caption-microcopy {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.3);
+  font-style: italic;
+}
+
 .form-group textarea.error {
   border-color: #ff6b6b;
   background: rgba(255, 59, 48, 0.05);

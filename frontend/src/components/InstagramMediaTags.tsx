@@ -114,6 +114,9 @@ export function InstagramMediaTags({
       <p className="media-tags-helper">
         Tags appear on the photo. Add @username or paste a profile URL, then click the image to place.
       </p>
+      <p className="media-tags-microcopy">
+        Media tags may require approval by the tagged account.
+      </p>
 
       {/* Input + Add button */}
       <div className="media-tags-input-row">

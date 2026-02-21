@@ -17,6 +17,13 @@
 .media-tags-helper {
   font-size: 0.75rem;
   color: rgba(255, 255, 255, 0.4);
+  margin: 0 0 0.35rem;
+}
+
+.media-tags-microcopy {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.3);
+  font-style: italic;
   margin: 0 0 0.75rem;
 }
 

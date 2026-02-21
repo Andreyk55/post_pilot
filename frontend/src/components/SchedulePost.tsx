@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { metaApi } from '../api/meta'
 import { aiApi, type AiPlatform, type AiGoal, type AudienceLocationMode } from '../api/ai'
 import type { MediaType, ValidationStatus, MediaValidationError, MediaValidationWarning } from '../api/media'
@@ -398,6 +398,29 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
   // Instagram media tags: show only for IG Feed + single image (not carousel, not video)
   const showMediaTags = isInstagramSelected && !isStory && mediaType === 'Image' && !isMultiMedia && !!mediaUrl
   const hasUnplacedTags = mediaTags.length > 0 && mediaTags.some(t => t.x === undefined || t.y === undefined)
+
+  // --- Caption summary parsing (Instagram only) ---
+  const captionSummary = useMemo(() => {
+    const mentionRegex = /(?<![\w.])@([A-Za-z0-9._]{1,30})/g
+    const hashtagRegex = /(?<![\w])#([A-Za-z0-9_]{1,50})/g
+    const mentionSet = new Set<string>()
+    const hashtagSet = new Set<string>()
+    let m: RegExpExecArray | null
+    while ((m = mentionRegex.exec(content)) !== null) mentionSet.add(m[1].toLowerCase())
+    while ((m = hashtagRegex.exec(content)) !== null) hashtagSet.add(m[1].toLowerCase())
+    const mediaTagCount = mediaTags.length
+    const notPlacedCount = mediaTags.filter(t => t.x === undefined || t.y === undefined).length
+    let mediaTagSuffix = ''
+    if (mediaTagCount > 0) {
+      mediaTagSuffix = notPlacedCount === 0 ? ' (placed)' : ` (${notPlacedCount} not placed)`
+    }
+    return {
+      mentionCount: mentionSet.size,
+      hashtagCount: hashtagSet.size,
+      mediaTagCount,
+      mediaTagSuffix,
+    }
+  }, [content, mediaTags])
   // Build placed tags payload for submission
   const placedUserTags: InstagramUserTag[] | undefined = showMediaTags && mediaTags.length > 0
     ? mediaTags
@@ -680,6 +703,17 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
                 </span>
               )}
             </div>
+
+            {isInstagramSelected && (
+              <div className="caption-summary-row">
+                <span className="caption-summary">
+                  Mentions: {captionSummary.mentionCount} &bull; Hashtags: {captionSummary.hashtagCount} &bull; Media tags: {captionSummary.mediaTagCount}{captionSummary.mediaTagSuffix}
+                </span>
+                <span className="caption-microcopy">
+                  Mentions and hashtags usually become clickable if they're valid.
+                </span>
+              </div>
+            )}
 
             {isInstagramSelected && (
               <InstagramMention
