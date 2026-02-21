@@ -96,6 +96,19 @@ public class PostCancelDeleteTests : IDisposable
     }
 
     [Fact]
+    public async Task Cancel_Processing_Returns200_And_StatusBecomesCanceled()
+    {
+        var post = CreatePost(PostStatus.Processing);
+
+        var result = await _controller.CancelPost(post.Id);
+
+        Assert.IsType<OkResult>(result);
+
+        var updated = await _dbContext.Posts.FindAsync(post.Id);
+        Assert.Equal(PostStatus.Canceled, updated!.Status);
+    }
+
+    [Fact]
     public async Task Cancel_AlreadyCanceled_Returns200_Idempotent()
     {
         var post = CreatePost(PostStatus.Canceled);
@@ -231,6 +244,17 @@ public class PostCancelDeleteTests : IDisposable
     public async Task Delete_RetryPending_Returns409()
     {
         var post = CreatePost(PostStatus.RetryPending);
+
+        var result = await _controller.DeletePost(post.Id);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result);
+        Assert.Equal(StatusCodes.Status409Conflict, conflict.StatusCode);
+    }
+
+    [Fact]
+    public async Task Delete_Processing_Returns409()
+    {
+        var post = CreatePost(PostStatus.Processing);
 
         var result = await _controller.DeletePost(post.Id);
 

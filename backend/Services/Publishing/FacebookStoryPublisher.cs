@@ -566,7 +566,7 @@ public class FacebookStoryPublisher : IStoryPublisher
     {
         var rowsAffected = await _dbContext.Posts
             .Where(p => p.Id == post.Id &&
-                       (p.Status == PostStatus.Scheduled || p.Status == PostStatus.RetryPending))
+                       (p.Status == PostStatus.Scheduled || p.Status == PostStatus.RetryPending || p.Status == PostStatus.Processing))
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(p => p.Status, PostStatus.Publishing)
                 .SetProperty(p => p.UpdatedAt, DateTime.UtcNow),

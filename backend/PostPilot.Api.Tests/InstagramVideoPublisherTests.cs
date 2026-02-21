@@ -251,7 +251,7 @@ public class InstagramVideoStateTransitionTests
     }
 
     [Fact]
-    public void VideoFlow_ProcessingRetry_SetsRetryPending()
+    public void VideoFlow_ProcessingRetry_SetsProcessing()
     {
         var post = CreateVideoPost();
         post.InstagramCreationId = "container-123";
@@ -259,13 +259,13 @@ public class InstagramVideoStateTransitionTests
 
         // Simulate processing retry
         post.ProcessingPollCount++;
-        post.Status = PostStatus.RetryPending;
+        post.Status = PostStatus.Processing;
         post.NextRetryAt = DateTime.UtcNow.AddSeconds(30);
 
-        Assert.Equal(PostStatus.RetryPending, post.Status);
+        Assert.Equal(PostStatus.Processing, post.Status);
         Assert.Equal(1, post.ProcessingPollCount);
         Assert.NotNull(post.NextRetryAt);
-        Assert.Equal(0, post.RetryCount); // Not a hard failure
+        Assert.Equal(0, post.RetryCount); // Not a hard failure — ProcessingPollCount only
     }
 
     [Fact]
@@ -359,7 +359,7 @@ public class InstagramVideoStateTransitionTests
         var post = CreateVideoPost();
         post.InstagramCreationId = "container-123";
         post.ProcessingPollCount = 2;
-        post.Status = PostStatus.RetryPending;
+        post.Status = PostStatus.Processing;
 
         // On next attempt, should resume polling (not recreate container)
         Assert.False(string.IsNullOrEmpty(post.InstagramCreationId));

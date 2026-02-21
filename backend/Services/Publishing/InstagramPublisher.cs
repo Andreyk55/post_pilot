@@ -201,10 +201,10 @@ public class InstagramPublisher : IPostPublisher
 
                 // Video flow handles its own state transitions for processing retries.
                 // If ScheduleProcessingRetryAsync was called, it returns Success=true with no ExternalPostId
-                // (the post is in RetryPending, not Published). Only proceed to MarkPublished if we got an ID.
+                // (the post is in Processing, not Published). Only proceed to MarkPublished if we got an ID.
                 if (result.Success && string.IsNullOrEmpty(result.ExternalPostId))
                 {
-                    // Processing retry scheduled — post is already in RetryPending state
+                    // Processing retry scheduled — post is already in Processing state
                     return result;
                 }
             }
@@ -473,17 +473,17 @@ public class InstagramPublisher : IPostPublisher
 
         var retryAt = DateTime.UtcNow.Add(VideoProcessingRetryDelay);
 
-        post.Status = PostStatus.RetryPending;
+        post.Status = PostStatus.Processing;
         post.NextRetryAt = retryAt;
-        post.ErrorMessage = $"Video processing in progress (poll {post.ProcessingPollCount}/{Post.MaxProcessingPollCount})";
+        post.ErrorMessage = $"Processing\u2026 (poll {post.ProcessingPollCount}/{Post.MaxProcessingPollCount})";
         post.UpdatedAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         await _scheduler.ScheduleRetryAsync(post, retryAt, cancellationToken);
 
         _logger.LogInformation(
-            "IG video post {PostId} still processing, scheduled retry #{PollCount} at {RetryAt}",
-            post.Id, post.ProcessingPollCount, retryAt);
+            "Processing check scheduled (poll {PollCount}/{MaxPoll}) NextRetryAt={RetryAt} PostId={PostId}",
+            post.ProcessingPollCount, Post.MaxProcessingPollCount, retryAt, post.Id);
 
         // Return success=false but NOT a hard failure — the caller won't call HandlePublishFailureAsync
         // because we already handled the state transition here.
@@ -1452,8 +1452,8 @@ public class InstagramPublisher : IPostPublisher
             var errorCode = error?.Error?.Code ?? 0;
             var errorType = ClassifyError(errorCode);
 
-            _logger.LogWarning("IG {Operation} error: Code={Code}, Message={Message}",
-                operation, errorCode, error?.Error?.Message);
+            _logger.LogWarning("IG {Operation} error: Code={Code}, Message={Message}, FbTraceId={FbTraceId}",
+                operation, errorCode, error?.Error?.Message, error?.Error?.FbTraceId);
 
             return new PublishResult(false,
                 ErrorType: errorType,
@@ -1476,7 +1476,7 @@ public class InstagramPublisher : IPostPublisher
     {
         var rowsAffected = await _dbContext.Posts
             .Where(p => p.Id == post.Id &&
-                       (p.Status == PostStatus.Scheduled || p.Status == PostStatus.RetryPending))
+                       (p.Status == PostStatus.Scheduled || p.Status == PostStatus.RetryPending || p.Status == PostStatus.Processing))
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(p => p.Status, PostStatus.Publishing)
                 .SetProperty(p => p.UpdatedAt, DateTime.UtcNow),
@@ -1563,8 +1563,8 @@ public class InstagramPublisher : IPostPublisher
         await _scheduler.ScheduleRetryAsync(post, retryAt, cancellationToken);
 
         _logger.LogInformation(
-            "Instagram post {PostId} scheduled for retry #{RetryCount} at {RetryAt}",
-            post.Id, post.RetryCount, retryAt);
+            "Transient failure retry scheduled (attempt {RetryCount}/{MaxRetries}) NextRetryAt={RetryAt} PostId={PostId}",
+            post.RetryCount, post.MaxRetries, retryAt, post.Id);
 
         return result;
     }

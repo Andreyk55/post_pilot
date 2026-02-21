@@ -843,7 +843,7 @@ public class PostsController : ControllerBase
                 await _context.SaveChangesAsync();
                 return Ok();
 
-            // Scheduled / RetryPending — cancel the schedule and mark as canceled
+            // Scheduled / RetryPending / Processing — cancel the schedule and mark as canceled
             default:
                 await _scheduler.CancelScheduleAsync(post);
 
@@ -877,9 +877,10 @@ public class PostsController : ControllerBase
                 await _context.SaveChangesAsync();
                 return NoContent();
 
-            // Scheduled / RetryPending — must cancel first
+            // Scheduled / RetryPending / Processing — must cancel first
             case PostStatus.Scheduled:
             case PostStatus.RetryPending:
+            case PostStatus.Processing:
                 return Conflict(new ProblemDetails
                 {
                     Title = "Cannot delete post",

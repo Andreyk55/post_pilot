@@ -34,19 +34,21 @@ const platformConfig: Record<string, { icon: string; name: string; color: string
 const getStatusConfig = (status: PostStatus) => {
   switch (status) {
     case 'Scheduled':
-      return { label: 'Scheduled', className: 'status-scheduled' }
+      return { label: 'Scheduled', className: 'status-scheduled', tooltip: '' }
     case 'Publishing':
-      return { label: 'Publishing', className: 'status-publishing' }
+      return { label: 'Publishing', className: 'status-publishing', tooltip: '' }
     case 'Published':
-      return { label: 'Published', className: 'status-published' }
+      return { label: 'Published', className: 'status-published', tooltip: '' }
     case 'Failed':
-      return { label: 'Failed', className: 'status-failed' }
+      return { label: 'Failed', className: 'status-failed', tooltip: '' }
     case 'RetryPending':
-      return { label: 'Retrying', className: 'status-retry' }
+      return { label: 'Retrying', className: 'status-retry', tooltip: 'Transient error. Will retry automatically.' }
+    case 'Processing':
+      return { label: 'Processing', className: 'status-processing', tooltip: 'Meta is processing the media. We\u2019ll publish automatically when ready.' }
     case 'Canceled':
-      return { label: 'Canceled', className: 'status-canceled' }
+      return { label: 'Canceled', className: 'status-canceled', tooltip: '' }
     default:
-      return { label: status, className: '' }
+      return { label: status, className: '', tooltip: '' }
   }
 }
 
@@ -154,7 +156,7 @@ export function PostItem({ post, onCancel, onDelete, cachedDetails, onDetailsFet
 
         <div className="post-body">
           <div className="post-meta-row">
-            <span className={`status-indicator ${statusConfig.className}`}>
+            <span className={`status-indicator ${statusConfig.className}`} title={statusConfig.tooltip || undefined}>
               {statusConfig.label}
             </span>
             {getContentBadges(post).map(badge => (
@@ -181,7 +183,7 @@ export function PostItem({ post, onCancel, onDelete, cachedDetails, onDetailsFet
             )}
           </div>
 
-          {post.errorMessage && (
+          {post.errorMessage && post.status === 'Failed' && (
             <div className="error-message">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>

@@ -309,7 +309,7 @@ public class InstagramCarouselStateTransitionTests
     }
 
     [Fact]
-    public void CarouselFlow_ProcessingRetry_SetsRetryPending()
+    public void CarouselFlow_ProcessingRetry_SetsProcessing()
     {
         var post = CreateCarouselPost();
         post.Status = PostStatus.Publishing;
@@ -319,13 +319,13 @@ public class InstagramCarouselStateTransitionTests
 
         // Simulate processing retry (IN_PROGRESS)
         post.ProcessingPollCount++;
-        post.Status = PostStatus.RetryPending;
+        post.Status = PostStatus.Processing;
         post.NextRetryAt = DateTime.UtcNow.AddSeconds(30);
 
-        Assert.Equal(PostStatus.RetryPending, post.Status);
+        Assert.Equal(PostStatus.Processing, post.Status);
         Assert.Equal(1, post.ProcessingPollCount);
         Assert.NotNull(post.NextRetryAt);
-        Assert.Equal(0, post.RetryCount); // Not a hard failure
+        Assert.Equal(0, post.RetryCount); // Not a hard failure — ProcessingPollCount only
     }
 
     [Fact]
@@ -447,7 +447,7 @@ public class InstagramCarouselStateTransitionTests
             new List<string> { "child-1", "child-2", "child-3" });
         post.InstagramCarouselCreationId = "carousel-container-456";
         post.ProcessingPollCount = 2;
-        post.Status = PostStatus.RetryPending;
+        post.Status = PostStatus.Processing;
 
         // On next attempt: all children done, carousel container exists → skip to status check
         Assert.False(string.IsNullOrEmpty(post.InstagramCarouselCreationId));

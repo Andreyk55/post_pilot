@@ -181,7 +181,7 @@ public class InstagramVideoCarouselStateTransitionTests
     }
 
     [Fact]
-    public void VideoCarouselFlow_ProcessingRetry_SetsRetryPending()
+    public void VideoCarouselFlow_ProcessingRetry_SetsProcessing()
     {
         var post = CreateVideoCarouselPost();
         post.Status = PostStatus.Publishing;
@@ -190,12 +190,12 @@ public class InstagramVideoCarouselStateTransitionTests
 
         // Simulate video child still processing
         post.ProcessingPollCount++;
-        post.Status = PostStatus.RetryPending;
+        post.Status = PostStatus.Processing;
         post.NextRetryAt = DateTime.UtcNow.AddSeconds(30);
 
-        Assert.Equal(PostStatus.RetryPending, post.Status);
+        Assert.Equal(PostStatus.Processing, post.Status);
         Assert.Equal(1, post.ProcessingPollCount);
-        Assert.Equal(0, post.RetryCount);
+        Assert.Equal(0, post.RetryCount); // Not a hard failure — ProcessingPollCount only
     }
 
     [Fact]

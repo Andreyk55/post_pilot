@@ -49,7 +49,7 @@ public class DispatcherFunction
         var duePosts = await dbContext.Posts
             .Where(p =>
                 (p.Status == PostStatus.Scheduled && p.ScheduledAt <= now) ||
-                (p.Status == PostStatus.RetryPending && p.NextRetryAt != null && p.NextRetryAt <= now))
+                ((p.Status == PostStatus.RetryPending || p.Status == PostStatus.Processing) && p.NextRetryAt != null && p.NextRetryAt <= now))
             .Select(p => new { p.Id, p.Platform, p.PostType, p.Status })
             .ToListAsync();
 

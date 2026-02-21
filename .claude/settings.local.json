@@ -49,7 +49,8 @@
       "WebFetch(domain:getlate.dev)",
       "WebFetch(domain:gist.github.com)",
       "WebFetch(domain:dailydevsblog.com)",
-      "WebFetch(domain:code.peren.gouv.fr)"
+      "WebFetch(domain:code.peren.gouv.fr)",
+      "Bash(grep:*)"
     ]
   }
 }

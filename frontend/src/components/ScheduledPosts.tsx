@@ -7,6 +7,16 @@ import { Toast } from './Toast'
 import { getContentBadges, getMediaLabel } from '../utils/postBadges'
 import './ScheduledPosts.css'
 
+const statusDisplayLabel: Record<string, string> = {
+  Scheduled: 'Scheduled',
+  Publishing: 'Publishing',
+  Published: 'Published',
+  Failed: 'Failed',
+  RetryPending: 'Retrying',
+  Canceled: 'Canceled',
+  Processing: 'Processing',
+}
+
 // Helper to get effective media type (use mediaType if set, otherwise detect from URL)
 function getEffectiveMediaType(post: Post): 'None' | 'Image' | 'Video' {
   if (post.mediaType && post.mediaType !== 'None') {
@@ -168,7 +178,7 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
     if (!deleteTarget) return
     setIsDeleting(true)
     try {
-      if (deleteTarget.status === 'Scheduled' || deleteTarget.status === 'RetryPending') {
+      if (deleteTarget.status === 'Scheduled' || deleteTarget.status === 'RetryPending' || deleteTarget.status === 'Processing') {
         await onCancel(deleteTarget.id)
       } else {
         await onDelete(deleteTarget.id)
@@ -188,6 +198,7 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
     switch (status) {
       case 'Scheduled':
       case 'RetryPending':
+      case 'Processing':
         return 'Cancel scheduled post'
       case 'Failed':
         return 'Delete failed post'
@@ -198,11 +209,12 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
     }
   }
   const getConfirmTitle = (status: string) =>
-    status === 'Scheduled' || status === 'RetryPending' ? 'Cancel scheduled post?' : 'Delete post?'
+    status === 'Scheduled' || status === 'RetryPending' || status === 'Processing' ? 'Cancel scheduled post?' : 'Delete post?'
   const getConfirmMessage = (status: string) => {
     switch (status) {
       case 'Scheduled':
       case 'RetryPending':
+      case 'Processing':
         return 'This will cancel the scheduled post. It will not be published. You can delete it afterwards.'
       case 'Failed':
         return "This will permanently delete the failed post record. This can't be undone."
@@ -213,9 +225,9 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
     }
   }
   const getConfirmButtonText = (status: string) =>
-    status === 'Scheduled' || status === 'RetryPending' ? 'Cancel scheduled' : 'Delete'
+    status === 'Scheduled' || status === 'RetryPending' || status === 'Processing' ? 'Cancel scheduled' : 'Delete'
   const canRemove = (status: string) =>
-    status === 'Scheduled' || status === 'Failed' || status === 'RetryPending' || status === 'Canceled'
+    status === 'Scheduled' || status === 'Failed' || status === 'RetryPending' || status === 'Processing' || status === 'Canceled'
 
   if ((!posts || posts.length === 0) && !isLoading) {
     return (
@@ -336,9 +348,13 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
                     >
                       {platformIcons[post.platform] || post.platform.charAt(0)}
                     </span>
-                    <span className="status-badge" data-status={post.status.toLowerCase()}>
+                    <span
+                      className="status-badge"
+                      data-status={post.status.toLowerCase()}
+                      title={post.status === 'Processing' ? 'Meta is processing the media. We\u2019ll publish automatically when ready.' : undefined}
+                    >
                       <span className="status-dot" />
-                      {post.status}
+                      {statusDisplayLabel[post.status] || post.status}
                     </span>
                     {getContentBadges(post).map(badge => (
                       <span key={badge.key} className="media-type-badge" data-type={badge.dataType}>

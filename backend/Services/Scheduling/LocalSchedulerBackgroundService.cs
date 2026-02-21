@@ -75,7 +75,7 @@ public class LocalSchedulerBackgroundService : BackgroundService
                 .Where(p => p.Platform == Platform.Facebook || p.Platform == Platform.Instagram)
                 .Where(p =>
                     (p.Status == PostStatus.Scheduled && p.ScheduledAt <= now) ||
-                    (p.Status == PostStatus.RetryPending && p.NextRetryAt != null && p.NextRetryAt <= now))
+                    ((p.Status == PostStatus.RetryPending || p.Status == PostStatus.Processing) && p.NextRetryAt != null && p.NextRetryAt <= now))
                 .Select(p => new { p.Id, p.Platform, p.PostType })
                 .AsNoTracking()
                 .ToListAsync(cancellationToken)

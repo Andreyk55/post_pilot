@@ -339,17 +339,17 @@ public class InstagramStoryPublisher : IStoryPublisher
 
         var retryAt = DateTime.UtcNow.Add(VideoProcessingRetryDelay);
 
-        post.Status = PostStatus.RetryPending;
+        post.Status = PostStatus.Processing;
         post.NextRetryAt = retryAt;
-        post.ErrorMessage = $"Story video processing in progress (poll {post.ProcessingPollCount}/{Post.MaxProcessingPollCount})";
+        post.ErrorMessage = $"Processing\u2026 (poll {post.ProcessingPollCount}/{Post.MaxProcessingPollCount})";
         post.UpdatedAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         await _scheduler.ScheduleRetryAsync(post, retryAt, cancellationToken);
 
         _logger.LogInformation(
-            "IG story video {PostId} still processing, scheduled retry #{PollCount} at {RetryAt}",
-            post.Id, post.ProcessingPollCount, retryAt);
+            "Processing check scheduled (poll {PollCount}/{MaxPoll}) NextRetryAt={RetryAt} PostId={PostId}",
+            post.ProcessingPollCount, Post.MaxProcessingPollCount, retryAt, post.Id);
 
         return new PublishResult(true);
     }
@@ -569,7 +569,7 @@ public class InstagramStoryPublisher : IStoryPublisher
     {
         var rowsAffected = await _dbContext.Posts
             .Where(p => p.Id == post.Id &&
-                       (p.Status == PostStatus.Scheduled || p.Status == PostStatus.RetryPending))
+                       (p.Status == PostStatus.Scheduled || p.Status == PostStatus.RetryPending || p.Status == PostStatus.Processing))
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(p => p.Status, PostStatus.Publishing)
                 .SetProperty(p => p.UpdatedAt, DateTime.UtcNow),
@@ -651,8 +651,8 @@ public class InstagramStoryPublisher : IStoryPublisher
         await _scheduler.ScheduleRetryAsync(post, retryAt, cancellationToken);
 
         _logger.LogInformation(
-            "Instagram story {PostId} scheduled for retry #{RetryCount} at {RetryAt}",
-            post.Id, post.RetryCount, retryAt);
+            "Transient failure retry scheduled (attempt {RetryCount}/{MaxRetries}) NextRetryAt={RetryAt} PostId={PostId}",
+            post.RetryCount, post.MaxRetries, retryAt, post.Id);
 
         return result;
     }

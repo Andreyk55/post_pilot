@@ -4,7 +4,7 @@ const API_URL = 'http://localhost:5122/api'
 
 export type Platform = 'Twitter' | 'Instagram' | 'Facebook' | 'LinkedIn'
 
-export type PostStatus = 'Scheduled' | 'Publishing' | 'Published' | 'Failed' | 'RetryPending' | 'Canceled'
+export type PostStatus = 'Scheduled' | 'Publishing' | 'Published' | 'Failed' | 'RetryPending' | 'Canceled' | 'Processing'
 
 export type PostType = 'Feed' | 'Story'
 

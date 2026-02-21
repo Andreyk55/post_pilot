@@ -14,9 +14,12 @@ public enum PostStatus
     /// <summary>Post failed permanently (max retries exceeded or permanent error)</summary>
     Failed,
 
-    /// <summary>Post failed but will be retried</summary>
+    /// <summary>Post failed but will be retried (transient error with exponential backoff)</summary>
     RetryPending,
 
     /// <summary>Post was canceled by the user before publishing</summary>
-    Canceled
+    Canceled,
+
+    /// <summary>Meta accepted the upload but is still processing (e.g., IG video container IN_PROGRESS). Not a failure.</summary>
+    Processing
 }

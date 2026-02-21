@@ -437,6 +437,25 @@
   background: #94a3b8;
 }
 
+.status-badge[data-status="processing"] {
+  background: rgba(168, 85, 247, 0.1);
+  color: #a855f7;
+}
+
+.status-badge[data-status="processing"] .status-dot {
+  background: #a855f7;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.status-badge[data-status="retrypending"] {
+  background: rgba(249, 115, 22, 0.1);
+  color: #fb923c;
+}
+
+.status-badge[data-status="retrypending"] .status-dot {
+  background: #fb923c;
+}
+
 /* Content badge (post type + media summary) */
 .media-type-badge {
   font-size: 0.625rem;

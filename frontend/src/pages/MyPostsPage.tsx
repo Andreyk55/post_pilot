@@ -10,6 +10,7 @@ const STATUS_TABS: { label: string; value: PostStatus | 'all'; count?: number }[
   { label: 'Published', value: 'Published' },
   { label: 'Failed', value: 'Failed' },
   { label: 'Retry Pending', value: 'RetryPending' },
+  { label: 'Processing', value: 'Processing' },
   { label: 'Canceled', value: 'Canceled' },
 ]
 

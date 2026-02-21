@@ -90,6 +90,11 @@
   color: #fb923c;
 }
 
+.status-processing {
+  background: rgba(168, 85, 247, 0.15);
+  color: #a855f7;
+}
+
 /* Content badge (post type + media summary) */
 .media-type-badge {
   font-size: 0.625rem;
