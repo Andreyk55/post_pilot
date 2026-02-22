@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
+using PostPilot.Api;
 using PostPilot.Api.Data;
 using PostPilot.Api.Entities;
 using PostPilot.Api.Enums;
@@ -77,7 +78,7 @@ public class FacebookPagePublisher : IPostPublisher
 
     public async Task<PublishResult> PublishAsync(Guid postId, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Starting publish for post {PostId}", postId);
+        _logger.LogInformation(PostPilotLogEvents.PublishStart, "FB_PUBLISH_START postId={PostId}", postId);
 
         // Step 1: Load post with target page and media items
         var post = await _dbContext.Posts
@@ -100,6 +101,14 @@ public class FacebookPagePublisher : IPostPublisher
             return new PublishResult(true, ExternalPostId: post.ExternalPostId,
                 ErrorType: PublishErrorType.AlreadyPublished);
         }
+
+        // Establish per-publish scope so all subsequent logs include PostId, Platform, AccountId
+        using var publishScope = _logger.BeginScope(new Dictionary<string, object>
+        {
+            ["PostId"]    = postId,
+            ["Platform"]  = "Facebook",
+            ["AccountId"] = post.TargetPage?.PageId ?? string.Empty
+        });
 
         // Step 3: Atomically claim the post (prevent race conditions)
         var claimResult = await TryClaimPostAsync(post, cancellationToken);
@@ -283,13 +292,17 @@ public class FacebookPagePublisher : IPostPublisher
             });
         }
 
-        _logger.LogInformation("Calling Meta API: POST {Url} for post {PostId}", url, post.Id);
+        _logger.LogInformation(PostPilotLogEvents.OutboundCall, "FB_OUTBOUND POST {Url} postId={PostId}", url, post.Id);
 
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         var response = await _httpClient.PostAsync(url, content, cancellationToken);
+        sw.Stop();
         var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
-        _logger.LogInformation("Meta API response for post {PostId}: {StatusCode} - {Body}",
-            post.Id, response.StatusCode, responseBody);
+        _logger.LogInformation(PostPilotLogEvents.PublishAttempt,
+            "FB_RESPONSE {StatusCode} postId={PostId} durationMs={DurationMs}",
+            (int)response.StatusCode, post.Id, sw.ElapsedMilliseconds);
+        _logger.LogDebug("FB_RESPONSE_BODY postId={PostId} body={Body}", post.Id, responseBody);
 
         return ParseMetaResponse(post.Id, response, responseBody);
     }
@@ -398,16 +411,16 @@ public class FacebookPagePublisher : IPostPublisher
             ["access_token"] = accessToken,
         });
 
-        _logger.LogInformation("Uploading unpublished photo: POST {Url} (imageUrl={ImageUrl})",
-            url, imageUrl);
+        _logger.LogInformation(PostPilotLogEvents.OutboundCall, "FB_PHOTO_UPLOAD POST {Url}", url);
 
         var response = await _httpClient.PostAsync(url, content, cancellationToken);
         var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
-        // Log response with token redaction
+        _logger.LogInformation(PostPilotLogEvents.PublishAttempt,
+            "FB_PHOTO_UPLOAD_RESPONSE {StatusCode}", response.StatusCode);
+        // Log response with token redaction at debug only
         var redactedBody = RedactTokenInBody(responseBody);
-        _logger.LogInformation("Unpublished photo upload response: {StatusCode} - {Body}",
-            response.StatusCode, redactedBody);
+        _logger.LogDebug("FB_PHOTO_UPLOAD_RESPONSE_BODY body={Body}", redactedBody);
 
         return ParseMetaPhotoIdResponse(response, responseBody);
     }
@@ -453,19 +466,18 @@ public class FacebookPagePublisher : IPostPublisher
         var formBody = string.Join("&", parts);
         var content = new StringContent(formBody, System.Text.Encoding.UTF8, "application/x-www-form-urlencoded");
 
-        // Log attached_media keys and photo count (no tokens)
-        var attachedKeys = string.Join(", ", Enumerable.Range(0, photoIds.Count).Select(i => $"attached_media[{i}]"));
-        _logger.LogInformation(
-            "Creating FB feed post: POST {Url} with {PhotoCount} photos, keys=[{AttachedKeys}], hasUserMessage={HasMessage}",
-            url, photoIds.Count, attachedKeys, !string.IsNullOrWhiteSpace(message));
+        _logger.LogInformation(PostPilotLogEvents.OutboundCall,
+            "FB_MULTIPHOTO_OUTBOUND POST {Url} photoCount={PhotoCount} hasMessage={HasMessage}",
+            url, photoIds.Count, !string.IsNullOrWhiteSpace(message));
 
         var response = await _httpClient.PostAsync(url, content, cancellationToken);
         var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
-        // Log response with token redaction
+        _logger.LogInformation(PostPilotLogEvents.PublishAttempt,
+            "FB_MULTIPHOTO_RESPONSE {StatusCode}", response.StatusCode);
+        // Log response with token redaction at debug only
         var redactedBody = RedactTokenInBody(responseBody);
-        _logger.LogInformation("FB feed post response: {StatusCode} - {Body}",
-            response.StatusCode, redactedBody);
+        _logger.LogDebug("FB_MULTIPHOTO_RESPONSE_BODY body={Body}", redactedBody);
 
         return ParseMetaResponse(Guid.Empty, response, responseBody);
     }
@@ -528,14 +540,18 @@ public class FacebookPagePublisher : IPostPublisher
 
         var content = new FormUrlEncodedContent(parameters);
 
-        _logger.LogInformation("Calling Meta Video API: POST {Url} for post {PostId}", url, post.Id);
-        _logger.LogInformation("Video URL being sent to Meta: {VideoUrl}", videoUrl);
+        _logger.LogInformation(PostPilotLogEvents.OutboundCall, "FB_VIDEO_OUTBOUND POST {Url} postId={PostId}", url, post.Id);
+        _logger.LogDebug("FB_VIDEO_URL postId={PostId} videoUrl={VideoUrl}", post.Id, videoUrl);
 
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         var response = await _httpClient.PostAsync(url, content, cancellationToken);
+        sw.Stop();
         var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
-        _logger.LogInformation("Meta Video API response for post {PostId}: {StatusCode} - {Body}",
-            post.Id, response.StatusCode, responseBody);
+        _logger.LogInformation(PostPilotLogEvents.PublishAttempt,
+            "FB_VIDEO_RESPONSE {StatusCode} postId={PostId} durationMs={DurationMs}",
+            (int)response.StatusCode, post.Id, sw.ElapsedMilliseconds);
+        _logger.LogDebug("FB_VIDEO_RESPONSE_BODY postId={PostId} body={Body}", post.Id, responseBody);
 
         return ParseMetaResponse(post.Id, response, responseBody);
     }
@@ -662,7 +678,8 @@ public class FacebookPagePublisher : IPostPublisher
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Post {PostId} published successfully as {ExternalPostId}",
+        _logger.LogInformation(PostPilotLogEvents.PublishSuccess,
+            "FB_PUBLISH_SUCCESS postId={PostId} externalPostId={ExternalPostId}",
             post.Id, externalPostId);
     }
 
@@ -705,8 +722,8 @@ public class FacebookPagePublisher : IPostPublisher
             post.Status = PostStatus.Failed;
             await _dbContext.SaveChangesAsync(cancellationToken);
 
-            _logger.LogWarning(
-                "Post {PostId} failed permanently after {RetryCount} attempts: {Error}",
+            _logger.LogWarning(PostPilotLogEvents.PublishFail,
+                "FB_PUBLISH_FAIL postId={PostId} retryCount={RetryCount} error={Error}",
                 post.Id, post.RetryCount, result.ErrorMessage);
 
             return result;
@@ -724,9 +741,9 @@ public class FacebookPagePublisher : IPostPublisher
         // Schedule the retry
         await _scheduler.ScheduleRetryAsync(post, retryAt, cancellationToken);
 
-        _logger.LogInformation(
-            "Post {PostId} scheduled for retry #{RetryCount} at {RetryAt} (in {DelayMinutes} minutes)",
-            post.Id, post.RetryCount, retryAt, delayMinutes);
+        _logger.LogInformation(PostPilotLogEvents.RetryScheduled,
+            "FB_RETRY_SCHEDULED postId={PostId} attempt={RetryCount}/{MaxRetries} retryAt={RetryAt} delayMin={DelayMinutes}",
+            post.Id, post.RetryCount, post.MaxRetries, retryAt, delayMinutes);
 
         return result;
     }

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
+using PostPilot.Api;
 using PostPilot.Api.Data;
 using PostPilot.Api.Entities;
 using PostPilot.Api.Enums;
@@ -106,7 +107,7 @@ public class InstagramPublisher : IPostPublisher
 
     public async Task<PublishResult> PublishAsync(Guid postId, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Starting Instagram publish for post {PostId}", postId);
+        _logger.LogInformation(PostPilotLogEvents.PublishStart, "IG_PUBLISH_START postId={PostId}", postId);
 
         // Step 1: Load post with target IG account and media items
         var post = await _dbContext.Posts
@@ -120,6 +121,14 @@ public class InstagramPublisher : IPostPublisher
             return new PublishResult(false, ErrorType: PublishErrorType.Permanent,
                 ErrorMessage: "Post not found");
         }
+
+        // Establish per-publish scope so all subsequent logs include PostId, Platform, AccountId
+        using var publishScope = _logger.BeginScope(new Dictionary<string, object>
+        {
+            ["PostId"]    = postId,
+            ["Platform"]  = "Instagram",
+            ["AccountId"] = post.TargetInstagramAccount?.IgBusinessId ?? string.Empty
+        });
 
         // Step 2: Idempotency check
         if (post.Status == PostStatus.Published && !string.IsNullOrEmpty(post.ExternalPostId))
@@ -297,7 +306,10 @@ public class InstagramPublisher : IPostPublisher
         if (!string.IsNullOrEmpty(userTagsJson))
         {
             _logger.LogInformation(
-                "[USER_TAGS] Post {PostId}: user_tags present on entity, raw value: {UserTags}",
+                "[USER_TAGS] Post {PostId}: user_tags present on entity",
+                post.Id);
+            _logger.LogDebug(
+                "[USER_TAGS] Post {PostId}: raw value: {UserTags}",
                 post.Id, userTagsJson);
 
             // Warn if any tag is missing x/y coordinates (IMAGE-only field)
@@ -976,13 +988,15 @@ public class InstagramPublisher : IPostPublisher
             ["access_token"] = accessToken,
         });
 
-        _logger.LogInformation("[IG_DEBUG] Creating IG video carousel child container: POST {Url}", url);
+        _logger.LogInformation(PostPilotLogEvents.OutboundCall,
+            "IG_VIDEO_CHILD_OUTBOUND POST {Url}", url);
 
         var response = await _httpClient.PostAsync(url, content, cancellationToken);
         var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
-        _logger.LogInformation("[IG_DEBUG] IG video carousel child container response: {StatusCode} - {Body}",
-            response.StatusCode, SanitizeForLog(responseBody));
+        _logger.LogInformation(PostPilotLogEvents.PublishAttempt,
+            "IG_VIDEO_CHILD_RESPONSE {StatusCode}", response.StatusCode);
+        _logger.LogDebug("IG_VIDEO_CHILD_RESPONSE_BODY body={Body}", SanitizeForLog(responseBody));
 
         return ParseMetaIdResponse(response, responseBody, "video carousel child container creation");
     }
@@ -1002,13 +1016,15 @@ public class InstagramPublisher : IPostPublisher
             ["access_token"] = accessToken,
         });
 
-        _logger.LogInformation("[IG_DEBUG] Creating IG carousel child container: POST {Url}", url);
+        _logger.LogInformation(PostPilotLogEvents.OutboundCall,
+            "IG_IMG_CHILD_OUTBOUND POST {Url}", url);
 
         var response = await _httpClient.PostAsync(url, content, cancellationToken);
         var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
-        _logger.LogInformation("[IG_DEBUG] IG carousel child container response: {StatusCode} - {Body}",
-            response.StatusCode, SanitizeForLog(responseBody));
+        _logger.LogInformation(PostPilotLogEvents.PublishAttempt,
+            "IG_IMG_CHILD_RESPONSE {StatusCode}", response.StatusCode);
+        _logger.LogDebug("IG_IMG_CHILD_RESPONSE_BODY body={Body}", SanitizeForLog(responseBody));
 
         return ParseMetaIdResponse(response, responseBody, "carousel child container creation");
     }
@@ -1029,14 +1045,15 @@ public class InstagramPublisher : IPostPublisher
             ["access_token"] = accessToken,
         });
 
-        _logger.LogInformation("[IG_DEBUG] Creating IG carousel container: POST {Url} with {Count} children",
-            url, childCreationIds.Count);
+        _logger.LogInformation(PostPilotLogEvents.OutboundCall,
+            "IG_CAROUSEL_OUTBOUND POST {Url} childCount={Count}", url, childCreationIds.Count);
 
         var response = await _httpClient.PostAsync(url, content, cancellationToken);
         var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
-        _logger.LogInformation("[IG_DEBUG] IG carousel container response: {StatusCode} - {Body}",
-            response.StatusCode, SanitizeForLog(responseBody));
+        _logger.LogInformation(PostPilotLogEvents.PublishAttempt,
+            "IG_CAROUSEL_RESPONSE {StatusCode}", response.StatusCode);
+        _logger.LogDebug("IG_CAROUSEL_RESPONSE_BODY body={Body}", SanitizeForLog(responseBody));
 
         return ParseMetaIdResponse(response, responseBody, "carousel container creation");
     }
@@ -1139,37 +1156,32 @@ public class InstagramPublisher : IPostPublisher
         }
 
         var content = new FormUrlEncodedContent(formFields);
-        var contentType = content.Headers.ContentType?.ToString() ?? "unknown";
 
         // ── IG CREATE CONTAINER start (image) ──
-        _logger.LogInformation(
-            "[IG_DEBUG] IG CREATE CONTAINER start | igUserId={IgUserId} | content-type={ContentType} | url={Url}",
-            igUserId, contentType, url);
+        _logger.LogInformation(PostPilotLogEvents.OutboundCall,
+            "IG_OUTBOUND POST {Url} igUserId={IgUserId} mediaType=IMAGE",
+            url, igUserId);
+        _logger.LogDebug(
+            "IG_OUTBOUND_PARAMS image_url={ImageUrl} caption={Caption} user_tags={UserTags}",
+            imageUrl, TruncateCaption(caption), userTagsJson ?? "(none)");
 
-        _logger.LogInformation(
-            "[IG_DEBUG] CREATE CONTAINER params | image_url={ImageUrl} | caption={Caption} | media_type=IMAGE | user_tags={UserTags}",
-            imageUrl,
-            TruncateCaption(caption),
-            userTagsJson ?? "(none)");
-
-        // Log the full form body (sanitized)
+        // Log the full form body (sanitized) at debug only
         var debugBody = await content.ReadAsStringAsync(cancellationToken);
-        _logger.LogInformation(
-            "[IG_DEBUG] CREATE CONTAINER full body (url-encoded, sanitized): {Body}",
-            SanitizeForLog(debugBody));
+        _logger.LogDebug("IG_OUTBOUND_BODY {Body}", SanitizeForLog(debugBody));
 
         var response = await _httpClient.PostAsync(url, content, cancellationToken);
         var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
         // ── IG CREATE CONTAINER response ──
-        _logger.LogInformation(
-            "[IG_DEBUG] CREATE CONTAINER response | HTTP {StatusCode} | body={Body}",
-            (int)response.StatusCode, SanitizeForLog(responseBody));
+        _logger.LogInformation(PostPilotLogEvents.PublishAttempt,
+            "IG_RESPONSE {StatusCode} step=image-container",
+            (int)response.StatusCode);
+        _logger.LogDebug("IG_RESPONSE_BODY body={Body}", SanitizeForLog(responseBody));
 
         var parsed = ParseMetaIdResponse(response, responseBody, "image container creation");
 
-        _logger.LogInformation(
-            "[IG_DEBUG] CREATE CONTAINER parsed | success={Success} | creation_id={CreationId}",
+        _logger.LogDebug(
+            "IG_CONTAINER_PARSED success={Success} creation_id={CreationId}",
             parsed.Success, parsed.ExternalPostId ?? "(null)");
 
         return parsed;
@@ -1192,35 +1204,32 @@ public class InstagramPublisher : IPostPublisher
         };
 
         var content = new FormUrlEncodedContent(formFields);
-        var contentType = content.Headers.ContentType?.ToString() ?? "unknown";
 
         // ── IG CREATE CONTAINER start (video) ──
-        _logger.LogInformation(
-            "[IG_DEBUG] IG CREATE CONTAINER start | igUserId={IgUserId} | content-type={ContentType} | url={Url}",
-            igUserId, contentType, url);
-
-        _logger.LogInformation(
-            "[IG_DEBUG] CREATE CONTAINER params | video_url={VideoUrl} | caption={Caption} | media_type=REELS | user_tags=(none, video)",
+        _logger.LogInformation(PostPilotLogEvents.OutboundCall,
+            "IG_OUTBOUND POST {Url} igUserId={IgUserId} mediaType=REELS",
+            url, igUserId);
+        _logger.LogDebug(
+            "IG_OUTBOUND_PARAMS video_url={VideoUrl} caption={Caption} media_type=REELS",
             videoUrl, TruncateCaption(caption));
 
-        // Log the full form body (sanitized)
+        // Log the full form body (sanitized) at debug only
         var debugBody = await content.ReadAsStringAsync(cancellationToken);
-        _logger.LogInformation(
-            "[IG_DEBUG] CREATE CONTAINER full body (url-encoded, sanitized): {Body}",
-            SanitizeForLog(debugBody));
+        _logger.LogDebug("IG_OUTBOUND_BODY {Body}", SanitizeForLog(debugBody));
 
         var response = await _httpClient.PostAsync(url, content, cancellationToken);
         var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
         // ── IG CREATE CONTAINER response ──
-        _logger.LogInformation(
-            "[IG_DEBUG] CREATE CONTAINER response | HTTP {StatusCode} | body={Body}",
-            (int)response.StatusCode, SanitizeForLog(responseBody));
+        _logger.LogInformation(PostPilotLogEvents.PublishAttempt,
+            "IG_RESPONSE {StatusCode} step=video-container",
+            (int)response.StatusCode);
+        _logger.LogDebug("IG_RESPONSE_BODY body={Body}", SanitizeForLog(responseBody));
 
         var parsed = ParseMetaIdResponse(response, responseBody, "video container creation");
 
-        _logger.LogInformation(
-            "[IG_DEBUG] CREATE CONTAINER parsed | success={Success} | creation_id={CreationId}",
+        _logger.LogDebug(
+            "IG_CONTAINER_PARSED success={Success} creation_id={CreationId}",
             parsed.Success, parsed.ExternalPostId ?? "(null)");
 
         return parsed;
@@ -1326,27 +1335,26 @@ public class InstagramPublisher : IPostPublisher
         });
 
         // ── IG PUBLISH start ──
-        _logger.LogInformation(
-            "[IG_DEBUG] IG PUBLISH start | url={Url} | creation_id={CreationId}",
+        _logger.LogInformation(PostPilotLogEvents.OutboundCall,
+            "IG_MEDIA_PUBLISH_OUTBOUND POST {Url} creation_id={CreationId}",
             url, creationId);
 
         var debugBody = await content.ReadAsStringAsync(cancellationToken);
-        _logger.LogInformation(
-            "[IG_DEBUG] PUBLISH body (sanitized): {Body}",
-            SanitizeForLog(debugBody));
+        _logger.LogDebug("IG_MEDIA_PUBLISH_BODY {Body}", SanitizeForLog(debugBody));
 
         var response = await _httpClient.PostAsync(url, content, cancellationToken);
         var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
         // ── IG PUBLISH response ──
-        _logger.LogInformation(
-            "[IG_DEBUG] PUBLISH response | HTTP {StatusCode} | body={Body}",
-            (int)response.StatusCode, SanitizeForLog(responseBody));
+        _logger.LogInformation(PostPilotLogEvents.PublishAttempt,
+            "IG_MEDIA_PUBLISH_RESPONSE {StatusCode}",
+            (int)response.StatusCode);
+        _logger.LogDebug("IG_MEDIA_PUBLISH_RESPONSE_BODY body={Body}", SanitizeForLog(responseBody));
 
         var parsed = ParseMetaIdResponse(response, responseBody, "media publish");
 
-        _logger.LogInformation(
-            "[IG_DEBUG] PUBLISH parsed | success={Success} | ig_media_id={IgMediaId}",
+        _logger.LogDebug(
+            "IG_MEDIA_PUBLISH_PARSED success={Success} ig_media_id={IgMediaId}",
             parsed.Success, parsed.ExternalPostId ?? "(null)");
 
         return parsed;
@@ -1540,7 +1548,8 @@ public class InstagramPublisher : IPostPublisher
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Instagram post {PostId} published successfully as {ExternalPostId}",
+        _logger.LogInformation(PostPilotLogEvents.PublishSuccess,
+            "IG_PUBLISH_SUCCESS postId={PostId} externalPostId={ExternalPostId}",
             post.Id, externalPostId);
     }
 
@@ -1582,8 +1591,8 @@ public class InstagramPublisher : IPostPublisher
             post.Status = PostStatus.Failed;
             await _dbContext.SaveChangesAsync(cancellationToken);
 
-            _logger.LogWarning(
-                "Instagram post {PostId} failed permanently after {RetryCount} attempts: {Error}",
+            _logger.LogWarning(PostPilotLogEvents.PublishFail,
+                "IG_PUBLISH_FAIL postId={PostId} retryCount={RetryCount} error={Error}",
                 post.Id, post.RetryCount, result.ErrorMessage);
 
             return result;
@@ -1600,9 +1609,9 @@ public class InstagramPublisher : IPostPublisher
 
         await _scheduler.ScheduleRetryAsync(post, retryAt, cancellationToken);
 
-        _logger.LogInformation(
-            "Transient failure retry scheduled (attempt {RetryCount}/{MaxRetries}) NextRetryAt={RetryAt} PostId={PostId}",
-            post.RetryCount, post.MaxRetries, retryAt, post.Id);
+        _logger.LogInformation(PostPilotLogEvents.RetryScheduled,
+            "IG_RETRY_SCHEDULED postId={PostId} attempt={RetryCount}/{MaxRetries} retryAt={RetryAt} delayMin={DelayMinutes}",
+            post.Id, post.RetryCount, post.MaxRetries, retryAt, delayMinutes);
 
         return result;
     }

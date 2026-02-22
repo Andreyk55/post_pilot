@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using Amazon.S3;
 using Amazon.Scheduler;
+using PostPilot.Api.Middleware;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using PostPilot.Api.Data;
@@ -145,6 +146,8 @@ public class Startup
             app.UseHttpsRedirection();
         }
 
+        // Correlation ID middleware: must run before routing so all logs include the id
+        app.UseMiddleware<CorrelationIdMiddleware>();
         app.UseCors("AllowFrontend");
         app.UseRouting();
         app.UseEndpoints(endpoints =>

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using PostPilot.Api;
 using PostPilot.Api.Data;
 using PostPilot.Api.Enums;
 using PostPilot.Api.Services.Publishing;
@@ -25,8 +26,8 @@ public class LocalSchedulerBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Local scheduler background service started (polling every {Interval}s)",
-            _pollInterval.TotalSeconds);
+        _logger.LogInformation(PostPilotLogEvents.RetryStart,
+            "SCHEDULER_START polling every {Interval}s", _pollInterval.TotalSeconds);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -42,7 +43,7 @@ public class LocalSchedulerBackgroundService : BackgroundService
             await Task.Delay(_pollInterval, stoppingToken);
         }
 
-        _logger.LogInformation("Local scheduler background service stopped");
+        _logger.LogInformation(PostPilotLogEvents.RetryStop, "SCHEDULER_STOP");
     }
 
     private async Task ProcessDuePostsAsync(CancellationToken cancellationToken)
@@ -113,7 +114,8 @@ public class LocalSchedulerBackgroundService : BackgroundService
             return;
         }
 
-        _logger.LogInformation("Found {Count} due posts to process", duePosts.Count);
+        _logger.LogInformation(PostPilotLogEvents.RetryStart,
+            "SCHEDULER_DISPATCH count={Count}", duePosts.Count);
 
         // Process each post in its own scope
         foreach (var duePost in duePosts)
