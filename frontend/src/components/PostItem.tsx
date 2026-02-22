@@ -18,8 +18,6 @@ function getEffectiveMediaType(post: Post): 'None' | 'Image' | 'Video' {
 
 interface PostItemProps {
   post: Post
-  onCancel: (id: string) => void
-  onDelete: (id: string) => void
   cachedDetails: PostDetails | undefined
   onDetailsFetched: (id: string, details: PostDetails) => void
 }
@@ -94,7 +92,7 @@ const formatNumber = (num: number | null | undefined): string => {
   return num.toString()
 }
 
-export function PostItem({ post, onCancel, onDelete, cachedDetails, onDetailsFetched }: PostItemProps) {
+export function PostItem({ post, cachedDetails, onDetailsFetched }: PostItemProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [isContentExpanded, setIsContentExpanded] = useState(false)
   const [isLoadingDetails, setIsLoadingDetails] = useState(false)
@@ -256,36 +254,6 @@ export function PostItem({ post, onCancel, onDelete, cachedDetails, onDetailsFet
           </svg>
         </div>
 
-        <div className="post-actions">
-          {(post.status === 'Scheduled' || post.status === 'RetryPending') && (
-            <button
-              className="action-btn delete-btn"
-              onClick={(e) => {
-                e.stopPropagation()
-                onCancel(post.id)
-              }}
-              title="Cancel scheduled post"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z"/>
-              </svg>
-            </button>
-          )}
-          {(post.status === 'Failed' || post.status === 'Canceled') && (
-            <button
-              className="action-btn delete-btn"
-              onClick={(e) => {
-                e.stopPropagation()
-                onDelete(post.id)
-              }}
-              title={post.status === 'Failed' ? 'Delete failed post' : 'Delete canceled post'}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z"/>
-              </svg>
-            </button>
-          )}
-        </div>
       </div>
 
       {/* Expandable Details Panel */}
