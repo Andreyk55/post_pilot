@@ -395,9 +395,12 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
   const hasInvalidMedia = mediaUrl && mediaValidationStatus === 'Invalid'
   const hasInvalidCarouselItems = carouselItems.some(item => item.validationStatus === 'Invalid')
 
-  // Instagram media tags: show only for IG Feed + single image (not carousel, not video)
-  const showMediaTags = isInstagramSelected && !isStory && mediaType === 'Image' && !isMultiMedia && !!mediaUrl
-  const hasUnplacedTags = mediaTags.length > 0 && mediaTags.some(t => t.x === undefined || t.y === undefined)
+  // Instagram media tags: show for IG Feed + single image or single video (not carousel)
+  const isTaggableMedia = mediaType === 'Image' || mediaType === 'Video'
+  const showMediaTags = isInstagramSelected && !isStory && isTaggableMedia && !isMultiMedia && !!mediaUrl
+  // For video posts, tags are auto-placed at center (0.5, 0.5) — only images need manual placement
+  const isVideoTag = mediaType === 'Video'
+  const hasUnplacedTags = !isVideoTag && mediaTags.length > 0 && mediaTags.some(t => t.x === undefined || t.y === undefined)
 
   // --- Caption summary parsing (Instagram only) ---
   const captionSummary = useMemo(() => {
@@ -422,10 +425,13 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
     }
   }, [content, mediaTags])
   // Build placed tags payload for submission
+  // For video: auto-place all tags at center (0.5, 0.5) since there's no image to click on
   const placedUserTags: InstagramUserTag[] | undefined = showMediaTags && mediaTags.length > 0
-    ? mediaTags
-        .filter(t => t.x !== undefined && t.y !== undefined)
-        .map(t => ({ username: t.username, x: t.x!, y: t.y! }))
+    ? isVideoTag
+      ? mediaTags.map(t => ({ username: t.username, x: t.x ?? 0.5, y: t.y ?? 0.5 }))
+      : mediaTags
+          .filter(t => t.x !== undefined && t.y !== undefined)
+          .map(t => ({ username: t.username, x: t.x!, y: t.y! }))
     : undefined
 
   // Form is valid if there's content OR media, plus date/time/platform, not uploading, text within limits, and no invalid media
@@ -856,7 +862,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
           )}
         </div>
 
-        {/* Instagram Media Tags — tag people on the image (IG Feed + single image only) */}
+        {/* Instagram Media Tags — tag people (IG Feed + single image or video) */}
         {showMediaTags && (
           <div className="form-group">
             <InstagramMediaTags
@@ -865,6 +871,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
               onMediaTagsChange={setMediaTags}
               mediaS3Key={mediaUrl}
               disabled={!isComposerEnabled}
+              isVideo={isVideoTag}
             />
             {hasUnplacedTags && (
               <div className="media-tags-validation-warning">

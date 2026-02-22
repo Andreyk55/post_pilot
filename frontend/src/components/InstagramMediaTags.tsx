@@ -13,9 +13,11 @@ interface InstagramMediaTagsProps {
   caption: string
   mediaTags: MediaTag[]
   onMediaTagsChange: (tags: MediaTag[]) => void
-  /** S3 key of the selected image */
+  /** S3 key of the selected media (image or video) */
   mediaS3Key: string | null
   disabled?: boolean
+  /** When true, hides the image placement editor (video tags auto-place at center) */
+  isVideo?: boolean
 }
 
 export function InstagramMediaTags({
@@ -24,6 +26,7 @@ export function InstagramMediaTags({
   onMediaTagsChange,
   mediaS3Key,
   disabled,
+  isVideo = false,
 }: InstagramMediaTagsProps) {
   const [input, setInput] = useState('')
   const [inputError, setInputError] = useState<string | null>(null)
@@ -112,7 +115,9 @@ export function InstagramMediaTags({
     <div className="media-tags-section">
       <label className="media-tags-label">Tag people on media (optional)</label>
       <p className="media-tags-helper">
-        Tags appear on the photo. Add @username or paste a profile URL, then click the image to place.
+        {isVideo
+          ? 'Add @username or paste a profile URL. Tags will be applied on publish.'
+          : 'Tags appear on the photo. Add @username or paste a profile URL, then click the image to place.'}
       </p>
       <p className="media-tags-microcopy">
         Media tags may require approval by the tagged account.
@@ -164,13 +169,15 @@ export function InstagramMediaTags({
           {mediaTags.map(tag => (
             <span
               key={tag.username}
-              className={`media-tags-chip tag ${isPlaced(tag) ? 'placed' : 'not-placed'} ${selectedTag?.toLowerCase() === tag.username.toLowerCase() ? 'selected' : ''}`}
-              onClick={() => !disabled && setSelectedTag(tag.username)}
+              className={`media-tags-chip tag ${isVideo || isPlaced(tag) ? 'placed' : 'not-placed'} ${selectedTag?.toLowerCase() === tag.username.toLowerCase() ? 'selected' : ''}`}
+              onClick={() => !disabled && !isVideo && setSelectedTag(tag.username)}
             >
               @{tag.username}
-              <span className="media-tags-chip-status">
-                {isPlaced(tag) ? 'Placed' : 'Not placed'}
-              </span>
+              {!isVideo && (
+                <span className="media-tags-chip-status">
+                  {isPlaced(tag) ? 'Placed' : 'Not placed'}
+                </span>
+              )}
               <button
                 type="button"
                 className="media-tags-chip-remove"
@@ -185,8 +192,8 @@ export function InstagramMediaTags({
         </div>
       )}
 
-      {/* Image placement editor */}
-      {imageUrl && mediaTags.length > 0 && (
+      {/* Image placement editor — hidden for video (tags auto-place at center) */}
+      {!isVideo && imageUrl && mediaTags.length > 0 && (
         <div className="media-tags-editor">
           <div className="media-tags-editor-label">
             {selectedTag

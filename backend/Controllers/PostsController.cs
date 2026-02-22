@@ -506,23 +506,24 @@ public class PostsController : ControllerBase
                     }
                 }
 
-                // Only include tags for image posts (MVP: single image only)
+                // Include tags for single image or single video posts (not carousel)
                 var mediaType = request.MediaType ?? MediaType.None;
-                if (mediaType == MediaType.Image && request.MediaItems is not { Count: > 0 })
+                if ((mediaType == MediaType.Image || mediaType == MediaType.Video) && request.MediaItems is not { Count: > 0 })
                 {
                     serializedUserTags = JsonSerializer.Serialize(
                         request.InstagramUserTags.Select(t => new { username = t.Username, x = t.X, y = t.Y }),
                         new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
                     _logger.LogInformation(
-                        "Instagram user tags: {Count} tags ({Usernames}) | Serialized JSON: {Json}",
+                        "Instagram user tags: {Count} tags ({Usernames}) for {MediaType} | Serialized JSON: {Json}",
                         request.InstagramUserTags.Count,
                         string.Join(", ", request.InstagramUserTags.Select(t => "@" + t.Username)),
+                        mediaType,
                         serializedUserTags);
                 }
                 else
                 {
-                    _logger.LogWarning("Instagram user tags provided for non-single-image post (MediaType={MediaType}). Ignoring.",
-                        mediaType);
+                    _logger.LogWarning("Instagram user tags provided for unsupported post type (MediaType={MediaType}, carousel={IsCarousel}). Ignoring.",
+                        mediaType, request.MediaItems is { Count: > 0 });
                 }
             }
         }

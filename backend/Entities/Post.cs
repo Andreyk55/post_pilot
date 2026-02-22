@@ -141,9 +141,9 @@ public class Post
     public string? FacebookStoryMediaId { get; set; }
 
     /// <summary>
-    /// JSON array of Instagram user tags (people tagged on the image).
+    /// JSON array of Instagram user tags (people tagged on the media).
     /// Format: [{"username":"nike","x":0.52,"y":0.33}, ...]
-    /// Only applicable for Instagram Feed Image posts. Null if no tags.
+    /// Supported for Instagram Feed Image and Video/Reels posts. Null if no tags.
     /// </summary>
     public string? InstagramUserTags { get; set; }
 

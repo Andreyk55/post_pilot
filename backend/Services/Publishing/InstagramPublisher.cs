@@ -394,13 +394,48 @@ public class InstagramPublisher : IPostPublisher
     {
         var igUserId = post.TargetInstagramAccount!.IgBusinessId;
 
-        // Warn if user_tags were set on a non-IMAGE post (IG only supports user_tags on images)
-        if (!string.IsNullOrEmpty(post.InstagramUserTags))
+        // Pre-validate user_tags before sending to Meta (same validation as image flow)
+        var userTagsJson = post.InstagramUserTags;
+        if (!string.IsNullOrEmpty(userTagsJson))
         {
-            _logger.LogWarning(
-                "[IG_DEBUG] user_tags WARNING: ignoring user_tags (MVP) — user_tags are only supported on IMAGE media, " +
-                "but this post is VIDEO. Post {PostId}, user_tags={UserTags}",
-                post.Id, post.InstagramUserTags);
+            _logger.LogInformation(
+                "[USER_TAGS] Post {PostId}: user_tags present on VIDEO entity",
+                post.Id);
+            _logger.LogDebug(
+                "[USER_TAGS] Post {PostId}: raw value: {UserTags}",
+                post.Id, userTagsJson);
+
+            try
+            {
+                var tags = JsonSerializer.Deserialize<List<Dictionary<string, JsonElement>>>(userTagsJson);
+                if (tags != null)
+                {
+                    var missingCoords = tags
+                        .Where(t => !t.ContainsKey("x") || !t.ContainsKey("y"))
+                        .Select(t => t.TryGetValue("username", out var u) ? u.GetString() : "(unknown)")
+                        .ToList();
+
+                    if (missingCoords.Count > 0)
+                    {
+                        _logger.LogWarning(
+                            "[IG_DEBUG] user_tags WARNING: {Count} tag(s) missing x/y coordinates — usernames: {Usernames}. " +
+                            "Meta may silently ignore tags without coordinates on video posts.",
+                            missingCoords.Count, string.Join(", ", missingCoords));
+                    }
+                }
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogWarning(ex,
+                    "[IG_DEBUG] user_tags WARNING: failed to parse user_tags for validation — raw: {UserTags}",
+                    userTagsJson);
+            }
+        }
+        else
+        {
+            _logger.LogInformation(
+                "[USER_TAGS] Post {PostId}: no user_tags on VIDEO entity (null/empty)",
+                post.Id);
         }
 
         // Step A: Create container if we don't have one yet
@@ -409,7 +444,8 @@ public class InstagramPublisher : IPostPublisher
             var mediaUrl = ResolveMediaUrl(post);
 
             var containerResult = await CreateVideoContainerAsync(
-                igUserId, mediaUrl, post.Content, accessToken, cancellationToken);
+                igUserId, mediaUrl, post.Content, accessToken, cancellationToken,
+                userTagsJson: userTagsJson);
 
             if (!containerResult.Success)
                 return containerResult;
@@ -1163,7 +1199,7 @@ public class InstagramPublisher : IPostPublisher
             url, igUserId);
         _logger.LogDebug(
             "IG_OUTBOUND_PARAMS image_url={ImageUrl} caption={Caption} user_tags={UserTags}",
-            imageUrl, TruncateCaption(caption), userTagsJson ?? "(none)");
+            RedactUrl(imageUrl), TruncateCaption(caption), userTagsJson ?? "(none)");
 
         // Log the full form body (sanitized) at debug only
         var debugBody = await content.ReadAsStringAsync(cancellationToken);
@@ -1189,13 +1225,24 @@ public class InstagramPublisher : IPostPublisher
 
     /// <summary>
     /// POST /{ig-user-id}/media with media_type=REELS, video_url, and caption (video container).
+    /// Optionally includes user_tags for tagging people on the video/reel.
+    ///
+    /// Important: Instagram requires that video/reel user_tags contain ONLY username (no x/y positions).
+    /// Image tags use [{"username":"nike","x":0.5,"y":0.5}] but video tags must be [{"username":"nike"}].
+    /// This method strips x/y from the stored tag JSON before sending.
+    ///
+    /// Fallback: if the request still fails with code=100 (Invalid parameter) AND user_tags were sent,
+    /// retries once without user_tags entirely. The post is still published — just without tags.
     /// </summary>
     private async Task<PublishResult> CreateVideoContainerAsync(
         string igUserId, string videoUrl, string caption,
-        string accessToken, CancellationToken cancellationToken)
+        string accessToken, CancellationToken cancellationToken,
+        string? userTagsJson = null)
     {
         var url = $"{GraphApiBaseUrl}/{igUserId}/media";
-        var formFields = new Dictionary<string, string>
+
+        // Build base form fields (always present)
+        var baseFields = new Dictionary<string, string>
         {
             ["media_type"] = "REELS",
             ["video_url"] = videoUrl,
@@ -1203,36 +1250,155 @@ public class InstagramPublisher : IPostPublisher
             ["access_token"] = accessToken,
         };
 
+        // Strip x/y positions from tags — IG rejects positions on video/reel containers.
+        // DB stores [{"username":"nike","x":0.5,"y":0.5}], but video must send [{"username":"nike"}].
+        var videoTagsJson = StripPositionsFromUserTags(userTagsJson);
+        var hasTags = !string.IsNullOrEmpty(videoTagsJson);
+
+        // First attempt: include user_tags (username-only) if present
+        var formFields = new Dictionary<string, string>(baseFields);
+        if (hasTags)
+        {
+            formFields["user_tags"] = videoTagsJson!;
+        }
+
+        // ── IG_CREATE_CONTAINER request (video, attempt 1) ──
+        LogVideoContainerRequest(url, igUserId, formFields, videoUrl, caption, videoTagsJson, attempt: 1);
+
         var content = new FormUrlEncodedContent(formFields);
-
-        // ── IG CREATE CONTAINER start (video) ──
-        _logger.LogInformation(PostPilotLogEvents.OutboundCall,
-            "IG_OUTBOUND POST {Url} igUserId={IgUserId} mediaType=REELS",
-            url, igUserId);
-        _logger.LogDebug(
-            "IG_OUTBOUND_PARAMS video_url={VideoUrl} caption={Caption} media_type=REELS",
-            videoUrl, TruncateCaption(caption));
-
-        // Log the full form body (sanitized) at debug only
-        var debugBody = await content.ReadAsStringAsync(cancellationToken);
-        _logger.LogDebug("IG_OUTBOUND_BODY {Body}", SanitizeForLog(debugBody));
-
         var response = await _httpClient.PostAsync(url, content, cancellationToken);
         var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
-        // ── IG CREATE CONTAINER response ──
-        _logger.LogInformation(PostPilotLogEvents.PublishAttempt,
-            "IG_RESPONSE {StatusCode} step=video-container",
-            (int)response.StatusCode);
-        _logger.LogDebug("IG_RESPONSE_BODY body={Body}", SanitizeForLog(responseBody));
+        // ── IG_CREATE_CONTAINER response ──
+        LogVideoContainerResponse(response, responseBody, attempt: 1);
+
+        // Fallback: if tags still caused "Invalid parameter" (code=100), retry without them entirely
+        if (hasTags && !response.IsSuccessStatusCode)
+        {
+            var shouldRetryWithoutTags = false;
+            try
+            {
+                var errBody = JsonSerializer.Deserialize<MetaErrorResponseIg>(responseBody);
+                var code = errBody?.Error?.Code ?? 0;
+                var subcode = errBody?.Error?.ErrorSubcode;
+                var message = errBody?.Error?.Message ?? "";
+
+                if (code == 100 &&
+                    (subcode == 2207064 ||
+                     message.Contains("Invalid parameter", StringComparison.OrdinalIgnoreCase) ||
+                     message.Contains("user tag", StringComparison.OrdinalIgnoreCase)))
+                {
+                    shouldRetryWithoutTags = true;
+                }
+            }
+            catch (JsonException)
+            {
+                // Can't parse error body — don't retry, fall through to normal failure
+            }
+
+            if (shouldRetryWithoutTags)
+            {
+                _logger.LogWarning(PostPilotLogEvents.OutboundError,
+                    "IG_CREATE_CONTAINER FALLBACK: IG rejected user_tags for video container (code=100). " +
+                    "Retrying WITHOUT tags. igUserId={IgUserId} videoTags={VideoTags}",
+                    igUserId, videoTagsJson);
+
+                var retryFields = new Dictionary<string, string>(baseFields);
+
+                LogVideoContainerRequest(url, igUserId, retryFields, videoUrl, caption, userTagsJson: null, attempt: 2);
+
+                var retryContent = new FormUrlEncodedContent(retryFields);
+                response = await _httpClient.PostAsync(url, retryContent, cancellationToken);
+                responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+                LogVideoContainerResponse(response, responseBody, attempt: 2);
+            }
+        }
 
         var parsed = ParseMetaIdResponse(response, responseBody, "video container creation");
 
         _logger.LogDebug(
-            "IG_CONTAINER_PARSED success={Success} creation_id={CreationId}",
+            "IG_CREATE_CONTAINER PARSED success={Success} creation_id={CreationId}",
             parsed.Success, parsed.ExternalPostId ?? "(null)");
 
         return parsed;
+    }
+
+    /// <summary>
+    /// Strips x/y position fields from user_tags JSON, returning username-only tags.
+    /// Instagram requires that video/reel tags do NOT include position coordinates.
+    ///
+    /// Input:  [{"username":"nike","x":0.5,"y":0.5},{"username":"adidas","x":0.1,"y":0.9}]
+    /// Output: [{"username":"nike"},{"username":"adidas"}]
+    ///
+    /// Returns null if input is null/empty or parsing fails.
+    /// </summary>
+    internal static string? StripPositionsFromUserTags(string? userTagsJson)
+    {
+        if (string.IsNullOrEmpty(userTagsJson))
+            return null;
+
+        try
+        {
+            var tags = JsonSerializer.Deserialize<List<Dictionary<string, JsonElement>>>(userTagsJson);
+            if (tags == null || tags.Count == 0)
+                return null;
+
+            // Extract only username from each tag object
+            var usernameOnly = tags
+                .Select(t => new { username = t.TryGetValue("username", out var u) ? u.GetString() : null })
+                .Where(t => !string.IsNullOrEmpty(t.username))
+                .ToList();
+
+            if (usernameOnly.Count == 0)
+                return null;
+
+            return JsonSerializer.Serialize(usernameOnly);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Structured request log for video container creation.
+    /// Logs all outgoing parameters as key-value pairs with sensitive fields redacted.
+    /// </summary>
+    private void LogVideoContainerRequest(
+        string url, string igUserId, Dictionary<string, string> formFields,
+        string videoUrl, string caption, string? userTagsJson, int attempt)
+    {
+        // Build a sanitized copy of all params for structured logging
+        var sanitizedParams = new Dictionary<string, string>();
+        foreach (var kvp in formFields)
+        {
+            sanitizedParams[kvp.Key] = kvp.Key switch
+            {
+                "access_token" => "***REDACTED***",
+                "video_url" => RedactUrl(kvp.Value),
+                "image_url" => RedactUrl(kvp.Value),
+                _ => kvp.Value,
+            };
+        }
+
+        var paramsJson = JsonSerializer.Serialize(sanitizedParams);
+
+        _logger.LogInformation(PostPilotLogEvents.OutboundCall,
+            "IG_CREATE_CONTAINER REQUEST attempt={Attempt} POST {Url} igUserId={IgUserId} " +
+            "mediaType=REELS hasUserTags={HasTags} params={Params}",
+            attempt, url, igUserId, !string.IsNullOrEmpty(userTagsJson), paramsJson);
+    }
+
+    /// <summary>
+    /// Structured response log for video container creation.
+    /// </summary>
+    private void LogVideoContainerResponse(
+        HttpResponseMessage response, string responseBody, int attempt)
+    {
+        _logger.LogInformation(PostPilotLogEvents.PublishAttempt,
+            "IG_CREATE_CONTAINER RESPONSE attempt={Attempt} httpStatus={StatusCode} body={Body}",
+            attempt, (int)response.StatusCode, SanitizeForLog(responseBody));
     }
 
     /// <summary>
@@ -1621,8 +1787,11 @@ public class InstagramPublisher : IPostPublisher
     // ──────────────────────────────────────────────
 
     /// <summary>
-    /// Redacts access_token values from URL-encoded bodies (access_token=...) and
-    /// JSON properties ("access_token":"...") so tokens are never written to logs.
+    /// Redacts sensitive fields from URL-encoded bodies and JSON properties so secrets
+    /// and signed URLs are never written to logs.
+    ///
+    /// Redacted fields: access_token, video_url, image_url.
+    /// For URLs (video_url, image_url): keeps scheme + host + last 12 chars of path for traceability.
     /// </summary>
     private static string SanitizeForLog(string raw)
     {
@@ -1636,7 +1805,45 @@ public class InstagramPublisher : IPostPublisher
         result = System.Text.RegularExpressions.Regex.Replace(
             result, @"""access_token""\s*:\s*""[^""]*""", "\"access_token\":\"***REDACTED***\"");
 
+        // URL-encoded form: video_url=XXXXX& or video_url=XXXXX (at end)
+        result = System.Text.RegularExpressions.Regex.Replace(
+            result, @"(video_url|image_url)=[^&\s]+", match => RedactUrlFormField(match.Value));
+
         return result;
+    }
+
+    /// <summary>
+    /// Redacts a URL-encoded form field value (e.g., "video_url=https://...long-signed-url")
+    /// keeping only the field name, scheme+host, and last 12 chars of the path for traceability.
+    /// </summary>
+    private static string RedactUrlFormField(string formField)
+    {
+        var eqIdx = formField.IndexOf('=');
+        if (eqIdx < 0) return formField;
+
+        var key = formField[..eqIdx];
+        var value = Uri.UnescapeDataString(formField[(eqIdx + 1)..]);
+        return $"{key}={RedactUrl(value)}";
+    }
+
+    /// <summary>
+    /// Redacts a URL to scheme+host + last 12 chars of path for traceability.
+    /// Example: "https://my-bucket.s3.amazonaws.com/...abc123def456"
+    /// </summary>
+    private static string RedactUrl(string? url)
+    {
+        if (string.IsNullOrEmpty(url)) return "(empty)";
+
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            var tail = url.Length > 12 ? url[^12..] : url;
+            return $"{uri.Scheme}://{uri.Host}/...{tail}";
+        }
+
+        // Not a valid URL — show first 20 + last 12 chars
+        if (url.Length > 40)
+            return $"{url[..20]}...{url[^12..]}";
+        return url;
     }
 
     /// <summary>
