@@ -38,6 +38,8 @@ public record PostDetailsDto(
     string? ExternalPostId,
     string? ErrorMessage,
     int RetryCount,
+    int ProcessingPollCount,
+    DateTime? NextRetryAt,
     PostEngagementDto? Engagement,
     string? ExternalPostUrl,
     string? ProfileUrl,

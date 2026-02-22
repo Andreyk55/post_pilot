@@ -56,18 +56,44 @@ public class LocalSchedulerBackgroundService : BackgroundService
             var now = DateTime.UtcNow;
             var stuckThreshold = now.AddMinutes(-5); // Posts stuck in Publishing for 5+ minutes
 
-            // Reset posts stuck in Publishing status (safety net for crashes)
+            // Recover posts stuck in Publishing status (safety net for crashes)
+            // Increment RetryCount; if max retries exceeded, fail permanently.
             var stuckPosts = await dbContext.Posts
                 .Where(p => p.Status == PostStatus.Publishing && p.UpdatedAt < stuckThreshold)
-                .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(p => p.Status, PostStatus.RetryPending)
-                    .SetProperty(p => p.NextRetryAt, now)
-                    .SetProperty(p => p.UpdatedAt, now),
-                    cancellationToken);
+                .ToListAsync(cancellationToken);
 
-            if (stuckPosts > 0)
+            foreach (var stuck in stuckPosts)
             {
-                _logger.LogWarning("Reset {Count} posts stuck in Publishing status", stuckPosts);
+                var previousUpdatedAt = stuck.UpdatedAt;
+                stuck.RetryCount++;
+                stuck.UpdatedAt = now;
+
+                if (stuck.RetryCount >= stuck.MaxRetries)
+                {
+                    stuck.Status = PostStatus.Failed;
+                    stuck.ErrorMessage = $"Stuck in Publishing for >5 minutes (recovered {stuck.RetryCount}/{stuck.MaxRetries} times)";
+                    stuck.NextRetryAt = null;
+
+                    _logger.LogWarning(
+                        "Stuck Publishing post failed permanently: PostId={PostId} PreviousUpdatedAt={PreviousUpdatedAt} Status=Failed RetryCount={RetryCount}/{MaxRetries}",
+                        stuck.Id, previousUpdatedAt, stuck.RetryCount, stuck.MaxRetries);
+                }
+                else
+                {
+                    stuck.Status = PostStatus.RetryPending;
+                    stuck.NextRetryAt = now.AddSeconds(10);
+                    stuck.ErrorMessage = $"Recovered from stuck Publishing (attempt {stuck.RetryCount}/{stuck.MaxRetries})";
+
+                    _logger.LogWarning(
+                        "Stuck Publishing post recovered: PostId={PostId} PreviousUpdatedAt={PreviousUpdatedAt} Status=RetryPending RetryCount={RetryCount}/{MaxRetries}",
+                        stuck.Id, previousUpdatedAt, stuck.RetryCount, stuck.MaxRetries);
+                }
+            }
+
+            if (stuckPosts.Count > 0)
+            {
+                await dbContext.SaveChangesAsync(cancellationToken);
+                _logger.LogWarning("Processed {Count} posts stuck in Publishing status", stuckPosts.Count);
             }
 
             // Find posts that are due for publication (Facebook + Instagram)

@@ -227,6 +227,8 @@ public class PostsController : ControllerBase
             ExternalPostId: post.ExternalPostId,
             ErrorMessage: post.ErrorMessage,
             RetryCount: post.RetryCount,
+            ProcessingPollCount: post.ProcessingPollCount,
+            NextRetryAt: post.NextRetryAt,
             Engagement: engagement,
             ExternalPostUrl: externalPostUrl,
             ProfileUrl: profileUrl,
@@ -1075,6 +1077,8 @@ public record PostDto(
     string? ExternalPostUrl,
     string? ErrorMessage,
     int RetryCount,
+    int ProcessingPollCount,
+    DateTime? NextRetryAt,
     string? SelectedThumbnailUrl,
     string? InstagramMediaType,
     List<PostMediaItemDto>? MediaItems = null
@@ -1102,6 +1106,8 @@ public record PostDto(
         post.ExternalPostUrl,
         post.ErrorMessage,
         post.RetryCount,
+        post.ProcessingPollCount,
+        post.NextRetryAt,
         post.SelectedThumbnailUrl,
         post.InstagramMediaType?.ToString(),
         post.MediaItems?.Count > 0

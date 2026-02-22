@@ -31,8 +31,17 @@ const platformConfig: Record<string, { icon: string; name: string; color: string
   LinkedIn: { icon: '', name: 'LinkedIn', color: '#0A66C2' },
 }
 
-const getStatusConfig = (status: PostStatus) => {
-  switch (status) {
+/** Returns the effective display status, mapping RetryPending with processing context to Processing. */
+const getDisplayStatus = (post: Post): PostStatus => {
+  if (post.status === 'RetryPending' && post.processingPollCount > 0 && post.retryCount === 0) {
+    return 'Processing'
+  }
+  return post.status
+}
+
+const getStatusConfig = (post: Post) => {
+  const displayStatus = getDisplayStatus(post)
+  switch (displayStatus) {
     case 'Scheduled':
       return { label: 'Scheduled', className: 'status-scheduled', tooltip: '' }
     case 'Publishing':
@@ -48,7 +57,7 @@ const getStatusConfig = (status: PostStatus) => {
     case 'Canceled':
       return { label: 'Canceled', className: 'status-canceled', tooltip: '' }
     default:
-      return { label: status, className: '', tooltip: '' }
+      return { label: displayStatus, className: '', tooltip: '' }
   }
 }
 
@@ -72,6 +81,9 @@ const getRightDateInfo = (post: Post, details: PostDetails): { label: string; va
   if (post.status === 'Published') {
     return { label: 'Published', value: details.publishedAt }
   }
+  if (post.status === 'RetryPending' && post.nextRetryAt) {
+    return { label: 'Retry at', value: post.nextRetryAt }
+  }
   return { label: 'Scheduled at', value: details.scheduledAt }
 }
 
@@ -92,7 +104,7 @@ export function PostItem({ post, onCancel, onDelete, cachedDetails, onDetailsFet
   const [hasOverflow, setHasOverflow] = useState(false)
 
   const platform = platformConfig[post.platform]
-  const statusConfig = getStatusConfig(post.status)
+  const statusConfig = getStatusConfig(post)
 
   // Check if content overflows
   useEffect(() => {
@@ -188,7 +200,7 @@ export function PostItem({ post, onCancel, onDelete, cachedDetails, onDetailsFet
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
               </svg>
-              {post.errorMessage}
+              {post.errorMessage.replace(/\s*\(poll \d+\/\d+\)/g, '')}
             </div>
           )}
         </div>

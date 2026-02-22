@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
-import type { Post } from '../api/posts'
+import type { Post, PostStatus } from '../api/posts'
 import { getMediaUrl, getMediaTypeFromFile } from '../api/media'
 import { VideoThumbnail } from './VideoThumbnail'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -15,6 +15,14 @@ const statusDisplayLabel: Record<string, string> = {
   RetryPending: 'Retrying',
   Canceled: 'Canceled',
   Processing: 'Processing',
+}
+
+/** Returns the effective display status, mapping RetryPending with processing context to Processing. */
+const getDisplayStatus = (post: Post): PostStatus => {
+  if (post.status === 'RetryPending' && post.processingPollCount > 0 && post.retryCount === 0) {
+    return 'Processing'
+  }
+  return post.status
 }
 
 // Helper to get effective media type (use mediaType if set, otherwise detect from URL)
@@ -350,11 +358,11 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
                     </span>
                     <span
                       className="status-badge"
-                      data-status={post.status.toLowerCase()}
-                      title={post.status === 'Processing' ? 'Meta is processing the media. We\u2019ll publish automatically when ready.' : undefined}
+                      data-status={getDisplayStatus(post).toLowerCase()}
+                      title={getDisplayStatus(post) === 'Processing' ? 'Meta is processing the media. We\u2019ll publish automatically when ready.' : undefined}
                     >
                       <span className="status-dot" />
-                      {statusDisplayLabel[post.status] || post.status}
+                      {statusDisplayLabel[getDisplayStatus(post)] || post.status}
                     </span>
                     {getContentBadges(post).map(badge => (
                       <span key={badge.key} className="media-type-badge" data-type={badge.dataType}>

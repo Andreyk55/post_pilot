@@ -42,6 +42,8 @@ export interface Post {
   profileUrl: string | null
   errorMessage: string | null
   retryCount: number
+  processingPollCount: number
+  nextRetryAt: string | null
   selectedThumbnailUrl: string | null
   instagramMediaType: string | null
   mediaItems: PostMediaItem[] | null
@@ -102,6 +104,8 @@ export interface PostDetails {
   externalPostId: string | null
   errorMessage: string | null
   retryCount: number
+  processingPollCount: number
+  nextRetryAt: string | null
   engagement: PostEngagement | null
   externalPostUrl: string | null
   profileUrl: string | null

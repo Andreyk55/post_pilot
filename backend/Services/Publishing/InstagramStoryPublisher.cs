@@ -43,7 +43,20 @@ public class InstagramStoryPublisher : IStoryPublisher
     private static readonly TimeSpan ImagePollInterval = TimeSpan.FromSeconds(2);
 
     // Video processing retry interval
-    private static readonly TimeSpan VideoProcessingRetryDelay = TimeSpan.FromSeconds(30);
+    /// <summary>
+    /// Computes progressive polling delay based on poll count.
+    /// Polls 1–4: 30s, 5–10: 60s, 11–15: 120s, 16–20: 180s.
+    /// </summary>
+    private static int GetProcessingPollDelaySeconds(int pollCount)
+    {
+        return pollCount switch
+        {
+            <= 4  => 30,
+            <= 10 => 60,
+            <= 15 => 120,
+            _     => 180,
+        };
+    }
 
     // Meta error codes — transient (retry)
     private static readonly HashSet<int> TransientErrorCodes = new()
@@ -195,12 +208,20 @@ public class InstagramStoryPublisher : IStoryPublisher
                     ErrorMessage: "Request timed out"),
                 cancellationToken);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsTransientException(ex))
         {
-            _logger.LogError(ex, "Unexpected error publishing Instagram story {PostId}", postId);
+            _logger.LogError(ex, "Transient error publishing Instagram story {PostId}", postId);
             return await HandlePublishFailureAsync(post,
                 new PublishResult(false, ErrorType: PublishErrorType.Transient,
-                    ErrorMessage: ex.Message),
+                    ErrorMessage: $"Transient error: {ex.Message}"),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Internal error (non-retryable) publishing Instagram story {PostId}: {ExceptionType}", postId, ex.GetType().Name);
+            return await HandlePublishFailureAsync(post,
+                new PublishResult(false, ErrorType: PublishErrorType.Permanent,
+                    ErrorMessage: $"Internal error (non-retryable): {ex.GetType().Name}: {ex.Message}"),
                 cancellationToken);
         }
     }
@@ -328,7 +349,7 @@ public class InstagramStoryPublisher : IStoryPublisher
                 post.Id, Post.MaxProcessingPollCount);
 
             post.Status = PostStatus.Failed;
-            post.ErrorMessage = $"Video processing timed out after {post.ProcessingPollCount} status checks (~{post.ProcessingPollCount * 30}s)";
+            post.ErrorMessage = $"Video processing timed out after {post.ProcessingPollCount} status checks";
             post.UpdatedAt = DateTime.UtcNow;
             await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -337,19 +358,20 @@ public class InstagramStoryPublisher : IStoryPublisher
                 ErrorMessage: post.ErrorMessage);
         }
 
-        var retryAt = DateTime.UtcNow.Add(VideoProcessingRetryDelay);
+        var delaySeconds = GetProcessingPollDelaySeconds(post.ProcessingPollCount);
+        var retryAt = DateTime.UtcNow.AddSeconds(delaySeconds);
 
         post.Status = PostStatus.Processing;
         post.NextRetryAt = retryAt;
-        post.ErrorMessage = $"Processing\u2026 (poll {post.ProcessingPollCount}/{Post.MaxProcessingPollCount})";
+        post.ErrorMessage = $"Processing\u2026";
         post.UpdatedAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         await _scheduler.ScheduleRetryAsync(post, retryAt, cancellationToken);
 
         _logger.LogInformation(
-            "Processing check scheduled (poll {PollCount}/{MaxPoll}) NextRetryAt={RetryAt} PostId={PostId}",
-            post.ProcessingPollCount, Post.MaxProcessingPollCount, retryAt, post.Id);
+            "Processing poll scheduled: poll={PollCount}/{MaxPoll} next={RetryAt} delay={DelaySeconds}s PostId={PostId}",
+            post.ProcessingPollCount, Post.MaxProcessingPollCount, retryAt, delaySeconds, post.Id);
 
         return new PublishResult(true);
     }
@@ -543,10 +565,10 @@ public class InstagramStoryPublisher : IStoryPublisher
         {
             var error = JsonSerializer.Deserialize<MetaErrorResponseLocal>(responseBody);
             var errorCode = error?.Error?.Code ?? 0;
-            var errorType = ClassifyError(errorCode);
+            var errorType = ClassifyError(errorCode, error?.Error?.ErrorSubcode, error?.Error?.FbTraceId, error?.Error?.Message);
 
-            _logger.LogWarning("IG {Operation} error: Code={Code}, Message={Message}",
-                operation, errorCode, error?.Error?.Message);
+            _logger.LogWarning("IG {Operation} error: Code={Code}, Subcode={Subcode}, Message={Message}, FbTraceId={FbTraceId}",
+                operation, errorCode, error?.Error?.ErrorSubcode, error?.Error?.Message, error?.Error?.FbTraceId);
 
             return new PublishResult(false,
                 ErrorType: errorType,
@@ -554,7 +576,7 @@ public class InstagramStoryPublisher : IStoryPublisher
         }
     }
 
-    private PublishErrorType ClassifyError(int errorCode)
+    private PublishErrorType ClassifyError(int errorCode, int? subcode = null, string? fbTraceId = null, string? message = null)
     {
         if (PermanentErrorCodes.Contains(errorCode))
             return PublishErrorType.Permanent;
@@ -562,7 +584,23 @@ public class InstagramStoryPublisher : IStoryPublisher
         if (TransientErrorCodes.Contains(errorCode))
             return PublishErrorType.Transient;
 
+        // Unknown code — default to transient but log details for investigation
+        _logger.LogWarning(
+            "Unknown Meta API error code defaulting to Transient: Code={Code} Subcode={Subcode} FbTraceId={FbTraceId} Message={Message}",
+            errorCode, subcode, fbTraceId, message);
         return PublishErrorType.Transient;
+    }
+
+    /// <summary>
+    /// Returns true for exceptions that represent transient failures (network, timeout).
+    /// Programming bugs (NullReference, Argument, etc.) return false → permanent failure.
+    /// </summary>
+    private static bool IsTransientException(Exception ex)
+    {
+        return ex is HttpRequestException
+            or TimeoutException
+            or TaskCanceledException
+            or OperationCanceledException;
     }
 
     private async Task<bool> TryClaimPostAsync(Post post, CancellationToken cancellationToken)
@@ -714,4 +752,7 @@ internal class MetaErrorLocal
 
     [JsonPropertyName("type")]
     public string? Type { get; set; }
+
+    [JsonPropertyName("fbtrace_id")]
+    public string? FbTraceId { get; set; }
 }

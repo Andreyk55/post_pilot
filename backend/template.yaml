@@ -150,6 +150,39 @@ Resources:
       Tags:
         Environment: !Ref Environment
 
+  StuckRecoveryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub postpilot-stuck-recovery-${Environment}
+      Handler: PostPilot.Api::PostPilot.Api.Lambdas.StuckRecoveryFunction::FunctionHandler
+      CodeUri: .
+      Description: Recovers posts stuck in Publishing status for >10 minutes
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: '*'
+      VpcConfig:
+        !If
+          - HasVpcConfig
+          - SubnetIds: !Ref VpcSubnetIds
+            SecurityGroupIds: !Ref VpcSecurityGroupIds
+          - !Ref AWS::NoValue
+      Events:
+        ScheduleEvent:
+          Type: Schedule
+          Properties:
+            Schedule: rate(5 minutes)
+            Name: !Sub postpilot-stuck-recovery-schedule-${Environment}
+            Description: Recovers stuck Publishing posts every 5 minutes
+            Enabled: true
+      Tags:
+        Environment: !Ref Environment
+
   PublisherFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -305,6 +338,10 @@ Outputs:
   PublisherFunctionArn:
     Description: Publisher Lambda ARN
     Value: !GetAtt PublisherFunction.Arn
+
+  StuckRecoveryFunctionArn:
+    Description: Stuck Recovery Lambda ARN
+    Value: !GetAtt StuckRecoveryFunction.Arn
 
   PublishQueueUrl:
     Description: SQS Queue URL for publishing

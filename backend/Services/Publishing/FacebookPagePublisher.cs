@@ -162,12 +162,20 @@ public class FacebookPagePublisher : IPostPublisher
                     ErrorMessage: "Request timed out"),
                 cancellationToken);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsTransientException(ex))
         {
-            _logger.LogError(ex, "Unexpected error publishing post {PostId}", postId);
+            _logger.LogError(ex, "Transient error publishing post {PostId}", postId);
             return await HandlePublishFailureAsync(post,
                 new PublishResult(false, ErrorType: PublishErrorType.Transient,
-                    ErrorMessage: ex.Message),
+                    ErrorMessage: $"Transient error: {ex.Message}"),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Internal error (non-retryable) publishing post {PostId}: {ExceptionType}", postId, ex.GetType().Name);
+            return await HandlePublishFailureAsync(post,
+                new PublishResult(false, ErrorType: PublishErrorType.Permanent,
+                    ErrorMessage: $"Internal error (non-retryable): {ex.GetType().Name}: {ex.Message}"),
                 cancellationToken);
         }
     }
@@ -570,10 +578,10 @@ public class FacebookPagePublisher : IPostPublisher
         {
             var error = JsonSerializer.Deserialize<MetaErrorResponse>(responseBody);
             var errorCode = error?.Error?.Code ?? 0;
-            var errorType = ClassifyError(errorCode);
+            var errorType = ClassifyError(errorCode, error?.Error?.ErrorSubcode, error?.Error?.FbTraceId, error?.Error?.Message);
 
-            _logger.LogWarning("Meta API error for post {PostId}: Code={Code}, Message={Message}",
-                postId, errorCode, error?.Error?.Message);
+            _logger.LogWarning("Meta API error for post {PostId}: Code={Code}, Subcode={Subcode}, Message={Message}, FbTraceId={FbTraceId}",
+                postId, errorCode, error?.Error?.ErrorSubcode, error?.Error?.Message, error?.Error?.FbTraceId);
 
             return new PublishResult(false,
                 ErrorType: errorType,
@@ -605,10 +613,10 @@ public class FacebookPagePublisher : IPostPublisher
         {
             var error = JsonSerializer.Deserialize<MetaErrorResponse>(responseBody);
             var errorCode = error?.Error?.Code ?? 0;
-            var errorType = ClassifyError(errorCode);
+            var errorType = ClassifyError(errorCode, error?.Error?.ErrorSubcode, error?.Error?.FbTraceId, error?.Error?.Message);
 
-            _logger.LogWarning("FB unpublished photo upload error: Code={Code}, Message={Message}",
-                errorCode, error?.Error?.Message);
+            _logger.LogWarning("FB unpublished photo upload error: Code={Code}, Subcode={Subcode}, Message={Message}, FbTraceId={FbTraceId}",
+                errorCode, error?.Error?.ErrorSubcode, error?.Error?.Message, error?.Error?.FbTraceId);
 
             return new PublishResult(false,
                 ErrorType: errorType,
@@ -616,7 +624,7 @@ public class FacebookPagePublisher : IPostPublisher
         }
     }
 
-    private PublishErrorType ClassifyError(int errorCode)
+    private PublishErrorType ClassifyError(int errorCode, int? subcode = null, string? fbTraceId = null, string? message = null)
     {
         if (PermanentErrorCodes.Contains(errorCode))
             return PublishErrorType.Permanent;
@@ -624,9 +632,23 @@ public class FacebookPagePublisher : IPostPublisher
         if (TransientErrorCodes.Contains(errorCode))
             return PublishErrorType.Transient;
 
-        // HTTP 5xx errors are transient
-        // Default to transient for unknown errors (safer - we'll retry)
+        // Unknown code — default to transient but log details for investigation
+        _logger.LogWarning(
+            "Unknown Meta API error code defaulting to Transient: Code={Code} Subcode={Subcode} FbTraceId={FbTraceId} Message={Message}",
+            errorCode, subcode, fbTraceId, message);
         return PublishErrorType.Transient;
+    }
+
+    /// <summary>
+    /// Returns true for exceptions that represent transient failures (network, timeout).
+    /// Programming bugs (NullReference, Argument, etc.) return false → permanent failure.
+    /// </summary>
+    private static bool IsTransientException(Exception ex)
+    {
+        return ex is HttpRequestException
+            or TimeoutException
+            or TaskCanceledException
+            or OperationCanceledException;
     }
 
     private async Task MarkPublishedAsync(Post post, string externalPostId,
