@@ -7,6 +7,7 @@ import { MyPostsPage } from './pages/MyPostsPage'
 import { ConnectedAccountsPage } from './pages/ConnectedAccountsPage'
 import { AssetsPage } from './pages/AssetsPage'
 import { PlaceholderPage } from './pages/PlaceholderPage'
+import { GreetingPage } from './pages/GreetingPage'
 import { MetaOAuthCallback } from './pages/MetaOAuthCallback'
 import './App.css'
 
@@ -17,6 +18,8 @@ function MainApp() {
     switch (currentPage) {
       case 'dashboard':
         return <Dashboard />
+      case 'greeting':
+        return <GreetingPage />
       case 'schedule':
         return <SchedulePostsPage onNavigate={setCurrentPage} />
       case 'posts':

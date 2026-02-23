@@ -1,0 +1,77 @@
+.greeting-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 4rem);
+  padding: 2rem;
+  width: 100%;
+}
+
+.greeting-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 480px;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1.25rem;
+  padding: 3rem 2.5rem;
+  gap: 1rem;
+}
+
+.greeting-icon {
+  font-size: 4rem;
+}
+
+.greeting-heading {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.greeting-subtext {
+  color: rgba(255, 255, 255, 0.55);
+  margin: 0;
+  line-height: 1.6;
+}
+
+.greeting-tips {
+  margin-top: 1.5rem;
+  text-align: left;
+  width: 100%;
+}
+
+.greeting-tips h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: rgba(255, 255, 255, 0.75);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.greeting-tips ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.greeting-tips li {
+  color: rgba(255, 255, 255, 0.55);
+  padding-left: 1.25rem;
+  position: relative;
+  line-height: 1.5;
+}
+
+.greeting-tips li::before {
+  content: '→';
+  position: absolute;
+  left: 0;
+  color: rgba(255, 255, 255, 0.3);
+}
