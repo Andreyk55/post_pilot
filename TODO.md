@@ -2,6 +2,7 @@
 
 <!-- This file is maintained manually. Do not auto-edit. -->
 
+# publish now button behavour is wierd, should set time now and execute scedule post logic
 # mentions / taagging for FB
 # align mutiple media choice
 # fix labels and text in media chooser
