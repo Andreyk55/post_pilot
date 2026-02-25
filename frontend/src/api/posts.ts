@@ -67,6 +67,8 @@ export interface CreatePostRequest {
   selectedThumbnailUrl?: string | null
   mediaItems?: CreatePostMediaItem[] | null
   instagramUserTags?: InstagramUserTag[] | null
+  /** Per-media-item tags for carousel posts. Key = media item order (0-based). */
+  instagramMediaTags?: Record<number, InstagramUserTag[]> | null
 }
 
 export interface PaginatedResponse<T> {

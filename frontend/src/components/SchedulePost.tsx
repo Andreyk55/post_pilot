@@ -11,6 +11,7 @@ import { SuggestedTimes } from './SuggestedTimes'
 import { type VoiceProfileSummary } from '../api/voiceProfiles'
 import { InstagramMention } from './InstagramMention'
 import { InstagramMediaTags, type MediaTag } from './InstagramMediaTags'
+import { canShowCarouselTags, buildCarouselMediaTags } from '../utils/instagramTagging'
 import {
   getPostTextMaxChars,
   getPlatformDisplayName,
@@ -34,6 +35,7 @@ interface SchedulePostProps {
     selectedThumbnailUrl?: string
     mediaItems?: CreatePostMediaItem[]
     instagramUserTags?: InstagramUserTag[]
+    instagramMediaTags?: Record<number, InstagramUserTag[]>
   }) => void
   onPublishNow?: (data: {
     content: string
@@ -46,6 +48,7 @@ interface SchedulePostProps {
     selectedThumbnailUrl?: string
     mediaItems?: CreatePostMediaItem[]
     instagramUserTags?: InstagramUserTag[]
+    instagramMediaTags?: Record<number, InstagramUserTag[]>
   }) => Promise<void>
   voiceProfiles: VoiceProfileSummary[]
   onVoiceProfileModalOpen: (profileId?: string | null) => void
@@ -102,8 +105,13 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
   // Carousel (multi-image) state for Instagram
   const [carouselItems, setCarouselItems] = useState<UploadedMediaItem[]>([])
 
-  // Instagram media tags (tag people on image)
+  // Instagram media tags (tag people on single image/video)
   const [mediaTags, setMediaTags] = useState<MediaTag[]>([])
+
+  // Instagram per-media-item tags for carousel posts (key = media item order)
+  const [carouselMediaTags, setCarouselMediaTags] = useState<Map<number, MediaTag[]>>(new Map())
+  // Which carousel item is currently selected for tag editing (order index)
+  const [selectedCarouselItemIndex, setSelectedCarouselItemIndex] = useState<number>(0)
 
   // AI state (shared between AiAssistPanel and time suggestions)
   const [goal, setGoal] = useState<AiGoal>('Engage')
@@ -363,6 +371,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
       selectedThumbnailUrl: selectedThumbnailUrl || undefined,
       mediaItems: mediaItemsPayload,
       instagramUserTags: placedUserTags,
+      instagramMediaTags: carouselMediaTagsPayload,
     })
 
     // Reset form including language
@@ -382,6 +391,8 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
     setMediaValidationErrors([])
     setCarouselItems([])
     setMediaTags([])
+    setCarouselMediaTags(new Map())
+    setSelectedCarouselItemIndex(0)
     setStickyLanguage({ languageCode: 'unknown', confidence: 0, isReliable: false })
   }
 
@@ -401,6 +412,17 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
   // For video posts, tags are auto-placed at center (0.5, 0.5) — only images need manual placement
   const isVideoTag = mediaType === 'Video'
   const hasUnplacedTags = !isVideoTag && mediaTags.length > 0 && mediaTags.some(t => t.x === undefined || t.y === undefined)
+
+  // Instagram carousel per-image tagging
+  const showCarouselTags = canShowCarouselTags(isInstagramSelected, isStory, isMultiMedia)
+  // Check if any carousel image tags are unplaced (video tags auto-place at center)
+  const hasUnplacedCarouselTags = showCarouselTags && Array.from(carouselMediaTags.values()).some(tags =>
+    tags.some(t => {
+      const item = carouselItems.find((_, idx) => idx === selectedCarouselItemIndex)
+      // Only require placement for image tags, not video
+      return item?.mediaType !== 'Video' && (t.x === undefined || t.y === undefined)
+    })
+  )
 
   // --- Caption summary parsing (Instagram only) ---
   const captionSummary = useMemo(() => {
@@ -432,6 +454,14 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
       : mediaTags
           .filter(t => t.x !== undefined && t.y !== undefined)
           .map(t => ({ username: t.username, x: t.x!, y: t.y! }))
+    : undefined
+
+  // Build carousel per-media-item tags payload
+  const carouselMediaTagsPayload = showCarouselTags
+    ? buildCarouselMediaTags(
+        carouselMediaTags,
+        new Map(carouselItems.map((item, idx) => [idx, item.mediaType]))
+      )
     : undefined
 
   // Form is valid if there's content OR media, plus date/time/platform, not uploading, text within limits, and no invalid media
@@ -488,6 +518,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
         selectedThumbnailUrl: selectedThumbnailUrl || undefined,
         mediaItems: mediaItemsPayload,
         instagramUserTags: placedUserTags,
+        instagramMediaTags: carouselMediaTagsPayload,
       })
 
       // Reset form on success
@@ -877,6 +908,52 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
               <div className="media-tags-validation-warning">
                 Place all tags on the image (click the image to position each tag).
               </div>
+            )}
+          </div>
+        )}
+
+        {/* Instagram Carousel Per-Image Tags — tag people on each carousel item */}
+        {showCarouselTags && (
+          <div className="form-group">
+            <label className="media-tags-label">Tag people on carousel media (optional)</label>
+            <p className="media-tags-helper">
+              Select a media item below, then add tags for that item. Image tags need to be placed; video tags are applied automatically.
+            </p>
+
+            {/* Media item selector tabs */}
+            <div className="carousel-tag-tabs">
+              {carouselItems.map((item, idx) => {
+                const itemTags = carouselMediaTags.get(idx) ?? []
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    className={`carousel-tag-tab ${selectedCarouselItemIndex === idx ? 'active' : ''}`}
+                    onClick={() => setSelectedCarouselItemIndex(idx)}
+                  >
+                    {item.mediaType === 'Video' ? 'Video' : 'Image'} {idx + 1}
+                    {itemTags.length > 0 && <span className="carousel-tag-tab-badge">{itemTags.length}</span>}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Per-item tag editor */}
+            {carouselItems[selectedCarouselItemIndex] && (
+              <InstagramMediaTags
+                caption={content}
+                mediaTags={carouselMediaTags.get(selectedCarouselItemIndex) ?? []}
+                onMediaTagsChange={(tags) => {
+                  setCarouselMediaTags(prev => {
+                    const next = new Map(prev)
+                    next.set(selectedCarouselItemIndex, tags)
+                    return next
+                  })
+                }}
+                mediaS3Key={carouselItems[selectedCarouselItemIndex].s3Key}
+                disabled={!isComposerEnabled}
+                isVideo={carouselItems[selectedCarouselItemIndex].mediaType === 'Video'}
+              />
             )}
           </div>
         )}

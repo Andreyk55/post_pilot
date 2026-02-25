@@ -124,6 +124,8 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
           mediaItems: formData.postType !== 'Story' && (platform === 'Instagram' || platform === 'Facebook') ? formData.mediaItems : undefined,
           // Include Instagram user tags (media tags) for single-image IG feed posts
           instagramUserTags: platform === 'Instagram' ? formData.instagramUserTags : undefined,
+          // Include per-media-item Instagram tags for carousel posts
+          instagramMediaTags: platform === 'Instagram' ? formData.instagramMediaTags : undefined,
         }
         const post = await postsApi.create(request)
         newPosts.push(post)
@@ -164,6 +166,7 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
     selectedThumbnailUrl?: string
     mediaItems?: CreatePostMediaItem[]
     instagramUserTags?: InstagramUserTag[]
+    instagramMediaTags?: Record<number, InstagramUserTag[]>
   }) => {
     const scheduledAt = new Date().toISOString()
 
@@ -183,6 +186,7 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
         selectedThumbnailUrl: formData.selectedThumbnailUrl,
         mediaItems: formData.postType !== 'Story' && (platform === 'Instagram' || platform === 'Facebook') ? formData.mediaItems : undefined,
         instagramUserTags: platform === 'Instagram' ? formData.instagramUserTags : undefined,
+        instagramMediaTags: platform === 'Instagram' ? formData.instagramMediaTags : undefined,
       }
       // Create the post first, then immediately publish
       const post = await postsApi.create(request)

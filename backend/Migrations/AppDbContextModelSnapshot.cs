@@ -252,6 +252,9 @@ namespace PostPilot.Api.Migrations
                     b.Property<string>("InstagramCreationId")
                         .HasColumnType("text");
 
+                    b.Property<string>("InstagramMediaTagsJson")
+                        .HasColumnType("text");
+
                     b.Property<int?>("InstagramMediaType")
                         .HasColumnType("integer");
 

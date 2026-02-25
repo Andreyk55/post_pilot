@@ -528,6 +528,73 @@ public class PostsController : ControllerBase
             }
         }
 
+        // Instagram per-media-item tags validation (carousel posts)
+        string? serializedMediaTags = null;
+        if (request.InstagramMediaTags is { Count: > 0 })
+        {
+            if (request.Platform != Platform.Instagram || request.PostType != PostType.Feed)
+            {
+                _logger.LogWarning("Instagram per-media tags provided for non-IG-Feed post. Ignoring.");
+            }
+            else if (request.MediaItems is not { Count: >= 2 })
+            {
+                _logger.LogWarning("Instagram per-media tags provided for non-carousel post. Ignoring.");
+            }
+            else
+            {
+                var usernameRegex = new Regex(@"^[A-Za-z0-9._]{1,30}$");
+                var validMediaOrders = request.MediaItems.Select(m => m.Order).ToHashSet();
+
+                foreach (var (order, tags) in request.InstagramMediaTags)
+                {
+                    if (!validMediaOrders.Contains(order))
+                    {
+                        return BadRequest(new ProblemDetails
+                        {
+                            Title = "Invalid media tag index",
+                            Detail = $"Media tag index {order} does not match any media item.",
+                            Status = StatusCodes.Status400BadRequest,
+                        });
+                    }
+
+                    foreach (var tag in tags)
+                    {
+                        if (!usernameRegex.IsMatch(tag.Username))
+                        {
+                            return BadRequest(new ProblemDetails
+                            {
+                                Title = "Invalid user tag",
+                                Detail = $"Invalid Instagram username: '{tag.Username}' on media item {order}.",
+                                Status = StatusCodes.Status400BadRequest,
+                            });
+                        }
+                        if (tag.X < 0 || tag.X > 1 || tag.Y < 0 || tag.Y > 1)
+                        {
+                            return BadRequest(new ProblemDetails
+                            {
+                                Title = "Invalid user tag position",
+                                Detail = $"Tag position for @{tag.Username} on media item {order} is out of bounds.",
+                                Status = StatusCodes.Status400BadRequest,
+                            });
+                        }
+                    }
+                }
+
+                // Serialize: key = order string, value = tag array with username/x/y
+                var tagsDict = request.InstagramMediaTags.ToDictionary(
+                    kvp => kvp.Key.ToString(),
+                    kvp => kvp.Value.Select(t => new { username = t.Username, x = t.X, y = t.Y }).ToList()
+                );
+                serializedMediaTags = JsonSerializer.Serialize(tagsDict,
+                    new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+
+                var totalTags = request.InstagramMediaTags.Values.Sum(v => v.Count);
+                _logger.LogInformation(
+                    "Instagram per-media tags: {TotalTags} tags across {MediaCount} media items | JSON: {Json}",
+                    totalTags, request.InstagramMediaTags.Count, serializedMediaTags);
+            }
+        }
+
         // Note: Media validation is done client-side via POST /api/media/validate before submission.
         // The frontend blocks submission if media is invalid.
 
@@ -545,6 +612,7 @@ public class PostsController : ControllerBase
             TargetInstagramAccountId = request.TargetInstagramAccountId,
             SelectedThumbnailUrl = request.SelectedThumbnailUrl,
             InstagramUserTags = serializedUserTags,
+            InstagramMediaTagsJson = serializedMediaTags,
             Status = PostStatus.Scheduled,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
@@ -1026,7 +1094,12 @@ public record CreatePostRequest(
     string? SelectedThumbnailUrl = null,
     List<Guid>? MediaAssetIds = null,
     List<CreatePostMediaItem>? MediaItems = null,
-    List<InstagramUserTagDto>? InstagramUserTags = null
+    List<InstagramUserTagDto>? InstagramUserTags = null,
+    /// <summary>
+    /// Per-media-item Instagram user tags for carousel posts.
+    /// Key = media item order (0-based), Value = list of tags for that item.
+    /// </summary>
+    Dictionary<int, List<InstagramUserTagDto>>? InstagramMediaTags = null
 );
 
 public record UpdatePostRequest(

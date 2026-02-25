@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { canShowInstagramTags, buildPlacedTags } from './instagramTagging'
+import { canShowInstagramTags, canShowCarouselTags, buildPlacedTags, buildCarouselMediaTags } from './instagramTagging'
 import type { MediaTag } from './instagramTagging'
+import type { MediaType } from '../api/media'
 
 describe('canShowInstagramTags', () => {
   // IG + image => visible
@@ -51,6 +52,24 @@ describe('canShowInstagramTags', () => {
 
   it('hides tags for None media type', () => {
     expect(canShowInstagramTags(true, false, 'None', false, true)).toBe(false)
+  })
+})
+
+describe('canShowCarouselTags', () => {
+  it('shows tags for IG Feed carousel', () => {
+    expect(canShowCarouselTags(true, false, true)).toBe(true)
+  })
+
+  it('hides tags for non-IG carousel', () => {
+    expect(canShowCarouselTags(false, false, true)).toBe(false)
+  })
+
+  it('hides tags for IG Story carousel', () => {
+    expect(canShowCarouselTags(true, true, true)).toBe(false)
+  })
+
+  it('hides tags when not carousel', () => {
+    expect(canShowCarouselTags(true, false, false)).toBe(false)
   })
 })
 
@@ -120,5 +139,108 @@ describe('buildPlacedTags', () => {
   it('returns empty array for empty tags', () => {
     expect(buildPlacedTags([], true)).toEqual([])
     expect(buildPlacedTags([], false)).toEqual([])
+  })
+})
+
+describe('buildCarouselMediaTags', () => {
+  it('builds per-item tags for image carousel', () => {
+    const carouselTags = new Map<number, MediaTag[]>([
+      [0, [{ username: 'nike', x: 0.2, y: 0.3 }]],
+      [1, [{ username: 'adidas', x: 0.8, y: 0.9 }]],
+    ])
+    const mediaTypes = new Map<number, MediaType>([
+      [0, 'Image'],
+      [1, 'Image'],
+    ])
+
+    const result = buildCarouselMediaTags(carouselTags, mediaTypes)
+    expect(result).toEqual({
+      0: [{ username: 'nike', x: 0.2, y: 0.3 }],
+      1: [{ username: 'adidas', x: 0.8, y: 0.9 }],
+    })
+  })
+
+  it('auto-places video tags at center', () => {
+    const carouselTags = new Map<number, MediaTag[]>([
+      [0, [{ username: 'nike' }]],
+    ])
+    const mediaTypes = new Map<number, MediaType>([
+      [0, 'Video'],
+    ])
+
+    const result = buildCarouselMediaTags(carouselTags, mediaTypes)
+    expect(result).toEqual({
+      0: [{ username: 'nike', x: 0.5, y: 0.5 }],
+    })
+  })
+
+  it('skips items with no tags', () => {
+    const carouselTags = new Map<number, MediaTag[]>([
+      [0, [{ username: 'nike', x: 0.2, y: 0.3 }]],
+      [1, []], // empty
+    ])
+    const mediaTypes = new Map<number, MediaType>([
+      [0, 'Image'],
+      [1, 'Image'],
+    ])
+
+    const result = buildCarouselMediaTags(carouselTags, mediaTypes)
+    expect(result).toEqual({
+      0: [{ username: 'nike', x: 0.2, y: 0.3 }],
+    })
+  })
+
+  it('skips unplaced image tags', () => {
+    const carouselTags = new Map<number, MediaTag[]>([
+      [0, [{ username: 'nike' }]], // unplaced image tag
+    ])
+    const mediaTypes = new Map<number, MediaType>([
+      [0, 'Image'],
+    ])
+
+    const result = buildCarouselMediaTags(carouselTags, mediaTypes)
+    expect(result).toBeUndefined() // no valid tags
+  })
+
+  it('returns undefined for empty map', () => {
+    const result = buildCarouselMediaTags(new Map(), new Map())
+    expect(result).toBeUndefined()
+  })
+
+  it('handles mixed image+video carousel', () => {
+    const carouselTags = new Map<number, MediaTag[]>([
+      [0, [{ username: 'nike', x: 0.2, y: 0.3 }]], // image - placed
+      [1, [{ username: 'adidas' }]], // video - auto-place
+    ])
+    const mediaTypes = new Map<number, MediaType>([
+      [0, 'Image'],
+      [1, 'Video'],
+    ])
+
+    const result = buildCarouselMediaTags(carouselTags, mediaTypes)
+    expect(result).toEqual({
+      0: [{ username: 'nike', x: 0.2, y: 0.3 }],
+      1: [{ username: 'adidas', x: 0.5, y: 0.5 }],
+    })
+  })
+
+  it('handles multiple tags per item', () => {
+    const carouselTags = new Map<number, MediaTag[]>([
+      [0, [
+        { username: 'nike', x: 0.2, y: 0.3 },
+        { username: 'adidas', x: 0.8, y: 0.9 },
+      ]],
+    ])
+    const mediaTypes = new Map<number, MediaType>([
+      [0, 'Image'],
+    ])
+
+    const result = buildCarouselMediaTags(carouselTags, mediaTypes)
+    expect(result).toEqual({
+      0: [
+        { username: 'nike', x: 0.2, y: 0.3 },
+        { username: 'adidas', x: 0.8, y: 0.9 },
+      ],
+    })
   })
 })

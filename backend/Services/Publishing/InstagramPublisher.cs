@@ -585,6 +585,11 @@ public class InstagramPublisher : IPostPublisher
             "Starting carousel publish for post {PostId} with {Count} images",
             post.Id, mediaItems.Count);
 
+        // Deserialize per-media-item tags (if any)
+        var perItemTags = DeserializeMediaTags(post.InstagramMediaTagsJson);
+        if (perItemTags.Count > 0)
+            _logger.LogInformation("Carousel has per-item tags for {Count} media items", perItemTags.Count);
+
         // Step 1: Create child containers (idempotent — skip if already created)
         var childIds = DeserializeChildIds(post.InstagramChildCreationIds);
 
@@ -595,9 +600,10 @@ public class InstagramPublisher : IPostPublisher
             {
                 var item = mediaItems[i];
                 var imageUrl = ResolveMediaUrlForItem(item);
+                perItemTags.TryGetValue(item.Order, out var itemTagsJson);
 
                 var childResult = await CreateCarouselChildContainerAsync(
-                    igUserId, imageUrl, accessToken, cancellationToken);
+                    igUserId, imageUrl, accessToken, cancellationToken, itemTagsJson);
 
                 if (!childResult.Success)
                 {
@@ -704,6 +710,11 @@ public class InstagramPublisher : IPostPublisher
             "Starting video carousel publish for post {PostId} with {Count} videos",
             post.Id, mediaItems.Count);
 
+        // Deserialize per-media-item tags (if any)
+        var perItemTags = DeserializeMediaTags(post.InstagramMediaTagsJson);
+        if (perItemTags.Count > 0)
+            _logger.LogInformation("Video carousel has per-item tags for {Count} media items", perItemTags.Count);
+
         // Step 1: Create child containers (idempotent — skip if already created)
         var childIds = DeserializeChildIds(post.InstagramChildCreationIds);
 
@@ -713,9 +724,10 @@ public class InstagramPublisher : IPostPublisher
             {
                 var item = mediaItems[i];
                 var videoUrl = ResolveMediaUrlForItem(item, TimeSpan.FromHours(2));
+                perItemTags.TryGetValue(item.Order, out var itemTagsJson);
 
                 var childResult = await CreateCarouselVideoChildContainerAsync(
-                    igUserId, videoUrl, accessToken, cancellationToken);
+                    igUserId, videoUrl, accessToken, cancellationToken, itemTagsJson);
 
                 if (!childResult.Success)
                 {
@@ -864,6 +876,11 @@ public class InstagramPublisher : IPostPublisher
             mediaItems.Count(m => m.MediaType == Enums.MediaType.Image),
             mediaItems.Count(m => m.MediaType == Enums.MediaType.Video));
 
+        // Deserialize per-media-item tags (if any)
+        var perItemTags = DeserializeMediaTags(post.InstagramMediaTagsJson);
+        if (perItemTags.Count > 0)
+            _logger.LogInformation("Mixed carousel has per-item tags for {Count} media items", perItemTags.Count);
+
         // Step 1: Create child containers (idempotent — skip if already created)
         var childIds = DeserializeChildIds(post.InstagramChildCreationIds);
 
@@ -872,19 +889,20 @@ public class InstagramPublisher : IPostPublisher
             for (int i = childIds.Count; i < mediaItems.Count; i++)
             {
                 var item = mediaItems[i];
+                perItemTags.TryGetValue(item.Order, out var itemTagsJson);
                 PublishResult childResult;
 
                 if (item.MediaType == Enums.MediaType.Video)
                 {
                     var videoUrl = ResolveMediaUrlForItem(item, TimeSpan.FromHours(2));
                     childResult = await CreateCarouselVideoChildContainerAsync(
-                        igUserId, videoUrl, accessToken, cancellationToken);
+                        igUserId, videoUrl, accessToken, cancellationToken, itemTagsJson);
                 }
                 else
                 {
                     var imageUrl = ResolveMediaUrlForItem(item);
                     childResult = await CreateCarouselChildContainerAsync(
-                        igUserId, imageUrl, accessToken, cancellationToken);
+                        igUserId, imageUrl, accessToken, cancellationToken, itemTagsJson);
                 }
 
                 if (!childResult.Success)
@@ -1013,16 +1031,27 @@ public class InstagramPublisher : IPostPublisher
     /// </summary>
     private async Task<PublishResult> CreateCarouselVideoChildContainerAsync(
         string igUserId, string videoUrl,
-        string accessToken, CancellationToken cancellationToken)
+        string accessToken, CancellationToken cancellationToken,
+        string? userTagsJson = null)
     {
         var url = $"{GraphApiBaseUrl}/{igUserId}/media";
-        var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        var formFields = new Dictionary<string, string>
         {
             ["media_type"] = "VIDEO",
             ["video_url"] = videoUrl,
             ["is_carousel_item"] = "true",
             ["access_token"] = accessToken,
-        });
+        };
+
+        // Video tags must NOT include x/y positions
+        var videoTagsJson = StripPositionsFromUserTags(userTagsJson);
+        if (!string.IsNullOrEmpty(videoTagsJson))
+        {
+            formFields["user_tags"] = videoTagsJson;
+            _logger.LogInformation("IG_VIDEO_CHILD user_tags included (username-only): {Tags}", videoTagsJson);
+        }
+
+        var content = new FormUrlEncodedContent(formFields);
 
         _logger.LogInformation(PostPilotLogEvents.OutboundCall,
             "IG_VIDEO_CHILD_OUTBOUND POST {Url}", url);
@@ -1042,15 +1071,25 @@ public class InstagramPublisher : IPostPublisher
     /// </summary>
     private async Task<PublishResult> CreateCarouselChildContainerAsync(
         string igUserId, string imageUrl,
-        string accessToken, CancellationToken cancellationToken)
+        string accessToken, CancellationToken cancellationToken,
+        string? userTagsJson = null)
     {
         var url = $"{GraphApiBaseUrl}/{igUserId}/media";
-        var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        var formFields = new Dictionary<string, string>
         {
             ["image_url"] = imageUrl,
             ["is_carousel_item"] = "true",
             ["access_token"] = accessToken,
-        });
+        };
+
+        // Image tags include x/y positions
+        if (!string.IsNullOrEmpty(userTagsJson))
+        {
+            formFields["user_tags"] = userTagsJson;
+            _logger.LogInformation("IG_IMG_CHILD user_tags included: {Tags}", userTagsJson);
+        }
+
+        var content = new FormUrlEncodedContent(formFields);
 
         _logger.LogInformation(PostPilotLogEvents.OutboundCall,
             "IG_IMG_CHILD_OUTBOUND POST {Url}", url);
@@ -1124,6 +1163,37 @@ public class InstagramPublisher : IPostPublisher
     private static string SerializeChildIds(List<string> ids)
     {
         return JsonSerializer.Serialize(ids);
+    }
+
+    /// <summary>
+    /// Deserializes InstagramMediaTagsJson into a dictionary keyed by media item Order (0-based).
+    /// Returns empty dictionary if null/empty/invalid JSON.
+    /// </summary>
+    internal static Dictionary<int, string> DeserializeMediaTags(string? json)
+    {
+        if (string.IsNullOrEmpty(json))
+            return new Dictionary<int, string>();
+
+        try
+        {
+            // JSON format: {"0":[{"username":"nike","x":0.5,"y":0.5}],"2":[...]}
+            var raw = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json);
+            if (raw == null) return new Dictionary<int, string>();
+
+            var result = new Dictionary<int, string>();
+            foreach (var (key, value) in raw)
+            {
+                if (int.TryParse(key, out var order) && value.ValueKind == JsonValueKind.Array && value.GetArrayLength() > 0)
+                {
+                    result[order] = value.GetRawText();
+                }
+            }
+            return result;
+        }
+        catch (JsonException)
+        {
+            return new Dictionary<int, string>();
+        }
     }
 
     // ──────────────────────────────────────────────

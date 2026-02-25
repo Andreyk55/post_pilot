@@ -147,6 +147,14 @@ public class Post
     /// </summary>
     public string? InstagramUserTags { get; set; }
 
+    /// <summary>
+    /// JSON dictionary of per-media-item Instagram user tags for carousel posts.
+    /// Keys are media item Order indices (0-based), values are tag arrays.
+    /// Format: {"0":[{"username":"nike","x":0.5,"y":0.5}],"2":[{"username":"adidas","x":0.3,"y":0.7}]}
+    /// Only populated for carousel posts with per-item tags. Null if no per-item tags.
+    /// </summary>
+    public string? InstagramMediaTagsJson { get; set; }
+
     // Navigation properties
     public ConnectedPage? TargetPage { get; set; }
     public ConnectedInstagramAccount? TargetInstagramAccount { get; set; }
