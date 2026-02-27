@@ -2,8 +2,7 @@ using Microsoft.Extensions.Logging.Console;
 using PostPilot.Api;
 using PostPilot.Api.Middleware;
 
-// This is the entry point for local development (dotnet run)
-// For AWS Lambda deployment, LambdaEntryPoint.cs is used instead
+// Entry point: long-running ASP.NET Core server (Kestrel)
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,7 +23,7 @@ if (enableEfSql)
     builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Query", LogLevel.Information);
 }
 
-// Use the shared Startup class for consistency with Lambda
+// Use Startup class for DI and middleware configuration
 var startup = new Startup(builder.Configuration);
 startup.ConfigureServices(builder.Services);
 

@@ -17,24 +17,23 @@ Post Pilot allows users to schedule and manage posts across social media platfor
 
 ## Tech Stack
 
-- **Backend:** .NET 10 (C#) Web API (AWS Lambda-compatible)
+- **Backend:** .NET 10 (C#) ASP.NET Core Web API (long-running Kestrel server)
 - **Frontend:** React + TypeScript + Vite
-- **Database:** PostgreSQL (AWS RDS)
-- **Job Scheduling:** AWS EventBridge Scheduler
-- **Queue:** AWS SQS
-- **Media Storage:** AWS S3
+- **Database:** PostgreSQL
+- **Media Storage:** AWS S3 (or local filesystem)
+- **Post Scheduling:** In-process BackgroundService (`PostPublishingWorker`) polling every 30s
 
 ## Supported Platforms
 
-- (To be decided - e.g., Twitter/X, Instagram, Facebook, LinkedIn, etc.)
+- Facebook Pages (Meta Graph API)
+- Instagram Business Accounts
 
 ## Architecture Decisions
 
 - **Monorepo structure:**
   - `/backend` - .NET 10 Web API (PostPilot.Api)
   - `/frontend` - React + TypeScript app (Vite)
-
-
+- **Single long-running server:** No Lambda/SQS/EventBridge. One ASP.NET Core app serves HTTP APIs and runs the publishing worker as a hosted BackgroundService.
 
 ## How to Run
 
@@ -47,117 +46,45 @@ Post Pilot allows users to schedule and manage posts across social media platfor
 - [x] Set up database (PostgreSQL + EF Core)
 - [x] Create post scheduling API endpoints
 - [x] Connect frontend to backend API
-- [x] Configure backend for AWS Lambda deployment
-- [ ] Deploy API Lambda to AWS
-- [ ] Set up AWS RDS PostgreSQL
-- [ ] Create API Gateway HTTP API
-- [ ] Implement EventBridge Scheduler + Dispatcher Lambda
-- [ ] Implement SQS queue + Publisher Lambda
-- [ ] Set up S3 media bucket
-- [ ] Integrate Meta Graph API
+- [x] Set up S3 media bucket
+- [x] Integrate Meta Graph API
 
 ## Notes
 
 - Project started: January 2026
 - Using TypeScript (.tsx files) for type safety in React
-- Backend is AWS Lambda-compatible (see [backend/README_LAMBDA.md](backend/README_LAMBDA.md))
-- Deployment guide: [backend/DEPLOYMENT.md](backend/DEPLOYMENT.md)
 
+# Architecture
 
+## Application technologies
 
-# infra -------------------------
+- Backend: C# .NET 10, ASP.NET Core (single long-running server)
+- Frontend: React (static SPA)
+- Database: PostgreSQL
+- API docs: Swagger/OpenAPI (enabled in non-prod / protected in prod)
+- Social platform v1: Facebook Pages + Instagram (Meta Graph API)
+- Content v1: text + images + videos
 
-Application technologies
+## Scheduling + publishing pipeline
 
-Backend: C# .NET 10, ASP.NET Core (single API app)
+`PostPublishingWorker` (BackgroundService, polls every 30 seconds):
+- Finds due posts in DB (Scheduled + ScheduledAt <= now, or RetryPending/Processing + NextRetryAt <= now)
+- Atomically claims them (status → Publishing)
+- Publishes to Meta via platform-specific publishers
+- Updates DB status (Published / Failed) + stores external IDs + errors
+- Stuck recovery: posts in Publishing status for >5 minutes are recovered with retry or marked Failed
 
-Frontend: React (static SPA)
+## Media handling
 
-Database: PostgreSQL
+- S3 media bucket (or local filesystem for development)
+- UI uploads files directly to S3 using pre-signed URLs
+- Publishing: generates pre-signed GET URL and passes it to Meta
 
-API docs: Swagger/OpenAPI (enabled in non-prod / protected in prod)
+## Auth (v1)
 
-Social platform v1: Facebook Pages (Meta Graph API)
+- App-level JWT auth (simple email/password or later federated login)
+- Store users in Postgres
 
-Content v1: text + images (videos supported later, same architecture)
+## Secrets & configuration
 
-AWS infrastructure (Lambda architecture)
-Frontend hosting
-
-S3: hosts the React build (static files)
-
-CloudFront: CDN + HTTPS + custom domain
-
-(Optional) Route 53 for DNS
-
-API layer
-
-API Gateway (HTTP API) → API Lambda
-
-Single Lambda handles all UI routes (/posts, /analytics, /settings, etc.)
-
-Routing handled by ASP.NET Core controllers/minimal APIs inside the Lambda
-
-✅ **IMPLEMENTED**: Backend configured for Lambda deployment
-- Entry point: `LambdaEntryPoint.cs` (uses Amazon.Lambda.AspNetCoreServer)
-- Local dev: `Program.cs` (standard ASP.NET Core)
-- Shared config: `Startup.cs` (used by both entry points)
-- Supports environment-based connection strings (local DB or RDS)
-
-Auth (v1)
-
-App-level JWT auth (simple email/password or later federated login)
-
-Store users in Postgres
-
-(Later option) move to Cognito if you want managed auth
-
-Database
-
-RDS PostgreSQL
-
-(Recommended soon) RDS Proxy to protect connections as traffic grows
-
-Scheduling + publishing pipeline
-
-EventBridge Scheduler (every 1 minute) → Dispatcher Lambda
-
-Finds due posts in DB (Pending + scheduled_at <= now)
-
-Atomically claims them (Publishing)
-
-Sends each post as a message to SQS
-
-SQS queue → Publisher Lambda
-
-1 post = 1 message = 1 Lambda execution (batch size = 1 initially)
-
-Publishes to Meta
-
-Updates DB status (Published / Failed) + stores external IDs + errors
-
-Retries handled by SQS; failures go to DLQ
-
-DLQ (Dead Letter Queue)
-
-Stores messages that repeatedly fail
-
-Enables manual retry + debugging
-
-Media handling (images now; videos later)
-
-S3 media bucket
-
-UI uploads files directly to S3 using pre-signed URLs
-
-Publishing:
-
-Images: Publisher Lambda generates pre-signed GET URL and passes it to Meta (Meta pulls the image)
-
-Videos (later): same pattern if supported; otherwise Publisher Lambda streams S3 → Meta with resumable upload + processing state
-
-Secrets & configuration
-
-SSM Parameter Store (standard) for non-sensitive config
-
-Secrets Manager for sensitive values (DB password, Meta app secret, JWT secret)
+- Environment variables for sensitive values (DB connection string, Meta app secret, etc.)

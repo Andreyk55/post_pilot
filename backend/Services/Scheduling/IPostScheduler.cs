@@ -10,7 +10,7 @@ public interface IPostScheduler
 {
     /// <summary>
     /// Schedule a post for publication at its ScheduledAt time.
-    /// Creates the appropriate trigger based on environment (EventBridge or local polling).
+    /// The background worker polls the database for due posts.
     /// </summary>
     /// <param name="post">The post to schedule</param>
     /// <param name="cancellationToken">Cancellation token</param>

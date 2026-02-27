@@ -1,6 +1,5 @@
 using System.Text.Json.Serialization;
 using Amazon.S3;
-using Amazon.Scheduler;
 using PostPilot.Api.Middleware;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -38,7 +37,6 @@ public class Startup
         services.AddSwaggerGen();
 
         // Configure PostgreSQL with EF Core
-        // In Lambda, connection string can come from environment variables or AWS Secrets Manager
         var connectionString = Configuration.GetConnectionString("DefaultConnection")
                                ?? Environment.GetEnvironmentVariable("DB_CONNECTION_STRING");
 
@@ -76,8 +74,9 @@ public class Startup
         // Register Meta OAuth service
         services.AddHttpClient<IMetaOAuthService, MetaOAuthService>();
 
-        // Configure scheduler based on environment
-        ConfigureScheduler(services);
+        // Post scheduling: polling-based background worker
+        services.AddScoped<IPostScheduler, PostScheduler>();
+        services.AddHostedService<PostPublishingWorker>();
 
         // Configure media service based on environment
         ConfigureMediaService(services);
@@ -139,12 +138,7 @@ public class Startup
             app.UseSwaggerUI();
         }
 
-        // Note: UseHttpsRedirection is typically not needed in Lambda as API Gateway handles HTTPS
-        // But we'll include it for compatibility with local development
-        if (!IsRunningInLambda())
-        {
-            app.UseHttpsRedirection();
-        }
+        app.UseHttpsRedirection();
 
         // Correlation ID middleware: must run before routing so all logs include the id
         app.UseMiddleware<CorrelationIdMiddleware>();
@@ -154,53 +148,6 @@ public class Startup
         {
             endpoints.MapControllers();
         });
-    }
-
-    private static bool IsRunningInLambda()
-    {
-        return !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("LAMBDA_TASK_ROOT"));
-    }
-
-    private static void ConfigureScheduler(IServiceCollection services)
-    {
-        var schedulerType = Environment.GetEnvironmentVariable("SCHEDULER_TYPE") ?? "Local";
-
-        if (schedulerType.Equals("EventBridge", StringComparison.OrdinalIgnoreCase))
-        {
-            // Production: AWS EventBridge Scheduler
-            var publisherLambdaArn = Environment.GetEnvironmentVariable("PUBLISHER_LAMBDA_ARN");
-            var schedulerRoleArn = Environment.GetEnvironmentVariable("SCHEDULER_ROLE_ARN");
-
-            if (string.IsNullOrEmpty(publisherLambdaArn))
-            {
-                throw new InvalidOperationException(
-                    "PUBLISHER_LAMBDA_ARN environment variable is required when SCHEDULER_TYPE=EventBridge");
-            }
-
-            if (string.IsNullOrEmpty(schedulerRoleArn))
-            {
-                throw new InvalidOperationException(
-                    "SCHEDULER_ROLE_ARN environment variable is required when SCHEDULER_TYPE=EventBridge");
-            }
-
-            var settings = new EventBridgeSchedulerSettings
-            {
-                ScheduleGroupName = Environment.GetEnvironmentVariable("EVENTBRIDGE_SCHEDULE_GROUP")
-                                    ?? "postpilot-schedules",
-                PublisherLambdaArn = publisherLambdaArn,
-                SchedulerRoleArn = schedulerRoleArn
-            };
-
-            services.AddSingleton(settings);
-            services.AddSingleton<IAmazonScheduler, AmazonSchedulerClient>();
-            services.AddScoped<IPostScheduler, EventBridgePostScheduler>();
-        }
-        else
-        {
-            // Local development: Polling-based scheduler
-            services.AddScoped<IPostScheduler, LocalPostScheduler>();
-            services.AddHostedService<LocalSchedulerBackgroundService>();
-        }
     }
 
     private static void ConfigureMediaService(IServiceCollection services)
@@ -230,9 +177,7 @@ public class Startup
         // Image metadata extractor (using ImageSharp)
         services.AddSingleton<IImageMetadataExtractor, ImageMetadataExtractor>();
 
-        // Video metadata extractor (using ffprobe)
-        // For Lambda: ffprobe should be included in Lambda Layer or container image
-        // For local development: ffprobe should be available on PATH
+        // Video metadata extractor (using ffprobe — must be on PATH)
         services.AddSingleton<IVideoMetadataExtractor, FfprobeVideoMetadataExtractor>();
 
         // Media validation service
@@ -313,19 +258,8 @@ public class Startup
         // Media AI services
         services.AddHttpClient<IAssetResolver, AssetResolver>();
 
-        // Video frame extractor: Use no-op in Lambda (client-side extraction),
-        // FFmpeg for local development (if available)
-        if (IsRunningInLambda())
-        {
-            // Lambda: No FFmpeg available, use no-op extractor
-            // Client should extract frames and submit via POST /api/ai/media/thumbnails
-            services.AddSingleton<IVideoFrameExtractor, NoOpVideoFrameExtractor>();
-        }
-        else
-        {
-            // Local development: Try FFmpeg if available
-            services.AddSingleton<IVideoFrameExtractor, FFmpegVideoFrameExtractor>();
-        }
+        // Video frame extractor: use FFmpeg if available on PATH
+        services.AddSingleton<IVideoFrameExtractor, FFmpegVideoFrameExtractor>();
 
         services.AddScoped<IMediaAiService, MediaAiService>();
     }

@@ -531,9 +531,7 @@
   <PropertyGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
     <PkgMicrosoft_Extensions_ApiDescription_Server Condition=" '$(PkgMicrosoft_Extensions_ApiDescription_Server)' == '' ">C:\Users\KTZ\.nuget\packages\microsoft.extensions.apidescription.server\10.0.0</PkgMicrosoft_Extensions_ApiDescription_Server>
     <PkgMicrosoft_CodeAnalysis_Analyzers Condition=" '$(PkgMicrosoft_CodeAnalysis_Analyzers)' == '' ">C:\Users\KTZ\.nuget\packages\microsoft.codeanalysis.analyzers\3.11.0</PkgMicrosoft_CodeAnalysis_Analyzers>
-    <PkgAWSSDK_Core Condition=" '$(PkgAWSSDK_Core)' == '' ">C:\Users\KTZ\.nuget\packages\awssdk.core\3.7.500.77</PkgAWSSDK_Core>
-    <PkgAWSSDK_SQS Condition=" '$(PkgAWSSDK_SQS)' == '' ">C:\Users\KTZ\.nuget\packages\awssdk.sqs\3.7.502.38</PkgAWSSDK_SQS>
-    <PkgAWSSDK_Scheduler Condition=" '$(PkgAWSSDK_Scheduler)' == '' ">C:\Users\KTZ\.nuget\packages\awssdk.scheduler\3.7.502.39</PkgAWSSDK_Scheduler>
-    <PkgAWSSDK_S3 Condition=" '$(PkgAWSSDK_S3)' == '' ">C:\Users\KTZ\.nuget\packages\awssdk.s3\3.7.510.5</PkgAWSSDK_S3>
+    <PkgAWSSDK_Core Condition=" '$(PkgAWSSDK_Core)' == '' ">C:\Users\KTZ\.nuget\packages\awssdk.core\3.7.500.85</PkgAWSSDK_Core>
+    <PkgAWSSDK_S3 Condition=" '$(PkgAWSSDK_S3)' == '' ">C:\Users\KTZ\.nuget\packages\awssdk.s3\3.7.510.11</PkgAWSSDK_S3>
   </PropertyGroup>
 </Project>

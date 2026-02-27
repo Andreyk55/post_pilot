@@ -19,12 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Amazon.Lambda.AspNetCoreServer" Version="9.2.1" />
-    <PackageReference Include="Amazon.Lambda.CloudWatchEvents" Version="4.1.0" />
-    <PackageReference Include="Amazon.Lambda.SQSEvents" Version="2.2.0" />
-    <PackageReference Include="AWSSDK.Scheduler" Version="3.7.*" />
     <PackageReference Include="AWSSDK.S3" Version="3.7.*" />
-    <PackageReference Include="AWSSDK.SQS" Version="3.7.*" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.1" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.1">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
