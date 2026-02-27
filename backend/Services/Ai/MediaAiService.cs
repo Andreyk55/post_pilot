@@ -183,10 +183,11 @@ public class MediaAiService : IMediaAiService
     /// </summary>
     private async Task<string> GetLocalVideoPathAsync(string assetUrl, CancellationToken cancellationToken)
     {
-        // If using LocalMediaService, get the local path directly
-        if (_mediaService is LocalMediaService localService && localService.FileExists(assetUrl))
+        // Try to get local file path directly from storage
+        var localFilePath = await _mediaService.GetLocalFilePathAsync(assetUrl);
+        if (localFilePath != null)
         {
-            return localService.GetLocalPath(assetUrl);
+            return localFilePath;
         }
 
         // Otherwise, download to temp file
@@ -215,20 +216,11 @@ public class MediaAiService : IMediaAiService
         await File.WriteAllBytesAsync(framePath, frame.ImageBytes, cancellationToken);
 
         // Generate URL using media service
-        var s3Key = $"media/frames/{frameId}";
+        var storageKey = $"media/frames/{frameId}";
 
-        // For local dev, save through the media service path
-        if (_mediaService is LocalMediaService)
-        {
-            // The file is already in uploads/frames, construct the URL
-            var baseUrl = Environment.GetEnvironmentVariable("PUBLIC_URL") ?? "http://localhost:5122";
-            return $"{baseUrl}/api/media/frames/{frameId}";
-        }
-
-        // For S3, we'd need to upload and get a URL
-        // For now, use local path approach
-        var publicUrl = Environment.GetEnvironmentVariable("PUBLIC_URL") ?? "http://localhost:5122";
-        return $"{publicUrl}/api/media/frames/{frameId}";
+        // Frames are always saved locally (both modes) for AI processing
+        var baseUrl = Environment.GetEnvironmentVariable("PUBLIC_URL") ?? "http://localhost:5122";
+        return $"{baseUrl}/api/media/frames/{frameId}";
     }
 
     /// <summary>

@@ -5,7 +5,7 @@ import type { PlatformId } from '../constants/validationLimits'
 import './MediaUpload.css'
 
 interface MediaUploadProps {
-  onUploadComplete: (s3Key: string, mediaType: MediaType) => void
+  onUploadComplete: (storageKey: string, mediaType: MediaType) => void
   onUploadError: (error: string) => void
   onClear: () => void
   onUploadingChange?: (isUploading: boolean) => void
@@ -165,20 +165,20 @@ export function MediaUpload({
       setProgress(10)
 
       // Get pre-signed upload URL
-      const { uploadUrl, s3Key, mediaType: returnedMediaType } = await mediaApi.generateUploadUrl({
+      const { uploadUrl, storageKey, mediaType: returnedMediaType } = await mediaApi.generateUploadUrl({
         fileName: file.name,
         contentType: file.type,
       })
       setProgress(30)
 
-      // Upload directly to S3 (or local endpoint in dev)
+      // Upload directly to storage provider (or local endpoint in dev)
       await mediaApi.uploadFile(uploadUrl, file, (progressPercent) => {
         setProgress(30 + Math.round(progressPercent * 0.5))
       })
       setProgress(80)
 
       // Store upload info for validation
-      setUploadedStorageKey(s3Key)
+      setUploadedStorageKey(storageKey)
       setUploadedMimeType(file.type)
 
       // If platform was selected, trigger validation
@@ -193,7 +193,7 @@ export function MediaUpload({
           }
 
           const validationResult = await mediaApi.validateMedia({
-            storageKey: s3Key,
+            storageKey: storageKey,
             mimeType: file.type,
             platform: platformMap[selectedPlatform] as Platform,
             placement: placement,
@@ -211,7 +211,7 @@ export function MediaUpload({
       }
 
       setProgress(100)
-      onUploadComplete(s3Key, returnedMediaType as MediaType)
+      onUploadComplete(storageKey, returnedMediaType as MediaType)
     } catch (err) {
       console.error('Upload failed:', err)
       onUploadError(err instanceof Error ? err.message : 'Failed to upload file. Please try again.')

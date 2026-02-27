@@ -3,7 +3,7 @@ import { mediaApi } from '../api/media'
 import './ImageUpload.css'
 
 interface ImageUploadProps {
-  onUploadComplete: (s3Key: string) => void
+  onUploadComplete: (storageKey: string) => void
   onUploadError: (error: string) => void
   onClear: () => void
   onUploadingChange?: (isUploading: boolean) => void
@@ -52,17 +52,17 @@ export function ImageUpload({ onUploadComplete, onUploadError, onClear, onUpload
       setProgress(10)
 
       // Get pre-signed upload URL
-      const { uploadUrl, s3Key } = await mediaApi.generateUploadUrl({
+      const { uploadUrl, storageKey } = await mediaApi.generateUploadUrl({
         fileName: file.name,
         contentType: file.type,
       })
       setProgress(30)
 
-      // Upload directly to S3 (or local endpoint in dev)
+      // Upload to storage provider (or local endpoint in dev)
       await mediaApi.uploadFile(uploadUrl, file)
       setProgress(100)
 
-      onUploadComplete(s3Key)
+      onUploadComplete(storageKey)
     } catch (err) {
       console.error('Upload failed:', err)
       onUploadError(err instanceof Error ? err.message : 'Failed to upload image. Please try again.')

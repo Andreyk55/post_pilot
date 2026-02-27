@@ -518,10 +518,10 @@ public class InstagramStoryPublisher : IStoryPublisher
 
     private string ResolveMediaUrl(Post post)
     {
-        if (_mediaService.IsS3Key(post.MediaUrl!))
+        if (_mediaService.IsStorageKey(post.MediaUrl!))
         {
             var url = _mediaService.GenerateDownloadUrl(post.MediaUrl!, MediaDownloadUrlExpiration);
-            _logger.LogInformation("Generated pre-signed URL for S3 key {S3Key} for IG story {PostId}",
+            _logger.LogInformation("Generated download URL for storage key {StorageKey} for IG story {PostId}",
                 post.MediaUrl, post.Id);
             return url;
         }

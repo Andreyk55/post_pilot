@@ -352,7 +352,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
     // Build media items for carousel (feed posts only)
     const mediaItemsPayload: CreatePostMediaItem[] | undefined = hasCarousel
       ? carouselItems.map((item, index) => ({
-          mediaUrl: item.s3Key,
+          mediaUrl: item.storageKey,
           mediaType: item.mediaType,
           order: index,
         }))
@@ -499,7 +499,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
     const hasCarousel = !isStory && (isInstagramSelected || isFacebookSelected) && carouselItems.length >= 2
     const mediaItemsPayload: CreatePostMediaItem[] | undefined = hasCarousel
       ? carouselItems.map((item, index) => ({
-          mediaUrl: item.s3Key,
+          mediaUrl: item.storageKey,
           mediaType: item.mediaType,
           order: index,
         }))
@@ -816,8 +816,8 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
             /* Stories: single media upload with Story placement for validation */
             <MediaUpload
               key={uploadKey}
-              onUploadComplete={(s3Key, type) => {
-                setMediaUrl(s3Key)
+              onUploadComplete={(storageKey, type) => {
+                setMediaUrl(storageKey)
                 setMediaType(type)
                 setUploadError(null)
               }}
@@ -843,14 +843,14 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
                 // If user goes from multi to single (1 item), keep it in carousel state
                 // but also set legacy media for AI panel preview
                 if (items.length === 1) {
-                  setMediaUrl(items[0].s3Key)
+                  setMediaUrl(items[0].storageKey)
                   setMediaType(items[0].mediaType)
                 } else if (items.length === 0) {
                   setMediaUrl(null)
                   setMediaType(null)
                 } else {
                   // Multi-media: set first item for AI preview
-                  setMediaUrl(items[0].s3Key)
+                  setMediaUrl(items[0].storageKey)
                   setMediaType(items[0].mediaType)
                 }
               }}
@@ -861,8 +861,8 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
           ) : (
             <MediaUpload
               key={uploadKey}
-              onUploadComplete={(s3Key, type) => {
-                setMediaUrl(s3Key)
+              onUploadComplete={(storageKey, type) => {
+                setMediaUrl(storageKey)
                 setMediaType(type)
                 setUploadError(null)
               }}
@@ -900,7 +900,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
               caption={content}
               mediaTags={mediaTags}
               onMediaTagsChange={setMediaTags}
-              mediaS3Key={mediaUrl}
+              mediaStorageKey={mediaUrl}
               disabled={!isComposerEnabled}
               isVideo={isVideoTag}
             />
@@ -950,7 +950,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
                     return next
                   })
                 }}
-                mediaS3Key={carouselItems[selectedCarouselItemIndex].s3Key}
+                mediaStorageKey={carouselItems[selectedCarouselItemIndex].storageKey}
                 disabled={!isComposerEnabled}
                 isVideo={carouselItems[selectedCarouselItemIndex].mediaType === 'Video'}
               />

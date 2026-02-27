@@ -1134,11 +1134,11 @@ public class InstagramPublisher : IPostPublisher
     }
 
     /// <summary>
-    /// Resolves a public URL for a PostMediaItem (generates pre-signed URL if S3 key).
+    /// Resolves a public URL for a PostMediaItem (generates download URL if storage key).
     /// </summary>
     private string ResolveMediaUrlForItem(PostMediaItem item, TimeSpan? expiration = null)
     {
-        if (_mediaService.IsS3Key(item.MediaUrl))
+        if (_mediaService.IsStorageKey(item.MediaUrl))
         {
             return _mediaService.GenerateDownloadUrl(item.MediaUrl, expiration ?? MediaDownloadUrlExpiration);
         }
@@ -1201,14 +1201,14 @@ public class InstagramPublisher : IPostPublisher
     // ──────────────────────────────────────────────
 
     /// <summary>
-    /// Resolves a public URL for the post's media (generates pre-signed URL if S3 key).
+    /// Resolves a public URL for the post's media (generates download URL if storage key).
     /// </summary>
     private string ResolveMediaUrl(Post post)
     {
-        if (_mediaService.IsS3Key(post.MediaUrl!))
+        if (_mediaService.IsStorageKey(post.MediaUrl!))
         {
             var url = _mediaService.GenerateDownloadUrl(post.MediaUrl!, MediaDownloadUrlExpiration);
-            _logger.LogInformation("Generated pre-signed URL for S3 key {S3Key} for IG post {PostId}",
+            _logger.LogInformation("Generated download URL for storage key {StorageKey} for IG post {PostId}",
                 post.MediaUrl, post.Id);
             return url;
         }
@@ -1898,7 +1898,7 @@ public class InstagramPublisher : IPostPublisher
 
     /// <summary>
     /// Redacts a URL to scheme+host + last 12 chars of path for traceability.
-    /// Example: "https://my-bucket.s3.amazonaws.com/...abc123def456"
+    /// Example: "https://storage.provider.example.com/...abc123def456"
     /// </summary>
     private static string RedactUrl(string? url)
     {

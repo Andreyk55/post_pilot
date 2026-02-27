@@ -4,7 +4,7 @@ namespace PostPilot.Api.Services.Ai;
 
 /// <summary>
 /// Resolves asset URLs to bytes for AI processing.
-/// Works with both local file storage and S3.
+/// Works with both local file storage and generic storage providers.
 /// </summary>
 public class AssetResolver : IAssetResolver
 {
@@ -31,10 +31,10 @@ public class AssetResolver : IAssetResolver
             throw new ArgumentException("Asset URL cannot be empty", nameof(assetUrl));
         }
 
-        // Determine if this is an S3 key or external URL
-        if (_mediaService.IsS3Key(assetUrl))
+        // Determine if this is a storage key or external URL
+        if (_mediaService.IsStorageKey(assetUrl))
         {
-            return await ResolveS3AssetAsync(assetUrl, cancellationToken);
+            return await ResolveStorageAssetAsync(assetUrl, cancellationToken);
         }
 
         // External URL - fetch directly
@@ -48,7 +48,7 @@ public class AssetResolver : IAssetResolver
             throw new ArgumentException("Asset URL cannot be empty", nameof(assetUrl));
         }
 
-        if (_mediaService.IsS3Key(assetUrl))
+        if (_mediaService.IsStorageKey(assetUrl))
         {
             return _mediaService.GenerateDownloadUrl(assetUrl, DownloadUrlExpiration);
         }
@@ -57,28 +57,28 @@ public class AssetResolver : IAssetResolver
         return assetUrl;
     }
 
-    private async Task<ResolvedAsset> ResolveS3AssetAsync(string s3Key, CancellationToken cancellationToken)
+    private async Task<ResolvedAsset> ResolveStorageAssetAsync(string storageKey, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("Resolving S3 asset: {S3Key}", s3Key);
+        _logger.LogDebug("Resolving storage asset: {StorageKey}", storageKey);
 
-        // For local dev, we can read directly from the local service
-        if (_mediaService is LocalMediaService localService)
+        // Try to read directly from storage provider
+        var stream = await _mediaService.StorageProvider.OpenReadAsync(storageKey);
+        if (stream != null)
         {
-            var localPath = localService.GetLocalPath(s3Key);
-            if (!localService.FileExists(s3Key))
+            await using (stream)
             {
-                throw new FileNotFoundException($"Asset not found: {s3Key}", localPath);
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms, cancellationToken);
+                var bytes = ms.ToArray();
+                var mimeType = GetMimeTypeFromExtension(Path.GetExtension(storageKey));
+
+                _logger.LogDebug("Resolved storage asset: {StorageKey}, Size: {Size} bytes", storageKey, bytes.Length);
+                return new ResolvedAsset(bytes, mimeType);
             }
-
-            var bytes = await File.ReadAllBytesAsync(localPath, cancellationToken);
-            var mimeType = GetMimeTypeFromExtension(Path.GetExtension(localPath));
-
-            _logger.LogDebug("Resolved local asset: {S3Key}, Size: {Size} bytes", s3Key, bytes.Length);
-            return new ResolvedAsset(bytes, mimeType);
         }
 
-        // For S3, generate a download URL and fetch from it
-        var downloadUrl = _mediaService.GenerateDownloadUrl(s3Key, DownloadUrlExpiration);
+        // Fallback: generate a download URL and fetch via HTTP
+        var downloadUrl = _mediaService.GenerateDownloadUrl(storageKey, DownloadUrlExpiration);
         return await ResolveExternalUrlAsync(downloadUrl, cancellationToken);
     }
 

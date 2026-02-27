@@ -211,10 +211,10 @@ public class FacebookStoryPublisher : IStoryPublisher
         if (string.IsNullOrEmpty(post.FacebookStoryMediaId))
         {
             string imageUrl;
-            if (_mediaService.IsS3Key(post.MediaUrl!))
+            if (_mediaService.IsStorageKey(post.MediaUrl!))
             {
                 imageUrl = _mediaService.GenerateDownloadUrl(post.MediaUrl!, MediaDownloadUrlExpiration);
-                _logger.LogInformation("Generated pre-signed URL for S3 key {S3Key} for FB story {PostId}",
+                _logger.LogInformation("Generated download URL for storage key {StorageKey} for FB story {PostId}",
                     post.MediaUrl, post.Id);
             }
             else
@@ -251,12 +251,12 @@ public class FacebookStoryPublisher : IStoryPublisher
         var pageId = post.TargetPage!.PageId;
         var accessToken = post.TargetPage.AccessToken;
 
-        // ── Download video bytes from S3 or external URL ──
+        // ── Download video bytes from storage provider or external URL ──
         string videoUrl;
-        if (_mediaService.IsS3Key(post.MediaUrl!))
+        if (_mediaService.IsStorageKey(post.MediaUrl!))
         {
             videoUrl = _mediaService.GenerateDownloadUrl(post.MediaUrl!, VideoDownloadUrlExpiration);
-            _logger.LogInformation("Generated pre-signed URL for video S3 key {S3Key} for FB story {PostId}",
+            _logger.LogInformation("Generated download URL for video storage key {StorageKey} for FB story {PostId}",
                 post.MediaUrl, post.Id);
         }
         else

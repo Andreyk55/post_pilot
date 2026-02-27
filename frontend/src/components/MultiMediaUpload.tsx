@@ -18,7 +18,7 @@ import './MultiMediaUpload.css'
 
 export interface UploadedMediaItem {
   id: string
-  s3Key: string
+  storageKey: string
   mediaType: MediaType
   fileName: string
   previewUrl: string
@@ -176,12 +176,12 @@ export function MultiMediaUpload({
 
       try {
         // Get upload URL
-        const { uploadUrl, s3Key, mediaType } = await mediaApi.generateUploadUrl({
+        const { uploadUrl, storageKey, mediaType } = await mediaApi.generateUploadUrl({
           fileName: file.name,
           contentType: file.type,
         })
 
-        // Upload to S3
+        // Upload to storage provider
         await mediaApi.uploadFile(uploadUrl, file)
 
         // Create preview
@@ -201,7 +201,7 @@ export function MultiMediaUpload({
           }
           try {
             const result = await mediaApi.validateMedia({
-              storageKey: s3Key,
+              storageKey: storageKey,
               mimeType: file.type,
               platform: platformMap[selectedPlatform] as Platform,
               placement: 'Feed',
@@ -216,7 +216,7 @@ export function MultiMediaUpload({
 
         newItems.push({
           id: crypto.randomUUID(),
-          s3Key,
+          storageKey,
           mediaType: mediaType as MediaType,
           fileName: file.name,
           previewUrl,

@@ -462,7 +462,7 @@ export function AiAssistPanel({
   const handleVideoCaptionIdeas = () =>
     handleMediaAction(async () => {
       if (!platform) return // TypeScript guard - platform is required
-      // Convert S3 key to full URL for browser video element
+      // Convert storage key to full URL for browser video element
       const videoUrl = getMediaUrl(mediaUrl)
       console.log('Video caption ideas - mediaUrl:', mediaUrl, 'videoUrl:', videoUrl)
       if (!videoUrl) throw new Error('Invalid media URL')
@@ -481,7 +481,7 @@ export function AiAssistPanel({
 
   const handleThumbnailSuggest = () =>
     handleMediaAction(async () => {
-      // Convert S3 key to full URL for browser video element
+      // Convert storage key to full URL for browser video element
       const videoUrl = getMediaUrl(mediaUrl)
       if (!videoUrl) throw new Error('Invalid media URL')
 

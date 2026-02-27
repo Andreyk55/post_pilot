@@ -4,15 +4,15 @@ const API_URL = 'http://localhost:5122/api'
 export type MediaType = 'None' | 'Image' | 'Video'
 
 /**
- * Generates a URL for viewing/downloading media from its S3 key.
+ * Generates a URL for viewing/downloading media from its storage key.
  * In local development, this uses a relative URL (proxied by Vite) to avoid CORS issues.
- * In production, this would generate a pre-signed S3 URL.
+ * In server mode, the storage provider generates a download URL.
  */
-export function getMediaUrl(s3Key: string | null | undefined): string | null {
-  if (!s3Key) return null
+export function getMediaUrl(storageKey: string | null | undefined): string | null {
+  if (!storageKey) return null
 
-  // Extract filename from s3Key (e.g., "media/guid.jpg" -> "guid.jpg")
-  const filename = s3Key.startsWith('media/') ? s3Key.slice(6) : s3Key
+  // Extract filename from storageKey (e.g., "media/guid.jpg" -> "guid.jpg")
+  const filename = storageKey.startsWith('media/') ? storageKey.slice(6) : storageKey
 
   // Use relative URL so Vite proxy can handle it (same-origin for canvas operations)
   return `/api/media/files/${filename}`
@@ -35,7 +35,7 @@ export interface GenerateUploadUrlRequest {
 
 export interface GenerateUploadUrlResponse {
   uploadUrl: string
-  s3Key: string
+  storageKey: string
   mediaType: MediaType
   allowedImageTypes: string[]
   allowedVideoTypes: string[]

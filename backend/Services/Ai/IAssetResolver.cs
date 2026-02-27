@@ -21,18 +21,18 @@ public record ResolvedAsset(
 public interface IAssetResolver
 {
     /// <summary>
-    /// Resolves an asset URL (S3 key or external URL) to raw bytes.
+    /// Resolves an asset URL (storage key or external URL) to raw bytes.
     /// </summary>
-    /// <param name="assetUrl">The asset URL or S3 key</param>
+    /// <param name="assetUrl">The asset URL or storage key</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Resolved asset with bytes and MIME type</returns>
     Task<ResolvedAsset> ResolveAsync(string assetUrl, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets a publicly accessible URL for an asset.
-    /// For S3 keys, generates a download URL; for external URLs, returns as-is.
+    /// For storage keys, generates a download URL; for external URLs, returns as-is.
     /// </summary>
-    /// <param name="assetUrl">The asset URL or S3 key</param>
+    /// <param name="assetUrl">The asset URL or storage key</param>
     /// <returns>Publicly accessible URL</returns>
     string GetPublicUrl(string assetUrl);
 }

@@ -13,8 +13,8 @@ interface InstagramMediaTagsProps {
   caption: string
   mediaTags: MediaTag[]
   onMediaTagsChange: (tags: MediaTag[]) => void
-  /** S3 key of the selected media (image or video) */
-  mediaS3Key: string | null
+  /** Storage key of the selected media (image or video) */
+  mediaStorageKey: string | null
   disabled?: boolean
   /** When true, hides the image placement editor (video tags auto-place at center) */
   isVideo?: boolean
@@ -24,7 +24,7 @@ export function InstagramMediaTags({
   caption,
   mediaTags,
   onMediaTagsChange,
-  mediaS3Key,
+  mediaStorageKey,
   disabled,
   isVideo = false,
 }: InstagramMediaTagsProps) {
@@ -41,7 +41,7 @@ export function InstagramMediaTags({
     return captionMentions.filter(m => !taggedLower.has(m.toLowerCase()))
   }, [captionMentions, mediaTags])
 
-  const imageUrl = useMemo(() => getMediaUrl(mediaS3Key), [mediaS3Key])
+  const imageUrl = useMemo(() => getMediaUrl(mediaStorageKey), [mediaStorageKey])
 
   const addTag = useCallback((username: string) => {
     const lower = username.toLowerCase()

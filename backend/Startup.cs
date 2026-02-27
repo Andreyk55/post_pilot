@@ -1,5 +1,4 @@
 using System.Text.Json.Serialization;
-using Amazon.S3;
 using PostPilot.Api.Middleware;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -152,24 +151,39 @@ public class Startup
 
     private static void ConfigureMediaService(IServiceCollection services)
     {
-        var bucketName = Environment.GetEnvironmentVariable("MEDIA_BUCKET_NAME");
+        var runModeStr = Environment.GetEnvironmentVariable("APP_RUN_MODE") ?? "local";
+        var runMode = runModeStr.Equals("server", StringComparison.OrdinalIgnoreCase)
+            ? Enums.AppRunMode.Server
+            : Enums.AppRunMode.Local;
 
-        if (!string.IsNullOrEmpty(bucketName))
+        // Register the run mode so other services can query it
+        services.AddSingleton(typeof(Enums.AppRunMode), runMode);
+
+        if (runMode == Enums.AppRunMode.Server)
         {
-            // Production: AWS S3
-            services.AddSingleton<IAmazonS3, AmazonS3Client>();
-            services.AddSingleton<IMediaService>(sp =>
-                new S3MediaService(
-                    sp.GetRequiredService<IAmazonS3>(),
-                    bucketName,
-                    sp.GetRequiredService<ILogger<S3MediaService>>()));
+            // Server mode: register stub provider — implement IMediaStorageProvider to add a real provider.
+            // Every method throws NotImplementedException until implemented.
+            services.AddSingleton<IMediaStorageProvider, ServerMediaStorageProvider>();
         }
         else
         {
-            // Local development: File system storage
-            services.AddSingleton<IMediaService>(sp =>
-                new LocalMediaService(sp.GetRequiredService<ILogger<LocalMediaService>>()));
+            // Local mode: filesystem storage
+            services.AddSingleton<IMediaStorageProvider>(sp =>
+                new LocalDiskMediaStorageProvider(
+                    sp.GetRequiredService<ILogger<LocalDiskMediaStorageProvider>>()));
         }
+
+        // Parse configurable expiration values
+        var uploadExpMinutes = int.TryParse(
+            Environment.GetEnvironmentVariable("MEDIA_UPLOAD_URL_EXPIRATION_MINUTES"), out var uem) ? uem : 60;
+
+        // Register the unified MediaService
+        services.AddSingleton<IMediaService>(sp =>
+            new MediaService(
+                sp.GetRequiredService<IMediaStorageProvider>(),
+                runMode,
+                sp.GetRequiredService<ILogger<MediaService>>(),
+                uploadUrlExpiration: TimeSpan.FromMinutes(uploadExpMinutes)));
     }
 
     private static void ConfigureMediaValidationServices(IServiceCollection services)

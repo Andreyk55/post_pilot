@@ -34,10 +34,10 @@ public class FacebookPagePublisherTests : IDisposable
             .ReturnsAsync(new ScheduleResult(true));
 
         _mediaServiceMock = new Mock<IMediaService>();
-        _mediaServiceMock.Setup(m => m.IsS3Key(It.IsAny<string?>()))
+        _mediaServiceMock.Setup(m => m.IsStorageKey(It.IsAny<string?>()))
             .Returns<string?>(url => url != null && !url.StartsWith("http"));
         _mediaServiceMock.Setup(m => m.GenerateDownloadUrl(It.IsAny<string>(), It.IsAny<TimeSpan>()))
-            .Returns<string, TimeSpan>((key, _) => $"https://s3.example.com/{key}?signed=1");
+            .Returns<string, TimeSpan>((key, _) => $"https://storage.example.com/{key}?signed=1");
 
         _featureSettings = new FeatureSettings();
         _loggerMock = new Mock<ILogger<FacebookPagePublisher>>();

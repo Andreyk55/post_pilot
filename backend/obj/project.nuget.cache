@@ -1,11 +1,9 @@
 {
   "version": 2,
-  "dgSpecHash": "kl4g/p+qNR0=",
+  "dgSpecHash": "jg6P7HW0exY=",
   "success": true,
   "projectFilePath": "D:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj",
   "expectedPackageFiles": [
-    "C:\\Users\\KTZ\\.nuget\\packages\\awssdk.core\\3.7.500.85\\awssdk.core.3.7.500.85.nupkg.sha512",
-    "C:\\Users\\KTZ\\.nuget\\packages\\awssdk.s3\\3.7.510.11\\awssdk.s3.3.7.510.11.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\humanizer.core\\2.14.1\\humanizer.core.2.14.1.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\microsoft.aspnetcore.openapi\\10.0.1\\microsoft.aspnetcore.openapi.10.0.1.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\microsoft.build\\17.7.2\\microsoft.build.17.7.2.nupkg.sha512",

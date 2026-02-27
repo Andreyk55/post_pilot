@@ -34,7 +34,7 @@ All maximum size restrictions have been successfully implemented for PostPilot a
 3. **Controllers/PostsController.cs** - Post validation + methods
 4. **Controllers/MetaController.cs** - New limits endpoint
 5. **DTOs/MetaDTOs.cs** - Validation response DTOs
-6. **Services/Media/S3MediaService.cs** - Image limit (10→20 MB)
+6. **Services/Media/MediaService.cs** - Image limit (10→20 MB)
 7. **Services/Media/LocalMediaService.cs** - Image limit (10→20 MB)
 
 ### Frontend (6 files)
@@ -98,10 +98,10 @@ Error collection → Gathers all violations
 Prevents bypass → Protects data integrity
 ```
 
-### Layer 3: Infrastructure (S3/Upload)
+### Layer 3: Infrastructure (Upload)
 ```
 Pre-signed URL → Enforces max file size
-Content-Length → S3 rejects oversized
+Content-Length → Storage provider rejects oversized
 Local endpoint → Enforces during dev
 ```
 
@@ -289,7 +289,7 @@ Returns all validation limits in JSON format
 | Voice profile field limits | ✅ | Backend | AiVoiceProfileController.cs |
 | Voice profile total limit | ✅ | Backend | AiVoiceProfileController.cs |
 | Post text limit | ✅ | Backend | PostsController.cs |
-| Image size limit | ✅ | Backend | S3/LocalMediaService.cs |
+| Image size limit | ✅ | Backend | MediaService.cs |
 | Field maxLength | ✅ | Frontend | VoiceProfileModal.tsx |
 | Total counter | ✅ | Frontend | VoiceProfileModal.tsx |
 | Submit disabled | ✅ | Frontend | VoiceProfileModal.tsx |
@@ -332,7 +332,7 @@ All requirements met:
 - ✅ Field-level messages
 - ✅ No user content in logs
 - ✅ Follows existing patterns
-- ✅ Works with S3 pre-signed URLs
+- ✅ Works with pre-signed upload URLs
 
 ---
 

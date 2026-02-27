@@ -232,10 +232,10 @@ public class FacebookPagePublisher : IPostPublisher
         {
             // Image post - use photos endpoint
             string imageUrl;
-            if (_mediaService.IsS3Key(post.MediaUrl))
+            if (_mediaService.IsStorageKey(post.MediaUrl))
             {
                 imageUrl = _mediaService.GenerateDownloadUrl(post.MediaUrl, MetaDownloadUrlExpiration);
-                _logger.LogInformation("Generated pre-signed URL for S3 key {S3Key} for post {PostId}",
+                _logger.LogInformation("Generated download URL for storage key {StorageKey} for post {PostId}",
                     post.MediaUrl, post.Id);
             }
             else
@@ -262,10 +262,10 @@ public class FacebookPagePublisher : IPostPublisher
 
             // Assume image for backward compatibility
             string imageUrl;
-            if (_mediaService.IsS3Key(post.MediaUrl))
+            if (_mediaService.IsStorageKey(post.MediaUrl))
             {
                 imageUrl = _mediaService.GenerateDownloadUrl(post.MediaUrl, MetaDownloadUrlExpiration);
-                _logger.LogInformation("Generated pre-signed URL for S3 key {S3Key} for post {PostId}",
+                _logger.LogInformation("Generated download URL for storage key {StorageKey} for post {PostId}",
                     post.MediaUrl, post.Id);
             }
             else
@@ -483,11 +483,11 @@ public class FacebookPagePublisher : IPostPublisher
     }
 
     /// <summary>
-    /// Resolves a public URL for a PostMediaItem (generates pre-signed URL if S3 key).
+    /// Resolves a public URL for a PostMediaItem (generates download URL if storage key).
     /// </summary>
     private string ResolveMediaUrlForItem(PostMediaItem item)
     {
-        if (_mediaService.IsS3Key(item.MediaUrl))
+        if (_mediaService.IsStorageKey(item.MediaUrl))
         {
             return _mediaService.GenerateDownloadUrl(item.MediaUrl, MetaDownloadUrlExpiration);
         }
@@ -498,11 +498,11 @@ public class FacebookPagePublisher : IPostPublisher
     {
         // Generate download URL for Meta to fetch the video
         string videoUrl;
-        if (_mediaService.IsS3Key(post.MediaUrl!))
+        if (_mediaService.IsStorageKey(post.MediaUrl!))
         {
             // Use longer expiration for videos since processing takes time
             videoUrl = _mediaService.GenerateDownloadUrl(post.MediaUrl!, TimeSpan.FromHours(2));
-            _logger.LogInformation("Generated pre-signed URL for video S3 key {S3Key} for post {PostId}",
+            _logger.LogInformation("Generated download URL for video storage key {StorageKey} for post {PostId}",
                 post.MediaUrl, post.Id);
         }
         else
@@ -558,8 +558,8 @@ public class FacebookPagePublisher : IPostPublisher
 
     private string? GetThumbnailUrl(string thumbnailUrl)
     {
-        // If it's an S3 key, generate a pre-signed URL
-        if (_mediaService.IsS3Key(thumbnailUrl))
+        // If it's a storage key, generate a download URL
+        if (_mediaService.IsStorageKey(thumbnailUrl))
         {
             return _mediaService.GenerateDownloadUrl(thumbnailUrl, MetaDownloadUrlExpiration);
         }

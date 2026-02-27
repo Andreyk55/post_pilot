@@ -20,7 +20,7 @@ Post Pilot allows users to schedule and manage posts across social media platfor
 - **Backend:** .NET 10 (C#) ASP.NET Core Web API (long-running Kestrel server)
 - **Frontend:** React + TypeScript + Vite
 - **Database:** PostgreSQL
-- **Media Storage:** AWS S3 (or local filesystem)
+- **Media Storage:** Local filesystem (APP_RUN_MODE=local) or generic storage provider (APP_RUN_MODE=server, stub — implement IMediaStorageProvider)
 - **Post Scheduling:** In-process BackgroundService (`PostPublishingWorker`) polling every 30s
 
 ## Supported Platforms
@@ -46,7 +46,7 @@ Post Pilot allows users to schedule and manage posts across social media platfor
 - [x] Set up database (PostgreSQL + EF Core)
 - [x] Create post scheduling API endpoints
 - [x] Connect frontend to backend API
-- [x] Set up S3 media bucket
+- [x] Set up media storage (local filesystem)
 - [x] Integrate Meta Graph API
 
 ## Notes
@@ -76,9 +76,9 @@ Post Pilot allows users to schedule and manage posts across social media platfor
 
 ## Media handling
 
-- S3 media bucket (or local filesystem for development)
-- UI uploads files directly to S3 using pre-signed URLs
-- Publishing: generates pre-signed GET URL and passes it to Meta
+- Local filesystem (APP_RUN_MODE=local) or generic storage provider (APP_RUN_MODE=server)
+- UI uploads files via pre-signed URLs (local: backend PUT endpoint; server: storage provider pre-signed URL)
+- Publishing: generates a download URL and passes it to Meta
 
 ## Auth (v1)
 

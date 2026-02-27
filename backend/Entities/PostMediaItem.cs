@@ -22,7 +22,7 @@ public class PostMediaItem
     public int Order { get; set; }
 
     /// <summary>
-    /// S3 key or external URL for this media file.
+    /// Storage key or external URL for this media file.
     /// </summary>
     public required string MediaUrl { get; set; }
 
