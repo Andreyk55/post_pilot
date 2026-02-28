@@ -38,16 +38,14 @@ public class Startup
         services.AddSwaggerGen();
 
         // Configure PostgreSQL with EF Core
-        // TODO: Deprecate DB_CONNECTION_STRING env var — prefer ConnectionStrings__DefaultConnection
-        // (standard .NET env var convention via AddEnvironmentVariables).
-        var connectionString = Configuration.GetConnectionString("DefaultConnection")
-                               ?? Environment.GetEnvironmentVariable("DB_CONNECTION_STRING");
+        // Use ConnectionStrings__DefaultConnection env var to override (standard .NET convention).
+        var connectionString = Configuration.GetConnectionString("DefaultConnection");
 
         if (string.IsNullOrEmpty(connectionString))
         {
             throw new InvalidOperationException(
                 "Database connection string not found. Set 'ConnectionStrings:DefaultConnection' in appsettings.json " +
-                "or 'DB_CONNECTION_STRING' environment variable.");
+                "or 'ConnectionStrings__DefaultConnection' environment variable.");
         }
 
         services.AddDbContext<AppDbContext>(options =>
@@ -60,12 +58,10 @@ public class Startup
         var appSecret = Environment.GetEnvironmentVariable("META_APP_SECRET") 
             ?? throw new InvalidOperationException("Required environment variable 'META_APP_SECRET' is missing.");
 
-        // For the RedirectUri, we check the Config, then Env Var, and finally fallback to localhost
-        // TODO: Deprecate META_REDIRECT_URI env var — prefer Meta__RedirectUri
-        // (standard .NET env var convention via AddEnvironmentVariables).
+        // For the RedirectUri, check config (use Meta__RedirectUri env var to override).
         var redirectUri = Configuration["Meta:RedirectUri"] 
-            ?? Environment.GetEnvironmentVariable("META_REDIRECT_URI") 
-            ?? throw new InvalidOperationException("RedirectUri is missing.");
+            ?? throw new InvalidOperationException(
+                "Meta:RedirectUri not found. Set it in appsettings.json or via 'Meta__RedirectUri' environment variable.");
 
         var metaSettings = new MetaOAuthSettings
         {
@@ -215,20 +211,16 @@ public class Startup
             });
         }
 
-        // Upload URL expiration: env var overrides config, config overrides default
-        var uploadExpMinutes = int.TryParse(
-            Environment.GetEnvironmentVariable("MEDIA_UPLOAD_URL_EXPIRATION_MINUTES"), out var uem) ? uem : -1;
-
         // Register the unified MediaService
+        // Use Media__UploadUrlExpirationMinutes env var to override the config value.
         services.AddSingleton<IMediaService>(sp =>
         {
             var mediaOpts = sp.GetRequiredService<MediaOptions>();
-            var effectiveUploadExp = uploadExpMinutes > 0 ? uploadExpMinutes : mediaOpts.UploadUrlExpirationMinutes;
             return new MediaService(
                 sp.GetRequiredService<IMediaStorageProvider>(),
                 runMode,
                 sp.GetRequiredService<ILogger<MediaService>>(),
-                uploadUrlExpiration: TimeSpan.FromMinutes(effectiveUploadExp),
+                uploadUrlExpiration: TimeSpan.FromMinutes(mediaOpts.UploadUrlExpirationMinutes),
                 maxImageFileSizeBytes: mediaOpts.MaxImageFileSizeBytes,
                 maxVideoFileSizeBytes: mediaOpts.MaxVideoFileSizeBytes);
         });
@@ -291,16 +283,9 @@ public class Startup
         services.AddSingleton<IValidateOptions<GeminiSettings>, GeminiSettingsValidator>();
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<GeminiSettings>>().Value);
 
-        // AI Provider settings: defaults from config, env var overrides (validated at startup)
+        // AI Provider settings: bound from config (use Ai__Providers__LanguageDetectorProvider etc. env vars to override)
         services.AddOptions<AiProviderSettings>()
             .Bind(configuration.GetSection(AiProviderSettings.SectionName))
-            .PostConfigure(settings =>
-            {
-                var langDetectorEnv = Environment.GetEnvironmentVariable("AI_LANGUAGE_DETECTOR_PROVIDER");
-                if (!string.IsNullOrEmpty(langDetectorEnv)) settings.LanguageDetectorProvider = langDetectorEnv;
-                var captionGenEnv = Environment.GetEnvironmentVariable("AI_CAPTION_GENERATOR_PROVIDER");
-                if (!string.IsNullOrEmpty(captionGenEnv)) settings.CaptionGeneratorProvider = captionGenEnv;
-            })
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<AiProviderSettings>, AiProviderSettingsValidator>();
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<AiProviderSettings>>().Value);
