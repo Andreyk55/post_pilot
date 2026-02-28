@@ -6,7 +6,7 @@ namespace PostPilot.Api.Services.Ai;
 /// Secrets (ApiKey, Model, VisionModel) bound from "Gemini" config section, which is
 /// populated via canonical env vars (Gemini__ApiKey, Gemini__Model, Gemini__VisionModel)
 /// or legacy env vars (GEMINI_API_KEY, GEMINI_MODEL, GEMINI_VISION_MODEL) through
-/// LegacyEnvVarMapper.
+/// EnvVarMapper.
 /// </summary>
 public class GeminiSettings
 {

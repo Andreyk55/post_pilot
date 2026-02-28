@@ -24,9 +24,9 @@ builder.Configuration
     .AddJsonFile("config/appsettings.common.json", optional: true, reloadOnChange: true)
     .AddJsonFile($"config/appsettings.{appEnv}.json", optional: true, reloadOnChange: true)
     .AddEnvironmentVariables()
-    // Map legacy flat env vars (APP_RUN_MODE, META_APP_ID, etc.) into canonical config keys.
-    // TODO: Remove once all deployments migrate to canonical __ env var names.
-    .AddLegacyEnvironmentVariables();
+    // Map flat env vars (APP_RUN_MODE, META_APP_ID, etc.) into canonical config keys.
+    // Both flat and canonical __ names are supported; canonical wins when both are set.
+    .AddFlatEnvironmentVariables();
 
 // ── Console logging: single-line with timestamp + scopes ──────────────────
 builder.Logging.AddSimpleConsole(options =>

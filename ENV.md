@@ -5,7 +5,7 @@
 PostPilot uses standard .NET configuration with `__`-separated environment variable names
 that map to hierarchical config keys (e.g. `Gemini__ApiKey` → `Gemini:ApiKey`).
 
-Legacy flat env var names (e.g. `GEMINI_API_KEY`) are still supported via `LegacyEnvVarMapper`
+Flat env var names (e.g. `GEMINI_API_KEY`) are also supported via `EnvVarMapper`
 but are **deprecated** and will be removed in a future release.
 
 ## Backend — Canonical env vars (preferred)
@@ -57,7 +57,7 @@ If both legacy and canonical env vars are set, the canonical one wins.
 .NET configuration uses a hierarchical key model. Environment variables override config files:
 - Config key `Gemini:ApiKey` can be set via env var `Gemini__ApiKey` (double underscore = section separator).
 - `AddEnvironmentVariables()` automatically handles this mapping.
-- The `LegacyEnvVarMapper` in `Program.cs` additionally maps old flat names for backward compatibility.
+- The `EnvVarMapper` in `Program.cs` additionally maps flat names (e.g. `GEMINI_API_KEY`) into canonical keys.
 
 ## Security
 

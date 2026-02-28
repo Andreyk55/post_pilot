@@ -1,21 +1,21 @@
 namespace PostPilot.Api.Settings;
 
 /// <summary>
-/// Maps legacy flat environment variable names to canonical __ (section-separated) config keys.
+/// Maps flat environment variable names to canonical __ (section-separated) config keys.
 ///
-/// This allows users who currently set e.g. META_APP_ID to keep working while
-/// the codebase transitions to standard .NET configuration keys like Meta__AppId.
+/// This allows users who set e.g. META_APP_ID or GEMINI_API_KEY to have those
+/// values flow into the standard .NET configuration hierarchy (Meta:AppId, Gemini:ApiKey, etc.).
 ///
-/// DEPRECATED: Legacy env var names will be removed in a future release.
-/// Prefer the canonical names (App__RunMode, Meta__AppId, Gemini__ApiKey, etc.).
+/// Both flat names and canonical __ names are supported. When both are set,
+/// the canonical name wins.
 /// </summary>
-public static class LegacyEnvVarMapper
+public static class EnvVarMapper
 {
     /// <summary>
-    /// Legacy flat env var → canonical config key.
+    /// Flat env var → canonical config key.
     /// Canonical keys use ":" as section separator (internally mapped from "__" by .NET).
     /// </summary>
-    private static readonly (string LegacyEnv, string ConfigKey)[] Mappings =
+    private static readonly (string FlatEnvVar, string ConfigKey)[] Mappings =
     [
         ("APP_RUN_MODE",        "App:RunMode"),
         ("PUBLIC_URL",          "App:PublicUrl"),
@@ -27,28 +27,28 @@ public static class LegacyEnvVarMapper
     ];
 
     /// <summary>
-    /// Reads legacy flat env vars and injects them into the <see cref="IConfigurationBuilder"/>
+    /// Reads flat env vars and injects them into the <see cref="IConfigurationBuilder"/>
     /// as in-memory overrides — but only when the canonical key is NOT already set.
     /// This ensures that if a user sets both META_APP_ID and Meta__AppId, the canonical one wins.
     /// </summary>
-    public static IConfigurationBuilder AddLegacyEnvironmentVariables(this IConfigurationBuilder builder)
+    public static IConfigurationBuilder AddFlatEnvironmentVariables(this IConfigurationBuilder builder)
     {
         // Build a temporary config to check what's already set
         var tempConfig = builder.Build();
 
         var overrides = new Dictionary<string, string?>();
 
-        foreach (var (legacyEnv, configKey) in Mappings)
+        foreach (var (flatEnvVar, configKey) in Mappings)
         {
-            var legacyValue = Environment.GetEnvironmentVariable(legacyEnv);
-            if (string.IsNullOrEmpty(legacyValue))
+            var value = Environment.GetEnvironmentVariable(flatEnvVar);
+            if (string.IsNullOrEmpty(value))
                 continue;
 
             // Only inject if the canonical key isn't already set (canonical wins)
             var existingValue = tempConfig[configKey];
             if (string.IsNullOrEmpty(existingValue))
             {
-                overrides[configKey] = legacyValue;
+                overrides[configKey] = value;
             }
         }
 

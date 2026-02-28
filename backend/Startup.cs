@@ -52,7 +52,7 @@ public class Startup
             options.UseNpgsql(connectionString));
 
         // ── App-level options (run mode, public URL) ──────────────────────────
-        // Secrets flow through legacy env var mapping (LegacyEnvVarMapper) or
+        // Secrets flow through flat env var mapping (EnvVarMapper) or
         // canonical env vars (App__RunMode, App__PublicUrl).
         services.AddOptions<AppOptions>()
             .Bind(Configuration.GetSection(AppOptions.SectionName))
@@ -274,7 +274,7 @@ public class Startup
         // Gemini settings: non-secret defaults (BaseUrl, TimeoutSeconds) from Ai:Gemini config section.
         // Secrets (ApiKey, Model, VisionModel) flow through legacy env var mapping or canonical env vars:
         //   Gemini__ApiKey, Gemini__Model, Gemini__VisionModel
-        // The LegacyEnvVarMapper in Program.cs maps GEMINI_API_KEY → Gemini:ApiKey etc.
+        // The EnvVarMapper in Program.cs maps GEMINI_API_KEY → Gemini:ApiKey etc.
         services.AddOptions<GeminiSettings>()
             .Bind(configuration.GetSection(GeminiSettings.SectionName))
             .Bind(configuration.GetSection("Gemini")) // Bind secrets from Gemini:ApiKey, Gemini:Model, Gemini:VisionModel
