@@ -34,8 +34,8 @@ public class MediaOptions
     /// Public-facing URL override (e.g., ngrok tunnel URL).
     /// When set, used instead of <see cref="LocalServerBaseUrl"/> for generating
     /// download/upload URLs that external services (Meta, AI) must reach.
-    /// Can be set via config key Media:PublicUrl, env var Media__PublicUrl,
-    /// or legacy env var PUBLIC_URL (deprecated — prefer Media__PublicUrl).
+    /// Centralized in <see cref="AppOptions.PublicUrl"/> and propagated here via PostConfigure.
+    /// Can also be set directly via config key Media:PublicUrl or env var Media__PublicUrl.
     /// </summary>
     public string? PublicUrl { get; set; }
 

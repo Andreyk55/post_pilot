@@ -56,6 +56,14 @@
               "target": "Package",
               "version": "[10.*, )"
             },
+            "Microsoft.Extensions.Configuration": {
+              "target": "Package",
+              "version": "[10.*, )"
+            },
+            "Microsoft.Extensions.Configuration.EnvironmentVariables": {
+              "target": "Package",
+              "version": "[10.*, )"
+            },
             "Microsoft.Extensions.Logging.Abstractions": {
               "target": "Package",
               "version": "[10.*, )"
@@ -413,30 +421,6 @@
         "net10.0": {
           "targetAlias": "net10.0",
           "dependencies": {
-            "AWSSDK.S3": {
-              "target": "Package",
-              "version": "[3.7.*, )"
-            },
-            "AWSSDK.SQS": {
-              "target": "Package",
-              "version": "[3.7.*, )"
-            },
-            "AWSSDK.Scheduler": {
-              "target": "Package",
-              "version": "[3.7.*, )"
-            },
-            "Amazon.Lambda.AspNetCoreServer": {
-              "target": "Package",
-              "version": "[9.2.1, )"
-            },
-            "Amazon.Lambda.CloudWatchEvents": {
-              "target": "Package",
-              "version": "[4.1.0, )"
-            },
-            "Amazon.Lambda.SQSEvents": {
-              "target": "Package",
-              "version": "[2.2.0, )"
-            },
             "Microsoft.AspNetCore.OpenApi": {
               "target": "Package",
               "version": "[10.0.1, )"

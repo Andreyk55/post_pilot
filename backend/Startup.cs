@@ -51,26 +51,36 @@ public class Startup
         services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(connectionString));
 
-        // Configure Meta OAuth settings (secrets from environment variables only)
-        var appId = Environment.GetEnvironmentVariable("META_APP_ID") 
-            ?? throw new InvalidOperationException("Required environment variable 'META_APP_ID' is missing.");
+        // ── App-level options (run mode, public URL) ──────────────────────────
+        // Secrets flow through legacy env var mapping (LegacyEnvVarMapper) or
+        // canonical env vars (App__RunMode, App__PublicUrl).
+        services.AddOptions<AppOptions>()
+            .Bind(Configuration.GetSection(AppOptions.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<AppOptions>, AppOptionsValidator>();
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<AppOptions>>().Value);
 
-        var appSecret = Environment.GetEnvironmentVariable("META_APP_SECRET") 
-            ?? throw new InvalidOperationException("Required environment variable 'META_APP_SECRET' is missing.");
+        // ── Meta OAuth options (AppId, AppSecret, RedirectUri) ──────────────────
+        // Secrets flow through legacy env var mapping or canonical env vars
+        // (Meta__AppId, Meta__AppSecret, Meta__RedirectUri).
+        services.AddOptions<MetaOptions>()
+            .Bind(Configuration.GetSection(MetaOptions.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<MetaOptions>, MetaOptionsValidator>();
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<MetaOptions>>().Value);
 
-        // For the RedirectUri, check config (use Meta__RedirectUri env var to override).
-        var redirectUri = Configuration["Meta:RedirectUri"] 
-            ?? throw new InvalidOperationException(
-                "Meta:RedirectUri not found. Set it in appsettings.json or via 'Meta__RedirectUri' environment variable.");
-
-        var metaSettings = new MetaOAuthSettings
+        // Bridge: expose MetaOAuthSettings for existing consumers (MetaOAuthService)
+        // TODO: Migrate MetaOAuthService to use IOptions<MetaOptions> directly, then remove this.
+        services.AddSingleton(sp =>
         {
-            AppId = appId,
-            AppSecret = appSecret,
-            RedirectUri = redirectUri
-        };
-        
-        services.AddSingleton(metaSettings);
+            var meta = sp.GetRequiredService<MetaOptions>();
+            return new MetaOAuthSettings
+            {
+                AppId = meta.AppId,
+                AppSecret = meta.AppSecret,
+                RedirectUri = meta.RedirectUri
+            };
+        });
 
         // Register Meta OAuth service
         services.AddHttpClient<IMetaOAuthService, MetaOAuthService>();
@@ -129,15 +139,15 @@ public class Startup
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<PublishingOptions>>().Value);
 
         // Configure media options (file size limits, upload expiration, local server URL)
+        // PUBLIC_URL is now centralized in AppOptions; propagated here via PostConfigure.
         services.AddOptions<MediaOptions>()
             .Bind(Configuration.GetSection(MediaOptions.SectionName))
-            .PostConfigure(options =>
+            .PostConfigure<IOptions<AppOptions>>((options, appOpts) =>
             {
-                // TODO: Deprecate PUBLIC_URL env var — prefer Media__PublicUrl or Media:PublicUrl config key.
-                var legacyPublicUrl = Environment.GetEnvironmentVariable("PUBLIC_URL");
-                if (!string.IsNullOrEmpty(legacyPublicUrl) && string.IsNullOrEmpty(options.PublicUrl))
+                // Centralized public URL: AppOptions is the single source of truth.
+                if (!string.IsNullOrEmpty(appOpts.Value.PublicUrl) && string.IsNullOrEmpty(options.PublicUrl))
                 {
-                    options.PublicUrl = legacyPublicUrl;
+                    options.PublicUrl = appOpts.Value.PublicUrl;
                 }
             })
             .ValidateOnStart();
@@ -185,36 +195,27 @@ public class Startup
 
     private static void ConfigureMediaService(IServiceCollection services)
     {
-        var runModeStr = Environment.GetEnvironmentVariable("APP_RUN_MODE") ?? "local";
-        var runMode = runModeStr.Equals("server", StringComparison.OrdinalIgnoreCase)
-            ? Enums.AppRunMode.Server
-            : Enums.AppRunMode.Local;
-
-        // Register the run mode so other services can query it
-        services.AddSingleton(typeof(Enums.AppRunMode), runMode);
-
-        if (runMode == Enums.AppRunMode.Server)
+        // Storage provider: chosen at resolution time based on AppOptions.RunModeEnum.
+        services.AddSingleton<IMediaStorageProvider>(sp =>
         {
-            // Server mode: register stub provider — implement IMediaStorageProvider to add a real provider.
-            // Every method throws NotImplementedException until implemented.
-            services.AddSingleton<IMediaStorageProvider, ServerMediaStorageProvider>();
-        }
-        else
-        {
-            // Local mode: filesystem storage
-            services.AddSingleton<IMediaStorageProvider>(sp =>
+            var runMode = sp.GetRequiredService<AppOptions>().RunModeEnum;
+            if (runMode == Enums.AppRunMode.Server)
             {
-                var mediaOpts = sp.GetRequiredService<MediaOptions>();
-                return new LocalDiskMediaStorageProvider(
-                    sp.GetRequiredService<ILogger<LocalDiskMediaStorageProvider>>(),
-                    mediaOpts.EffectiveBaseUrl);
-            });
-        }
+                // Server mode: stub provider — implement IMediaStorageProvider to add a real provider.
+                return new ServerMediaStorageProvider();
+            }
+
+            // Local mode: filesystem storage
+            var mediaOpts = sp.GetRequiredService<MediaOptions>();
+            return new LocalDiskMediaStorageProvider(
+                sp.GetRequiredService<ILogger<LocalDiskMediaStorageProvider>>(),
+                mediaOpts.EffectiveBaseUrl);
+        });
 
         // Register the unified MediaService
-        // Use Media__UploadUrlExpirationMinutes env var to override the config value.
         services.AddSingleton<IMediaService>(sp =>
         {
+            var runMode = sp.GetRequiredService<AppOptions>().RunModeEnum;
             var mediaOpts = sp.GetRequiredService<MediaOptions>();
             return new MediaService(
                 sp.GetRequiredService<IMediaStorageProvider>(),
@@ -270,14 +271,20 @@ public class Startup
         services.AddSingleton<IValidateOptions<AiCacheOptions>, AiCacheOptionsValidator>();
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<AiCacheOptions>>().Value);
 
-        // Gemini settings: non-secret defaults from config, secrets from env vars (validated at startup)
+        // Gemini settings: non-secret defaults (BaseUrl, TimeoutSeconds) from Ai:Gemini config section.
+        // Secrets (ApiKey, Model, VisionModel) flow through legacy env var mapping or canonical env vars:
+        //   Gemini__ApiKey, Gemini__Model, Gemini__VisionModel
+        // The LegacyEnvVarMapper in Program.cs maps GEMINI_API_KEY → Gemini:ApiKey etc.
         services.AddOptions<GeminiSettings>()
             .Bind(configuration.GetSection(GeminiSettings.SectionName))
+            .Bind(configuration.GetSection("Gemini")) // Bind secrets from Gemini:ApiKey, Gemini:Model, Gemini:VisionModel
             .PostConfigure(settings =>
             {
-                settings.ApiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? string.Empty;
-                settings.Model = Environment.GetEnvironmentVariable("GEMINI_MODEL") ?? string.Empty;
-                settings.VisionModel = Environment.GetEnvironmentVariable("GEMINI_VISION_MODEL");
+                // VisionModel fallback: if not set, use Model.
+                if (string.IsNullOrWhiteSpace(settings.VisionModel))
+                {
+                    settings.VisionModel = settings.Model;
+                }
             })
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<GeminiSettings>, GeminiSettingsValidator>();

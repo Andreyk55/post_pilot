@@ -10,6 +10,8 @@
         "dependencies": {
           "Microsoft.EntityFrameworkCore.InMemory": "10.0.1",
           "Microsoft.Extensions.Caching.Memory": "10.0.3",
+          "Microsoft.Extensions.Configuration": "10.0.3",
+          "Microsoft.Extensions.Configuration.EnvironmentVariables": "10.0.3",
           "Microsoft.Extensions.Logging.Abstractions": "10.0.3",
           "Microsoft.NET.Test.Sdk": "17.14.1",
           "Moq": "4.20.72",
@@ -18,125 +20,6 @@
         },
         "runtime": {
           "PostPilot.Api.Tests.dll": {}
-        }
-      },
-      "Amazon.Lambda.APIGatewayEvents/2.7.3": {
-        "runtime": {
-          "lib/net8.0/Amazon.Lambda.APIGatewayEvents.dll": {
-            "assemblyVersion": "1.0.0.0",
-            "fileVersion": "1.2.0.0"
-          }
-        }
-      },
-      "Amazon.Lambda.ApplicationLoadBalancerEvents/2.2.0": {
-        "runtime": {
-          "lib/net8.0/Amazon.Lambda.ApplicationLoadBalancerEvents.dll": {
-            "assemblyVersion": "0.0.0.0",
-            "fileVersion": "0.0.0.0"
-          }
-        }
-      },
-      "Amazon.Lambda.AspNetCoreServer/9.2.1": {
-        "dependencies": {
-          "Amazon.Lambda.APIGatewayEvents": "2.7.3",
-          "Amazon.Lambda.ApplicationLoadBalancerEvents": "2.2.0",
-          "Amazon.Lambda.Core": "2.8.0",
-          "Amazon.Lambda.Logging.AspNetCore": "4.1.1",
-          "Amazon.Lambda.Serialization.SystemTextJson": "2.4.4"
-        },
-        "runtime": {
-          "lib/net8.0/Amazon.Lambda.AspNetCoreServer.dll": {
-            "assemblyVersion": "2.0.0.0",
-            "fileVersion": "2.0.4.0"
-          }
-        }
-      },
-      "Amazon.Lambda.CloudWatchEvents/4.1.0": {
-        "runtime": {
-          "lib/netcoreapp3.1/Amazon.Lambda.CloudWatchEvents.dll": {
-            "assemblyVersion": "0.0.0.0",
-            "fileVersion": "0.0.0.0"
-          }
-        }
-      },
-      "Amazon.Lambda.Core/2.8.0": {
-        "runtime": {
-          "lib/net8.0/Amazon.Lambda.Core.dll": {
-            "assemblyVersion": "1.0.0.0",
-            "fileVersion": "1.0.0.0"
-          }
-        }
-      },
-      "Amazon.Lambda.Logging.AspNetCore/4.1.1": {
-        "dependencies": {
-          "Amazon.Lambda.Core": "2.8.0",
-          "Microsoft.Extensions.Logging.Abstractions": "10.0.3"
-        },
-        "runtime": {
-          "lib/net8.0/Amazon.Lambda.Logging.AspNetCore.dll": {
-            "assemblyVersion": "2.0.0.0",
-            "fileVersion": "2.0.0.0"
-          }
-        }
-      },
-      "Amazon.Lambda.Serialization.SystemTextJson/2.4.4": {
-        "dependencies": {
-          "Amazon.Lambda.Core": "2.8.0"
-        },
-        "runtime": {
-          "lib/net8.0/Amazon.Lambda.Serialization.SystemTextJson.dll": {
-            "assemblyVersion": "0.0.0.0",
-            "fileVersion": "0.0.0.0"
-          }
-        }
-      },
-      "Amazon.Lambda.SQSEvents/2.2.0": {
-        "runtime": {
-          "lib/net8.0/Amazon.Lambda.SQSEvents.dll": {
-            "assemblyVersion": "1.0.0.0",
-            "fileVersion": "1.0.0.0"
-          }
-        }
-      },
-      "AWSSDK.Core/3.7.500.77": {
-        "runtime": {
-          "lib/net8.0/AWSSDK.Core.dll": {
-            "assemblyVersion": "3.3.0.0",
-            "fileVersion": "3.7.500.77"
-          }
-        }
-      },
-      "AWSSDK.S3/3.7.510.5": {
-        "dependencies": {
-          "AWSSDK.Core": "3.7.500.77"
-        },
-        "runtime": {
-          "lib/net8.0/AWSSDK.S3.dll": {
-            "assemblyVersion": "3.3.0.0",
-            "fileVersion": "3.7.510.5"
-          }
-        }
-      },
-      "AWSSDK.Scheduler/3.7.502.39": {
-        "dependencies": {
-          "AWSSDK.Core": "3.7.500.77"
-        },
-        "runtime": {
-          "lib/net8.0/AWSSDK.Scheduler.dll": {
-            "assemblyVersion": "3.3.0.0",
-            "fileVersion": "3.7.502.39"
-          }
-        }
-      },
-      "AWSSDK.SQS/3.7.502.38": {
-        "dependencies": {
-          "AWSSDK.Core": "3.7.500.77"
-        },
-        "runtime": {
-          "lib/net8.0/AWSSDK.SQS.dll": {
-            "assemblyVersion": "3.3.0.0",
-            "fileVersion": "3.7.502.38"
-          }
         }
       },
       "Castle.Core/5.1.1": {
@@ -201,7 +84,8 @@
       "Microsoft.EntityFrameworkCore.Relational/10.0.0": {
         "dependencies": {
           "Microsoft.EntityFrameworkCore": "10.0.1",
-          "Microsoft.Extensions.Caching.Memory": "10.0.3"
+          "Microsoft.Extensions.Caching.Memory": "10.0.3",
+          "Microsoft.Extensions.Configuration.Abstractions": "10.0.3"
         },
         "runtime": {
           "lib/net10.0/Microsoft.EntityFrameworkCore.Relational.dll": {
@@ -231,6 +115,41 @@
         },
         "runtime": {
           "lib/net10.0/Microsoft.Extensions.Caching.Memory.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.326.7603"
+          }
+        }
+      },
+      "Microsoft.Extensions.Configuration/10.0.3": {
+        "dependencies": {
+          "Microsoft.Extensions.Configuration.Abstractions": "10.0.3",
+          "Microsoft.Extensions.Primitives": "10.0.3"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.Configuration.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.326.7603"
+          }
+        }
+      },
+      "Microsoft.Extensions.Configuration.Abstractions/10.0.3": {
+        "dependencies": {
+          "Microsoft.Extensions.Primitives": "10.0.3"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.Configuration.Abstractions.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.326.7603"
+          }
+        }
+      },
+      "Microsoft.Extensions.Configuration.EnvironmentVariables/10.0.3": {
+        "dependencies": {
+          "Microsoft.Extensions.Configuration": "10.0.3",
+          "Microsoft.Extensions.Configuration.Abstractions": "10.0.3"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.Configuration.EnvironmentVariables.dll": {
             "assemblyVersion": "10.0.0.0",
             "fileVersion": "10.0.326.7603"
           }
@@ -672,12 +591,6 @@
       },
       "PostPilot.Api/1.0.0": {
         "dependencies": {
-          "AWSSDK.S3": "3.7.510.5",
-          "AWSSDK.SQS": "3.7.502.38",
-          "AWSSDK.Scheduler": "3.7.502.39",
-          "Amazon.Lambda.AspNetCoreServer": "9.2.1",
-          "Amazon.Lambda.CloudWatchEvents": "4.1.0",
-          "Amazon.Lambda.SQSEvents": "2.2.0",
           "Microsoft.AspNetCore.OpenApi": "10.0.1",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "10.0.0",
           "SixLabors.ImageSharp": "3.1.7",
@@ -697,90 +610,6 @@
       "type": "project",
       "serviceable": false,
       "sha512": ""
-    },
-    "Amazon.Lambda.APIGatewayEvents/2.7.3": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-CXmiXdwuSXSJA0YH+7OJqG2uGDnhDcKkN2ei2u2/kdRFK+RH8JC5GbdechdJoldpogxHdHy12TuAfqqKSC67Nw==",
-      "path": "amazon.lambda.apigatewayevents/2.7.3",
-      "hashPath": "amazon.lambda.apigatewayevents.2.7.3.nupkg.sha512"
-    },
-    "Amazon.Lambda.ApplicationLoadBalancerEvents/2.2.0": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-UtCd9tFuVyED8+DmDKEkdXJbAb/TdHIz51R/CsJCexKerO6HGOG87FGId4Ce9IXE+qjlBGyNQsKCw9oLLNe0hw==",
-      "path": "amazon.lambda.applicationloadbalancerevents/2.2.0",
-      "hashPath": "amazon.lambda.applicationloadbalancerevents.2.2.0.nupkg.sha512"
-    },
-    "Amazon.Lambda.AspNetCoreServer/9.2.1": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-2K1x1AIMA7iK2G+oDi+rwHW9gYkaRe9+m1oZGHGduNCug/8Nq4ibiV8CMMO/jJ3NOaZa/l4tkA6xiWKV3aSjlw==",
-      "path": "amazon.lambda.aspnetcoreserver/9.2.1",
-      "hashPath": "amazon.lambda.aspnetcoreserver.9.2.1.nupkg.sha512"
-    },
-    "Amazon.Lambda.CloudWatchEvents/4.1.0": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-CYC24b/QvjqMt8cwOZVhcogmYRos8Em4jnJdhjIbNXqBdMF3TOLrZIw73ZJm/REntjS7gzich9paVOAO1wRIkg==",
-      "path": "amazon.lambda.cloudwatchevents/4.1.0",
-      "hashPath": "amazon.lambda.cloudwatchevents.4.1.0.nupkg.sha512"
-    },
-    "Amazon.Lambda.Core/2.8.0": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-mZnqCrLuNvB9T9/bCIcu/7H8HWd3yi6sEDzRE76D9ym06D+CoEfJ/EG4w7FucclvpSXO7ui/MKpzqhEnR2FAVg==",
-      "path": "amazon.lambda.core/2.8.0",
-      "hashPath": "amazon.lambda.core.2.8.0.nupkg.sha512"
-    },
-    "Amazon.Lambda.Logging.AspNetCore/4.1.1": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-4wtlguk2jI0FFR0dHvJfmfW99mDZWXJ56MELPfk2nxtgRlpUyo0RW5GcO3Teyc0nefFmxCiKdE7Iz2xSwiOnfg==",
-      "path": "amazon.lambda.logging.aspnetcore/4.1.1",
-      "hashPath": "amazon.lambda.logging.aspnetcore.4.1.1.nupkg.sha512"
-    },
-    "Amazon.Lambda.Serialization.SystemTextJson/2.4.4": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-iv/cvqFuZ3v3+NFDyof0IJZvU+4kdpzOe3pWSBwp9HB885I+D32WQxuid9V4GnvRynER9XnWMPaDmImX8qH5cA==",
-      "path": "amazon.lambda.serialization.systemtextjson/2.4.4",
-      "hashPath": "amazon.lambda.serialization.systemtextjson.2.4.4.nupkg.sha512"
-    },
-    "Amazon.Lambda.SQSEvents/2.2.0": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-RyYLgEa6nh+VJrCfTDKxvTLS1+eLDIIDyHgwDY3TR1WQz1+UeDIcccOJvoDk2nmjkSA0TfWJmZX9Ld0ySf57lA==",
-      "path": "amazon.lambda.sqsevents/2.2.0",
-      "hashPath": "amazon.lambda.sqsevents.2.2.0.nupkg.sha512"
-    },
-    "AWSSDK.Core/3.7.500.77": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-aMCS4lEpCqW4GkR6L6+QBT4Cl/hTIV7IKlF5g6jJSBm/kFrSML+Qil2zuARKXyzCAE07CJowKNKHEOfZyGsHCw==",
-      "path": "awssdk.core/3.7.500.77",
-      "hashPath": "awssdk.core.3.7.500.77.nupkg.sha512"
-    },
-    "AWSSDK.S3/3.7.510.5": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-JvJvSRo0H1Vz4Vzk8nVTLW1S2cZ7Zm9NBc1b0B11giEVcTjM0M69yHLdNfaC4eLUCP8fN6goHdIrOb6jrFnj3w==",
-      "path": "awssdk.s3/3.7.510.5",
-      "hashPath": "awssdk.s3.3.7.510.5.nupkg.sha512"
-    },
-    "AWSSDK.Scheduler/3.7.502.39": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-sYEzj840TCGSkm01ISg8TNlsZKg4UHSIXaHkb+BTKfrMGSdW4s9PeUrT/stiwD9uE6dOZoYrPVAKf2Cucj1Dyg==",
-      "path": "awssdk.scheduler/3.7.502.39",
-      "hashPath": "awssdk.scheduler.3.7.502.39.nupkg.sha512"
-    },
-    "AWSSDK.SQS/3.7.502.38": {
-      "type": "package",
-      "serviceable": true,
-      "sha512": "sha512-cLVuMJ+FqmyoOGRV+E2gq63d7WNtOyKVQ828Jjzeaq1lXDLBsX1J5nyTFBylMjFdMepkifg3TCYPfNXUX0T9cA==",
-      "path": "awssdk.sqs/3.7.502.38",
-      "hashPath": "awssdk.sqs.3.7.502.38.nupkg.sha512"
     },
     "Castle.Core/5.1.1": {
       "type": "package",
@@ -844,6 +673,27 @@
       "sha512": "sha512-No4fVh0z30SWqiWFRoA4PNdrEco6OjXvCqRFvlmRgDQqqks2bRDdeavUgWEiAX153ZAwW9loUgbxcvuP4NKQLg==",
       "path": "microsoft.extensions.caching.memory/10.0.3",
       "hashPath": "microsoft.extensions.caching.memory.10.0.3.nupkg.sha512"
+    },
+    "Microsoft.Extensions.Configuration/10.0.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-H1Cjv2xmm7O3iAGmFTcnSM0ZhLQ/7SqefmAvSJoT1PbXoxeYc2fo0mCLn2JlVbr9E6YpoU9q/o0fI9neDJB0xQ==",
+      "path": "microsoft.extensions.configuration/10.0.3",
+      "hashPath": "microsoft.extensions.configuration.10.0.3.nupkg.sha512"
+    },
+    "Microsoft.Extensions.Configuration.Abstractions/10.0.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-xVDHL0+SIgemfh95fTO9cGLe17TWv/ZP0n7m01z8X6pzt2DmQpucioWR/mYZA1sRlkWnkXzfl0JweLNWmE9WMg==",
+      "path": "microsoft.extensions.configuration.abstractions/10.0.3",
+      "hashPath": "microsoft.extensions.configuration.abstractions.10.0.3.nupkg.sha512"
+    },
+    "Microsoft.Extensions.Configuration.EnvironmentVariables/10.0.3": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-jBm6bpc5OM2VHM/QYVUyD78xweFzble6UsIt7GUnQAwCm07hktFaUBtRfO7viLGg5qPbc4ByteNB7DeVAYNSfA==",
+      "path": "microsoft.extensions.configuration.environmentvariables/10.0.3",
+      "hashPath": "microsoft.extensions.configuration.environmentvariables.10.0.3.nupkg.sha512"
     },
     "Microsoft.Extensions.DependencyInjection.Abstractions/10.0.3": {
       "type": "package",

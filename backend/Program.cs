@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Console;
 using PostPilot.Api;
 using PostPilot.Api.Middleware;
+using PostPilot.Api.Settings;
 
 // Entry point: long-running ASP.NET Core server (Kestrel)
 
@@ -9,6 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 // ── Additional config: load backend/config/ layered files ─────────────────
 // Precedence (last wins): appsettings.json → appsettings.{env}.json
 //   → config/appsettings.common.json → config/appsettings.{appEnv}.json → env vars
+//   → legacy flat env vars (backward compat, deprecated)
 var aspEnv = builder.Environment.EnvironmentName; // e.g. "Development"
 var appEnv = aspEnv switch
 {
@@ -21,7 +23,10 @@ var appEnv = aspEnv switch
 builder.Configuration
     .AddJsonFile("config/appsettings.common.json", optional: true, reloadOnChange: true)
     .AddJsonFile($"config/appsettings.{appEnv}.json", optional: true, reloadOnChange: true)
-    .AddEnvironmentVariables();
+    .AddEnvironmentVariables()
+    // Map legacy flat env vars (APP_RUN_MODE, META_APP_ID, etc.) into canonical config keys.
+    // TODO: Remove once all deployments migrate to canonical __ env var names.
+    .AddLegacyEnvironmentVariables();
 
 // ── Console logging: single-line with timestamp + scopes ──────────────────
 builder.Logging.AddSimpleConsole(options =>

@@ -2,8 +2,11 @@ namespace PostPilot.Api.Services.Ai;
 
 /// <summary>
 /// Configuration for Gemini AI service.
-/// Non-secret values (BaseUrl, TimeoutSeconds) from "Ai:Gemini" config section.
-/// Secrets (ApiKey, Model, VisionModel) from environment variables only.
+/// Non-secret values (BaseUrl, TimeoutSeconds) bound from "Ai:Gemini" config section.
+/// Secrets (ApiKey, Model, VisionModel) bound from "Gemini" config section, which is
+/// populated via canonical env vars (Gemini__ApiKey, Gemini__Model, Gemini__VisionModel)
+/// or legacy env vars (GEMINI_API_KEY, GEMINI_MODEL, GEMINI_VISION_MODEL) through
+/// LegacyEnvVarMapper.
 /// </summary>
 public class GeminiSettings
 {

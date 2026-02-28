@@ -148,18 +148,6 @@ D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\PostPilot.Api.Tests.d
 D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\PostPilot.Api.Tests.runtimeconfig.json
 D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\PostPilot.Api.Tests.dll
 D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\PostPilot.Api.Tests.pdb
-D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\Amazon.Lambda.APIGatewayEvents.dll
-D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\Amazon.Lambda.ApplicationLoadBalancerEvents.dll
-D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\Amazon.Lambda.AspNetCoreServer.dll
-D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\Amazon.Lambda.CloudWatchEvents.dll
-D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\Amazon.Lambda.Core.dll
-D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\Amazon.Lambda.Logging.AspNetCore.dll
-D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\Amazon.Lambda.Serialization.SystemTextJson.dll
-D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\Amazon.Lambda.SQSEvents.dll
-D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\AWSSDK.Core.dll
-D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\AWSSDK.S3.dll
-D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\AWSSDK.Scheduler.dll
-D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\AWSSDK.SQS.dll
 D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\Castle.Core.dll
 D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\Microsoft.AspNetCore.OpenApi.dll
 D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\Microsoft.VisualStudio.CodeCoverage.Shim.dll
@@ -264,3 +252,6 @@ D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\config\appsettings.co
 D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\config\appsettings.dev.json
 D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\config\appsettings.local.json
 D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\config\appsettings.prod.json
+D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\Microsoft.Extensions.Configuration.dll
+D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\Microsoft.Extensions.Configuration.Abstractions.dll
+D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\Microsoft.Extensions.Configuration.EnvironmentVariables.dll

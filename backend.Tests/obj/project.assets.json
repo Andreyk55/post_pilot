@@ -2,190 +2,6 @@
   "version": 3,
   "targets": {
     "net10.0": {
-      "Amazon.Lambda.APIGatewayEvents/2.7.3": {
-        "type": "package",
-        "compile": {
-          "lib/net8.0/Amazon.Lambda.APIGatewayEvents.dll": {
-            "related": ".xml"
-          }
-        },
-        "runtime": {
-          "lib/net8.0/Amazon.Lambda.APIGatewayEvents.dll": {
-            "related": ".xml"
-          }
-        }
-      },
-      "Amazon.Lambda.ApplicationLoadBalancerEvents/2.2.0": {
-        "type": "package",
-        "compile": {
-          "lib/net8.0/Amazon.Lambda.ApplicationLoadBalancerEvents.dll": {
-            "related": ".xml"
-          }
-        },
-        "runtime": {
-          "lib/net8.0/Amazon.Lambda.ApplicationLoadBalancerEvents.dll": {
-            "related": ".xml"
-          }
-        }
-      },
-      "Amazon.Lambda.AspNetCoreServer/9.2.1": {
-        "type": "package",
-        "dependencies": {
-          "Amazon.Lambda.APIGatewayEvents": "2.7.3",
-          "Amazon.Lambda.ApplicationLoadBalancerEvents": "2.2.0",
-          "Amazon.Lambda.Core": "2.8.0",
-          "Amazon.Lambda.Logging.AspNetCore": "4.1.1",
-          "Amazon.Lambda.Serialization.SystemTextJson": "2.4.4"
-        },
-        "compile": {
-          "lib/net8.0/Amazon.Lambda.AspNetCoreServer.dll": {
-            "related": ".xml"
-          }
-        },
-        "runtime": {
-          "lib/net8.0/Amazon.Lambda.AspNetCoreServer.dll": {
-            "related": ".xml"
-          }
-        },
-        "frameworkReferences": [
-          "Microsoft.AspNetCore.App"
-        ]
-      },
-      "Amazon.Lambda.CloudWatchEvents/4.1.0": {
-        "type": "package",
-        "compile": {
-          "lib/netcoreapp3.1/Amazon.Lambda.CloudWatchEvents.dll": {
-            "related": ".xml"
-          }
-        },
-        "runtime": {
-          "lib/netcoreapp3.1/Amazon.Lambda.CloudWatchEvents.dll": {
-            "related": ".xml"
-          }
-        }
-      },
-      "Amazon.Lambda.Core/2.8.0": {
-        "type": "package",
-        "compile": {
-          "lib/net8.0/Amazon.Lambda.Core.dll": {
-            "related": ".xml"
-          }
-        },
-        "runtime": {
-          "lib/net8.0/Amazon.Lambda.Core.dll": {
-            "related": ".xml"
-          }
-        }
-      },
-      "Amazon.Lambda.Logging.AspNetCore/4.1.1": {
-        "type": "package",
-        "dependencies": {
-          "Amazon.Lambda.Core": "2.7.0",
-          "Microsoft.Extensions.Configuration.Abstractions": "2.1.0",
-          "Microsoft.Extensions.Logging": "2.1.0",
-          "Microsoft.Extensions.Logging.Abstractions": "2.1.0"
-        },
-        "compile": {
-          "lib/net8.0/Amazon.Lambda.Logging.AspNetCore.dll": {
-            "related": ".xml"
-          }
-        },
-        "runtime": {
-          "lib/net8.0/Amazon.Lambda.Logging.AspNetCore.dll": {
-            "related": ".xml"
-          }
-        }
-      },
-      "Amazon.Lambda.Serialization.SystemTextJson/2.4.4": {
-        "type": "package",
-        "dependencies": {
-          "Amazon.Lambda.Core": "2.3.0"
-        },
-        "compile": {
-          "lib/net8.0/Amazon.Lambda.Serialization.SystemTextJson.dll": {
-            "related": ".xml"
-          }
-        },
-        "runtime": {
-          "lib/net8.0/Amazon.Lambda.Serialization.SystemTextJson.dll": {
-            "related": ".xml"
-          }
-        }
-      },
-      "Amazon.Lambda.SQSEvents/2.2.0": {
-        "type": "package",
-        "compile": {
-          "lib/net8.0/Amazon.Lambda.SQSEvents.dll": {
-            "related": ".xml"
-          }
-        },
-        "runtime": {
-          "lib/net8.0/Amazon.Lambda.SQSEvents.dll": {
-            "related": ".xml"
-          }
-        }
-      },
-      "AWSSDK.Core/3.7.500.77": {
-        "type": "package",
-        "compile": {
-          "lib/net8.0/AWSSDK.Core.dll": {
-            "related": ".pdb;.xml"
-          }
-        },
-        "runtime": {
-          "lib/net8.0/AWSSDK.Core.dll": {
-            "related": ".pdb;.xml"
-          }
-        }
-      },
-      "AWSSDK.S3/3.7.510.5": {
-        "type": "package",
-        "dependencies": {
-          "AWSSDK.Core": "[3.7.500.77, 4.0.0)"
-        },
-        "compile": {
-          "lib/net8.0/AWSSDK.S3.dll": {
-            "related": ".pdb;.xml"
-          }
-        },
-        "runtime": {
-          "lib/net8.0/AWSSDK.S3.dll": {
-            "related": ".pdb;.xml"
-          }
-        }
-      },
-      "AWSSDK.Scheduler/3.7.502.39": {
-        "type": "package",
-        "dependencies": {
-          "AWSSDK.Core": "[3.7.500.77, 4.0.0)"
-        },
-        "compile": {
-          "lib/net8.0/AWSSDK.Scheduler.dll": {
-            "related": ".pdb;.xml"
-          }
-        },
-        "runtime": {
-          "lib/net8.0/AWSSDK.Scheduler.dll": {
-            "related": ".pdb;.xml"
-          }
-        }
-      },
-      "AWSSDK.SQS/3.7.502.38": {
-        "type": "package",
-        "dependencies": {
-          "AWSSDK.Core": "[3.7.500.77, 4.0.0)"
-        },
-        "compile": {
-          "lib/net8.0/AWSSDK.SQS.dll": {
-            "related": ".pdb;.xml"
-          }
-        },
-        "runtime": {
-          "lib/net8.0/AWSSDK.SQS.dll": {
-            "related": ".pdb;.xml"
-          }
-        }
-      },
       "Castle.Core/5.1.1": {
         "type": "package",
         "dependencies": {
@@ -363,10 +179,30 @@
           "buildTransitive/net8.0/_._": {}
         }
       },
-      "Microsoft.Extensions.Configuration.Abstractions/10.0.0": {
+      "Microsoft.Extensions.Configuration/10.0.3": {
         "type": "package",
         "dependencies": {
-          "Microsoft.Extensions.Primitives": "10.0.0"
+          "Microsoft.Extensions.Configuration.Abstractions": "10.0.3",
+          "Microsoft.Extensions.Primitives": "10.0.3"
+        },
+        "compile": {
+          "lib/net10.0/Microsoft.Extensions.Configuration.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.Configuration.dll": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "buildTransitive/net8.0/_._": {}
+        }
+      },
+      "Microsoft.Extensions.Configuration.Abstractions/10.0.3": {
+        "type": "package",
+        "dependencies": {
+          "Microsoft.Extensions.Primitives": "10.0.3"
         },
         "compile": {
           "lib/net10.0/Microsoft.Extensions.Configuration.Abstractions.dll": {
@@ -375,6 +211,26 @@
         },
         "runtime": {
           "lib/net10.0/Microsoft.Extensions.Configuration.Abstractions.dll": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "buildTransitive/net8.0/_._": {}
+        }
+      },
+      "Microsoft.Extensions.Configuration.EnvironmentVariables/10.0.3": {
+        "type": "package",
+        "dependencies": {
+          "Microsoft.Extensions.Configuration": "10.0.3",
+          "Microsoft.Extensions.Configuration.Abstractions": "10.0.3"
+        },
+        "compile": {
+          "lib/net10.0/Microsoft.Extensions.Configuration.EnvironmentVariables.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.Configuration.EnvironmentVariables.dll": {
             "related": ".xml"
           }
         },
@@ -1037,12 +893,6 @@
         "type": "project",
         "framework": ".NETCoreApp,Version=v10.0",
         "dependencies": {
-          "AWSSDK.S3": "3.7.0",
-          "AWSSDK.SQS": "3.7.0",
-          "AWSSDK.Scheduler": "3.7.0",
-          "Amazon.Lambda.AspNetCoreServer": "9.2.1",
-          "Amazon.Lambda.CloudWatchEvents": "4.1.0",
-          "Amazon.Lambda.SQSEvents": "2.2.0",
           "Microsoft.AspNetCore.OpenApi": "10.0.1",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "10.0.0",
           "SixLabors.ImageSharp": "3.1.7",
@@ -1061,265 +911,6 @@
     }
   },
   "libraries": {
-    "Amazon.Lambda.APIGatewayEvents/2.7.3": {
-      "sha512": "CXmiXdwuSXSJA0YH+7OJqG2uGDnhDcKkN2ei2u2/kdRFK+RH8JC5GbdechdJoldpogxHdHy12TuAfqqKSC67Nw==",
-      "type": "package",
-      "path": "amazon.lambda.apigatewayevents/2.7.3",
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "README.md",
-        "amazon.lambda.apigatewayevents.2.7.3.nupkg.sha512",
-        "amazon.lambda.apigatewayevents.nuspec",
-        "lib/net8.0/Amazon.Lambda.APIGatewayEvents.dll",
-        "lib/net8.0/Amazon.Lambda.APIGatewayEvents.xml",
-        "lib/netcoreapp3.1/Amazon.Lambda.APIGatewayEvents.dll",
-        "lib/netcoreapp3.1/Amazon.Lambda.APIGatewayEvents.xml",
-        "lib/netstandard2.0/Amazon.Lambda.APIGatewayEvents.dll",
-        "lib/netstandard2.0/Amazon.Lambda.APIGatewayEvents.xml"
-      ]
-    },
-    "Amazon.Lambda.ApplicationLoadBalancerEvents/2.2.0": {
-      "sha512": "UtCd9tFuVyED8+DmDKEkdXJbAb/TdHIz51R/CsJCexKerO6HGOG87FGId4Ce9IXE+qjlBGyNQsKCw9oLLNe0hw==",
-      "type": "package",
-      "path": "amazon.lambda.applicationloadbalancerevents/2.2.0",
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "amazon.lambda.applicationloadbalancerevents.2.2.0.nupkg.sha512",
-        "amazon.lambda.applicationloadbalancerevents.nuspec",
-        "lib/net8.0/Amazon.Lambda.ApplicationLoadBalancerEvents.dll",
-        "lib/net8.0/Amazon.Lambda.ApplicationLoadBalancerEvents.xml",
-        "lib/netcoreapp3.1/Amazon.Lambda.ApplicationLoadBalancerEvents.dll",
-        "lib/netcoreapp3.1/Amazon.Lambda.ApplicationLoadBalancerEvents.xml",
-        "lib/netstandard2.0/Amazon.Lambda.ApplicationLoadBalancerEvents.dll",
-        "lib/netstandard2.0/Amazon.Lambda.ApplicationLoadBalancerEvents.xml"
-      ]
-    },
-    "Amazon.Lambda.AspNetCoreServer/9.2.1": {
-      "sha512": "2K1x1AIMA7iK2G+oDi+rwHW9gYkaRe9+m1oZGHGduNCug/8Nq4ibiV8CMMO/jJ3NOaZa/l4tkA6xiWKV3aSjlw==",
-      "type": "package",
-      "path": "amazon.lambda.aspnetcoreserver/9.2.1",
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "README.md",
-        "amazon.lambda.aspnetcoreserver.9.2.1.nupkg.sha512",
-        "amazon.lambda.aspnetcoreserver.nuspec",
-        "lib/net6.0/Amazon.Lambda.AspNetCoreServer.dll",
-        "lib/net6.0/Amazon.Lambda.AspNetCoreServer.xml",
-        "lib/net8.0/Amazon.Lambda.AspNetCoreServer.dll",
-        "lib/net8.0/Amazon.Lambda.AspNetCoreServer.xml"
-      ]
-    },
-    "Amazon.Lambda.CloudWatchEvents/4.1.0": {
-      "sha512": "CYC24b/QvjqMt8cwOZVhcogmYRos8Em4jnJdhjIbNXqBdMF3TOLrZIw73ZJm/REntjS7gzich9paVOAO1wRIkg==",
-      "type": "package",
-      "path": "amazon.lambda.cloudwatchevents/4.1.0",
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "amazon.lambda.cloudwatchevents.4.1.0.nupkg.sha512",
-        "amazon.lambda.cloudwatchevents.nuspec",
-        "lib/netcoreapp3.1/Amazon.Lambda.CloudWatchEvents.dll",
-        "lib/netcoreapp3.1/Amazon.Lambda.CloudWatchEvents.xml",
-        "lib/netstandard2.0/Amazon.Lambda.CloudWatchEvents.dll",
-        "lib/netstandard2.0/Amazon.Lambda.CloudWatchEvents.xml"
-      ]
-    },
-    "Amazon.Lambda.Core/2.8.0": {
-      "sha512": "mZnqCrLuNvB9T9/bCIcu/7H8HWd3yi6sEDzRE76D9ym06D+CoEfJ/EG4w7FucclvpSXO7ui/MKpzqhEnR2FAVg==",
-      "type": "package",
-      "path": "amazon.lambda.core/2.8.0",
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "README.md",
-        "amazon.lambda.core.2.8.0.nupkg.sha512",
-        "amazon.lambda.core.nuspec",
-        "lib/net6.0/Amazon.Lambda.Core.dll",
-        "lib/net6.0/Amazon.Lambda.Core.xml",
-        "lib/net8.0/Amazon.Lambda.Core.dll",
-        "lib/net8.0/Amazon.Lambda.Core.xml",
-        "lib/netstandard2.0/Amazon.Lambda.Core.dll",
-        "lib/netstandard2.0/Amazon.Lambda.Core.xml"
-      ]
-    },
-    "Amazon.Lambda.Logging.AspNetCore/4.1.1": {
-      "sha512": "4wtlguk2jI0FFR0dHvJfmfW99mDZWXJ56MELPfk2nxtgRlpUyo0RW5GcO3Teyc0nefFmxCiKdE7Iz2xSwiOnfg==",
-      "type": "package",
-      "path": "amazon.lambda.logging.aspnetcore/4.1.1",
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "amazon.lambda.logging.aspnetcore.4.1.1.nupkg.sha512",
-        "amazon.lambda.logging.aspnetcore.nuspec",
-        "lib/net6.0/Amazon.Lambda.Logging.AspNetCore.dll",
-        "lib/net6.0/Amazon.Lambda.Logging.AspNetCore.xml",
-        "lib/net8.0/Amazon.Lambda.Logging.AspNetCore.dll",
-        "lib/net8.0/Amazon.Lambda.Logging.AspNetCore.xml"
-      ]
-    },
-    "Amazon.Lambda.Serialization.SystemTextJson/2.4.4": {
-      "sha512": "iv/cvqFuZ3v3+NFDyof0IJZvU+4kdpzOe3pWSBwp9HB885I+D32WQxuid9V4GnvRynER9XnWMPaDmImX8qH5cA==",
-      "type": "package",
-      "path": "amazon.lambda.serialization.systemtextjson/2.4.4",
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "README.md",
-        "amazon.lambda.serialization.systemtextjson.2.4.4.nupkg.sha512",
-        "amazon.lambda.serialization.systemtextjson.nuspec",
-        "lib/net6.0/Amazon.Lambda.Serialization.SystemTextJson.dll",
-        "lib/net6.0/Amazon.Lambda.Serialization.SystemTextJson.xml",
-        "lib/net8.0/Amazon.Lambda.Serialization.SystemTextJson.dll",
-        "lib/net8.0/Amazon.Lambda.Serialization.SystemTextJson.xml",
-        "lib/netcoreapp3.1/Amazon.Lambda.Serialization.SystemTextJson.dll",
-        "lib/netcoreapp3.1/Amazon.Lambda.Serialization.SystemTextJson.xml"
-      ]
-    },
-    "Amazon.Lambda.SQSEvents/2.2.0": {
-      "sha512": "RyYLgEa6nh+VJrCfTDKxvTLS1+eLDIIDyHgwDY3TR1WQz1+UeDIcccOJvoDk2nmjkSA0TfWJmZX9Ld0ySf57lA==",
-      "type": "package",
-      "path": "amazon.lambda.sqsevents/2.2.0",
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "amazon.lambda.sqsevents.2.2.0.nupkg.sha512",
-        "amazon.lambda.sqsevents.nuspec",
-        "lib/net8.0/Amazon.Lambda.SQSEvents.dll",
-        "lib/net8.0/Amazon.Lambda.SQSEvents.xml",
-        "lib/netcoreapp3.1/Amazon.Lambda.SQSEvents.dll",
-        "lib/netcoreapp3.1/Amazon.Lambda.SQSEvents.xml",
-        "lib/netstandard2.0/Amazon.Lambda.SQSEvents.dll",
-        "lib/netstandard2.0/Amazon.Lambda.SQSEvents.xml"
-      ]
-    },
-    "AWSSDK.Core/3.7.500.77": {
-      "sha512": "aMCS4lEpCqW4GkR6L6+QBT4Cl/hTIV7IKlF5g6jJSBm/kFrSML+Qil2zuARKXyzCAE07CJowKNKHEOfZyGsHCw==",
-      "type": "package",
-      "path": "awssdk.core/3.7.500.77",
-      "hasTools": true,
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "awssdk.core.3.7.500.77.nupkg.sha512",
-        "awssdk.core.nuspec",
-        "images/AWSLogo.png",
-        "lib/net35/AWSSDK.Core.dll",
-        "lib/net35/AWSSDK.Core.pdb",
-        "lib/net35/AWSSDK.Core.xml",
-        "lib/net45/AWSSDK.Core.dll",
-        "lib/net45/AWSSDK.Core.pdb",
-        "lib/net45/AWSSDK.Core.xml",
-        "lib/net8.0/AWSSDK.Core.dll",
-        "lib/net8.0/AWSSDK.Core.pdb",
-        "lib/net8.0/AWSSDK.Core.xml",
-        "lib/netcoreapp3.1/AWSSDK.Core.dll",
-        "lib/netcoreapp3.1/AWSSDK.Core.pdb",
-        "lib/netcoreapp3.1/AWSSDK.Core.xml",
-        "lib/netstandard2.0/AWSSDK.Core.dll",
-        "lib/netstandard2.0/AWSSDK.Core.pdb",
-        "lib/netstandard2.0/AWSSDK.Core.xml",
-        "tools/account-management.ps1"
-      ]
-    },
-    "AWSSDK.S3/3.7.510.5": {
-      "sha512": "JvJvSRo0H1Vz4Vzk8nVTLW1S2cZ7Zm9NBc1b0B11giEVcTjM0M69yHLdNfaC4eLUCP8fN6goHdIrOb6jrFnj3w==",
-      "type": "package",
-      "path": "awssdk.s3/3.7.510.5",
-      "hasTools": true,
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "analyzers/dotnet/cs/AWSSDK.S3.CodeAnalysis.dll",
-        "analyzers/dotnet/cs/SharedAnalysisCode.dll",
-        "awssdk.s3.3.7.510.5.nupkg.sha512",
-        "awssdk.s3.nuspec",
-        "images/AWSLogo.png",
-        "lib/net35/AWSSDK.S3.dll",
-        "lib/net35/AWSSDK.S3.pdb",
-        "lib/net35/AWSSDK.S3.xml",
-        "lib/net45/AWSSDK.S3.dll",
-        "lib/net45/AWSSDK.S3.pdb",
-        "lib/net45/AWSSDK.S3.xml",
-        "lib/net8.0/AWSSDK.S3.dll",
-        "lib/net8.0/AWSSDK.S3.pdb",
-        "lib/net8.0/AWSSDK.S3.xml",
-        "lib/netcoreapp3.1/AWSSDK.S3.dll",
-        "lib/netcoreapp3.1/AWSSDK.S3.pdb",
-        "lib/netcoreapp3.1/AWSSDK.S3.xml",
-        "lib/netstandard2.0/AWSSDK.S3.dll",
-        "lib/netstandard2.0/AWSSDK.S3.pdb",
-        "lib/netstandard2.0/AWSSDK.S3.xml",
-        "tools/install.ps1",
-        "tools/uninstall.ps1"
-      ]
-    },
-    "AWSSDK.Scheduler/3.7.502.39": {
-      "sha512": "sYEzj840TCGSkm01ISg8TNlsZKg4UHSIXaHkb+BTKfrMGSdW4s9PeUrT/stiwD9uE6dOZoYrPVAKf2Cucj1Dyg==",
-      "type": "package",
-      "path": "awssdk.scheduler/3.7.502.39",
-      "hasTools": true,
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "analyzers/dotnet/cs/AWSSDK.Scheduler.CodeAnalysis.dll",
-        "analyzers/dotnet/cs/SharedAnalysisCode.dll",
-        "awssdk.scheduler.3.7.502.39.nupkg.sha512",
-        "awssdk.scheduler.nuspec",
-        "images/AWSLogo.png",
-        "lib/net35/AWSSDK.Scheduler.dll",
-        "lib/net35/AWSSDK.Scheduler.pdb",
-        "lib/net35/AWSSDK.Scheduler.xml",
-        "lib/net45/AWSSDK.Scheduler.dll",
-        "lib/net45/AWSSDK.Scheduler.pdb",
-        "lib/net45/AWSSDK.Scheduler.xml",
-        "lib/net8.0/AWSSDK.Scheduler.dll",
-        "lib/net8.0/AWSSDK.Scheduler.pdb",
-        "lib/net8.0/AWSSDK.Scheduler.xml",
-        "lib/netcoreapp3.1/AWSSDK.Scheduler.dll",
-        "lib/netcoreapp3.1/AWSSDK.Scheduler.pdb",
-        "lib/netcoreapp3.1/AWSSDK.Scheduler.xml",
-        "lib/netstandard2.0/AWSSDK.Scheduler.dll",
-        "lib/netstandard2.0/AWSSDK.Scheduler.pdb",
-        "lib/netstandard2.0/AWSSDK.Scheduler.xml",
-        "tools/install.ps1",
-        "tools/uninstall.ps1"
-      ]
-    },
-    "AWSSDK.SQS/3.7.502.38": {
-      "sha512": "cLVuMJ+FqmyoOGRV+E2gq63d7WNtOyKVQ828Jjzeaq1lXDLBsX1J5nyTFBylMjFdMepkifg3TCYPfNXUX0T9cA==",
-      "type": "package",
-      "path": "awssdk.sqs/3.7.502.38",
-      "hasTools": true,
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "analyzers/dotnet/cs/AWSSDK.SQS.CodeAnalysis.dll",
-        "analyzers/dotnet/cs/SharedAnalysisCode.dll",
-        "awssdk.sqs.3.7.502.38.nupkg.sha512",
-        "awssdk.sqs.nuspec",
-        "images/AWSLogo.png",
-        "lib/net35/AWSSDK.SQS.dll",
-        "lib/net35/AWSSDK.SQS.pdb",
-        "lib/net35/AWSSDK.SQS.xml",
-        "lib/net45/AWSSDK.SQS.dll",
-        "lib/net45/AWSSDK.SQS.pdb",
-        "lib/net45/AWSSDK.SQS.xml",
-        "lib/net8.0/AWSSDK.SQS.dll",
-        "lib/net8.0/AWSSDK.SQS.pdb",
-        "lib/net8.0/AWSSDK.SQS.xml",
-        "lib/netcoreapp3.1/AWSSDK.SQS.dll",
-        "lib/netcoreapp3.1/AWSSDK.SQS.pdb",
-        "lib/netcoreapp3.1/AWSSDK.SQS.xml",
-        "lib/netstandard2.0/AWSSDK.SQS.dll",
-        "lib/netstandard2.0/AWSSDK.SQS.pdb",
-        "lib/netstandard2.0/AWSSDK.SQS.xml",
-        "tools/install.ps1",
-        "tools/uninstall.ps1"
-      ]
-    },
     "Castle.Core/5.1.1": {
       "sha512": "rpYtIczkzGpf+EkZgDr9CClTdemhsrwA/W5hMoPjLkRFnXzH44zDLoovXeKtmxb1ykXK9aJVODSpiJml8CTw2g==",
       "type": "package",
@@ -1821,10 +1412,39 @@
         "useSharedDesignerContext.txt"
       ]
     },
-    "Microsoft.Extensions.Configuration.Abstractions/10.0.0": {
-      "sha512": "d2kDKnCsJvY7mBVhcjPSp9BkJk48DsaHPg5u+Oy4f8XaOqnEedRy/USyvnpHL92wpJ6DrTPy7htppUUzskbCXQ==",
+    "Microsoft.Extensions.Configuration/10.0.3": {
+      "sha512": "H1Cjv2xmm7O3iAGmFTcnSM0ZhLQ/7SqefmAvSJoT1PbXoxeYc2fo0mCLn2JlVbr9E6YpoU9q/o0fI9neDJB0xQ==",
       "type": "package",
-      "path": "microsoft.extensions.configuration.abstractions/10.0.0",
+      "path": "microsoft.extensions.configuration/10.0.3",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "PACKAGE.md",
+        "THIRD-PARTY-NOTICES.TXT",
+        "buildTransitive/net461/Microsoft.Extensions.Configuration.targets",
+        "buildTransitive/net462/_._",
+        "buildTransitive/net8.0/_._",
+        "buildTransitive/netcoreapp2.0/Microsoft.Extensions.Configuration.targets",
+        "lib/net10.0/Microsoft.Extensions.Configuration.dll",
+        "lib/net10.0/Microsoft.Extensions.Configuration.xml",
+        "lib/net462/Microsoft.Extensions.Configuration.dll",
+        "lib/net462/Microsoft.Extensions.Configuration.xml",
+        "lib/net8.0/Microsoft.Extensions.Configuration.dll",
+        "lib/net8.0/Microsoft.Extensions.Configuration.xml",
+        "lib/net9.0/Microsoft.Extensions.Configuration.dll",
+        "lib/net9.0/Microsoft.Extensions.Configuration.xml",
+        "lib/netstandard2.0/Microsoft.Extensions.Configuration.dll",
+        "lib/netstandard2.0/Microsoft.Extensions.Configuration.xml",
+        "microsoft.extensions.configuration.10.0.3.nupkg.sha512",
+        "microsoft.extensions.configuration.nuspec",
+        "useSharedDesignerContext.txt"
+      ]
+    },
+    "Microsoft.Extensions.Configuration.Abstractions/10.0.3": {
+      "sha512": "xVDHL0+SIgemfh95fTO9cGLe17TWv/ZP0n7m01z8X6pzt2DmQpucioWR/mYZA1sRlkWnkXzfl0JweLNWmE9WMg==",
+      "type": "package",
+      "path": "microsoft.extensions.configuration.abstractions/10.0.3",
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
@@ -1845,8 +1465,37 @@
         "lib/net9.0/Microsoft.Extensions.Configuration.Abstractions.xml",
         "lib/netstandard2.0/Microsoft.Extensions.Configuration.Abstractions.dll",
         "lib/netstandard2.0/Microsoft.Extensions.Configuration.Abstractions.xml",
-        "microsoft.extensions.configuration.abstractions.10.0.0.nupkg.sha512",
+        "microsoft.extensions.configuration.abstractions.10.0.3.nupkg.sha512",
         "microsoft.extensions.configuration.abstractions.nuspec",
+        "useSharedDesignerContext.txt"
+      ]
+    },
+    "Microsoft.Extensions.Configuration.EnvironmentVariables/10.0.3": {
+      "sha512": "jBm6bpc5OM2VHM/QYVUyD78xweFzble6UsIt7GUnQAwCm07hktFaUBtRfO7viLGg5qPbc4ByteNB7DeVAYNSfA==",
+      "type": "package",
+      "path": "microsoft.extensions.configuration.environmentvariables/10.0.3",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "PACKAGE.md",
+        "THIRD-PARTY-NOTICES.TXT",
+        "buildTransitive/net461/Microsoft.Extensions.Configuration.EnvironmentVariables.targets",
+        "buildTransitive/net462/_._",
+        "buildTransitive/net8.0/_._",
+        "buildTransitive/netcoreapp2.0/Microsoft.Extensions.Configuration.EnvironmentVariables.targets",
+        "lib/net10.0/Microsoft.Extensions.Configuration.EnvironmentVariables.dll",
+        "lib/net10.0/Microsoft.Extensions.Configuration.EnvironmentVariables.xml",
+        "lib/net462/Microsoft.Extensions.Configuration.EnvironmentVariables.dll",
+        "lib/net462/Microsoft.Extensions.Configuration.EnvironmentVariables.xml",
+        "lib/net8.0/Microsoft.Extensions.Configuration.EnvironmentVariables.dll",
+        "lib/net8.0/Microsoft.Extensions.Configuration.EnvironmentVariables.xml",
+        "lib/net9.0/Microsoft.Extensions.Configuration.EnvironmentVariables.dll",
+        "lib/net9.0/Microsoft.Extensions.Configuration.EnvironmentVariables.xml",
+        "lib/netstandard2.0/Microsoft.Extensions.Configuration.EnvironmentVariables.dll",
+        "lib/netstandard2.0/Microsoft.Extensions.Configuration.EnvironmentVariables.xml",
+        "microsoft.extensions.configuration.environmentvariables.10.0.3.nupkg.sha512",
+        "microsoft.extensions.configuration.environmentvariables.nuspec",
         "useSharedDesignerContext.txt"
       ]
     },
@@ -2668,6 +2317,8 @@
     "net10.0": [
       "Microsoft.EntityFrameworkCore.InMemory >= 10.0.1",
       "Microsoft.Extensions.Caching.Memory >= 10.*",
+      "Microsoft.Extensions.Configuration >= 10.*",
+      "Microsoft.Extensions.Configuration.EnvironmentVariables >= 10.*",
       "Microsoft.Extensions.Logging.Abstractions >= 10.*",
       "Microsoft.NET.Test.Sdk >= 17.*",
       "Moq >= 4.*",
@@ -2728,6 +2379,14 @@
             "version": "[10.0.1, )"
           },
           "Microsoft.Extensions.Caching.Memory": {
+            "target": "Package",
+            "version": "[10.*, )"
+          },
+          "Microsoft.Extensions.Configuration": {
+            "target": "Package",
+            "version": "[10.*, )"
+          },
+          "Microsoft.Extensions.Configuration.EnvironmentVariables": {
             "target": "Package",
             "version": "[10.*, )"
           },
