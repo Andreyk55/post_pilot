@@ -109,7 +109,7 @@ public class PostTimeSuggestionService
 
     private async Task<string> CallGeminiAsync(string prompt, CancellationToken cancellationToken)
     {
-        var url = $"{_settings.BaseUrl}/models/{_settings.Model}:generateContent?key={_settings.ApiKey}";
+        var url = $"{_settings.BaseUrl}/models/{_settings.Model}:generateContent";
 
         // Check if model supports JSON mode (Gemma models don't)
         var supportsJsonMode = !_settings.Model.StartsWith("gemma", StringComparison.OrdinalIgnoreCase);
@@ -133,7 +133,9 @@ public class PostTimeSuggestionService
         var json = JsonSerializer.Serialize(geminiRequest, JsonOptions);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var response = await _httpClient.PostAsync(url, content, cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
+        request.Headers.Add("x-goog-api-key", _settings.ApiKey);
+        var response = await _httpClient.SendAsync(request, cancellationToken);
         var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
         if (!response.IsSuccessStatusCode)

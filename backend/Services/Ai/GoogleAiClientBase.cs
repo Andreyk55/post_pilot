@@ -153,7 +153,9 @@ public abstract class GoogleAiClientBase
 
         try
         {
-            var response = await HttpClient.PostAsync(url, content, cancellationToken);
+            using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
+            request.Headers.Add("x-goog-api-key", Settings.ApiKey);
+            var response = await HttpClient.SendAsync(request, cancellationToken);
             stopwatch.Stop();
 
             // Always read response body for better error diagnostics
@@ -259,7 +261,7 @@ public abstract class GoogleAiClientBase
 
     private string BuildApiUrl()
     {
-        return $"{Settings.BaseUrl}/models/{Settings.Model}:generateContent?key={Settings.ApiKey}";
+        return $"{Settings.BaseUrl}/models/{Settings.Model}:generateContent";
     }
 
     private string BuildApiUrlForLogging()

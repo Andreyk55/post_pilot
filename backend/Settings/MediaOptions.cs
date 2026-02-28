@@ -29,4 +29,18 @@ public class MediaOptions
     /// Can also be overridden via PUBLIC_URL env var.
     /// </summary>
     public string LocalServerBaseUrl { get; set; } = null!;
+
+    /// <summary>
+    /// Public-facing URL override (e.g., ngrok tunnel URL).
+    /// When set, used instead of <see cref="LocalServerBaseUrl"/> for generating
+    /// download/upload URLs that external services (Meta, AI) must reach.
+    /// Can be set via config key Media:PublicUrl, env var Media__PublicUrl,
+    /// or legacy env var PUBLIC_URL (deprecated — prefer Media__PublicUrl).
+    /// </summary>
+    public string? PublicUrl { get; set; }
+
+    /// <summary>
+    /// Returns <see cref="PublicUrl"/> if set, otherwise <see cref="LocalServerBaseUrl"/>.
+    /// </summary>
+    public string EffectiveBaseUrl => !string.IsNullOrWhiteSpace(PublicUrl) ? PublicUrl : LocalServerBaseUrl;
 }

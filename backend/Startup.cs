@@ -38,6 +38,8 @@ public class Startup
         services.AddSwaggerGen();
 
         // Configure PostgreSQL with EF Core
+        // TODO: Deprecate DB_CONNECTION_STRING env var — prefer ConnectionStrings__DefaultConnection
+        // (standard .NET env var convention via AddEnvironmentVariables).
         var connectionString = Configuration.GetConnectionString("DefaultConnection")
                                ?? Environment.GetEnvironmentVariable("DB_CONNECTION_STRING");
 
@@ -59,6 +61,8 @@ public class Startup
             ?? throw new InvalidOperationException("Required environment variable 'META_APP_SECRET' is missing.");
 
         // For the RedirectUri, we check the Config, then Env Var, and finally fallback to localhost
+        // TODO: Deprecate META_REDIRECT_URI env var — prefer Meta__RedirectUri
+        // (standard .NET env var convention via AddEnvironmentVariables).
         var redirectUri = Configuration["Meta:RedirectUri"] 
             ?? Environment.GetEnvironmentVariable("META_REDIRECT_URI") 
             ?? throw new InvalidOperationException("RedirectUri is missing.");
@@ -131,6 +135,15 @@ public class Startup
         // Configure media options (file size limits, upload expiration, local server URL)
         services.AddOptions<MediaOptions>()
             .Bind(Configuration.GetSection(MediaOptions.SectionName))
+            .PostConfigure(options =>
+            {
+                // TODO: Deprecate PUBLIC_URL env var — prefer Media__PublicUrl or Media:PublicUrl config key.
+                var legacyPublicUrl = Environment.GetEnvironmentVariable("PUBLIC_URL");
+                if (!string.IsNullOrEmpty(legacyPublicUrl) && string.IsNullOrEmpty(options.PublicUrl))
+                {
+                    options.PublicUrl = legacyPublicUrl;
+                }
+            })
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<MediaOptions>, MediaOptionsValidator>();
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<MediaOptions>>().Value);
@@ -198,7 +211,7 @@ public class Startup
                 var mediaOpts = sp.GetRequiredService<MediaOptions>();
                 return new LocalDiskMediaStorageProvider(
                     sp.GetRequiredService<ILogger<LocalDiskMediaStorageProvider>>(),
-                    mediaOpts.LocalServerBaseUrl);
+                    mediaOpts.EffectiveBaseUrl);
             });
         }
 
@@ -271,8 +284,7 @@ public class Startup
             .PostConfigure(settings =>
             {
                 settings.ApiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? string.Empty;
-                settings.Model = Environment.GetEnvironmentVariable("GEMINI_MODEL")
-                    ?? throw new InvalidOperationException("Required environment variable 'GEMINI_MODEL' is missing.");
+                settings.Model = Environment.GetEnvironmentVariable("GEMINI_MODEL") ?? string.Empty;
                 settings.VisionModel = Environment.GetEnvironmentVariable("GEMINI_VISION_MODEL");
             })
             .ValidateOnStart();

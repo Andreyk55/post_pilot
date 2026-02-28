@@ -9,6 +9,12 @@ public class GeminiSettingsValidator : IValidateOptions<GeminiSettings>
     {
         var failures = new List<string>();
 
+        if (string.IsNullOrWhiteSpace(options.ApiKey))
+            failures.Add("GEMINI_API_KEY environment variable is required.");
+
+        if (string.IsNullOrWhiteSpace(options.Model))
+            failures.Add("GEMINI_MODEL environment variable is required.");
+
         if (string.IsNullOrWhiteSpace(options.BaseUrl))
             failures.Add($"{nameof(options.BaseUrl)} is required.");
         else if (!Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out _))

@@ -15,7 +15,7 @@ public class MediaAiService : IMediaAiService
     private readonly IVideoFrameExtractor _videoFrameExtractor;
     private readonly IMediaService _mediaService;
     private readonly ILogger<MediaAiService> _logger;
-    private readonly string _localServerBaseUrl;
+    private readonly string _effectiveBaseUrl;
 
     // Temporary storage for extracted frames
     private readonly string _framesDirectory;
@@ -33,7 +33,7 @@ public class MediaAiService : IMediaAiService
         _videoFrameExtractor = videoFrameExtractor;
         _mediaService = mediaService;
         _logger = logger;
-        _localServerBaseUrl = mediaOptions.LocalServerBaseUrl;
+        _effectiveBaseUrl = mediaOptions.EffectiveBaseUrl;
 
         _framesDirectory = Path.Combine(Directory.GetCurrentDirectory(), "uploads", "frames");
         Directory.CreateDirectory(_framesDirectory);
@@ -223,7 +223,7 @@ public class MediaAiService : IMediaAiService
         var storageKey = $"media/frames/{frameId}";
 
         // Frames are always saved locally (both modes) for AI processing
-        var baseUrl = Environment.GetEnvironmentVariable("PUBLIC_URL") ?? _localServerBaseUrl;
+        var baseUrl = _effectiveBaseUrl;
         return $"{baseUrl}/api/media/frames/{frameId}";
     }
 
@@ -300,7 +300,7 @@ public class MediaAiService : IMediaAiService
         _logger.LogDebug("Saved client-extracted frame: {FramePath}", framePath);
 
         // Generate URL
-        var publicUrl = Environment.GetEnvironmentVariable("PUBLIC_URL") ?? _localServerBaseUrl;
+        var publicUrl = _effectiveBaseUrl;
         return $"{publicUrl}/api/media/frames/{frameId}";
     }
 
