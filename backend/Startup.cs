@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Options;
 using PostPilot.Api.Middleware;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -10,6 +11,7 @@ using PostPilot.Api.Services.Publishing;
 using PostPilot.Api.Services.Scheduling;
 using PostPilot.Api.Services.Validation;
 using PostPilot.Api.Settings;
+using PostPilot.Api.Settings.Validators;
 
 namespace PostPilot.Api;
 
@@ -106,9 +108,32 @@ public class Startup
         var featureSettings = Configuration.GetSection("Features").Get<FeatureSettings>() ?? new FeatureSettings();
         services.AddSingleton(featureSettings);
 
-        // Configure platform selection options
-        services.Configure<PlatformSelectionOptions>(
-            Configuration.GetSection("Features:PlatformSelection"));
+        // Configure platform selection options (validated at startup)
+        services.AddOptions<PlatformSelectionOptions>()
+            .Bind(Configuration.GetSection("Features:PlatformSelection"))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<PlatformSelectionOptions>, PlatformSelectionOptionsValidator>();
+
+        // Configure Meta API options (Graph API base URL, OAuth dialog URL)
+        services.AddOptions<MetaApiOptions>()
+            .Bind(Configuration.GetSection(MetaApiOptions.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<MetaApiOptions>, MetaApiOptionsValidator>();
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<MetaApiOptions>>().Value);
+
+        // Configure publishing options (polling intervals, retry settings, URL expirations)
+        services.AddOptions<PublishingOptions>()
+            .Bind(Configuration.GetSection(PublishingOptions.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<PublishingOptions>, PublishingOptionsValidator>();
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<PublishingOptions>>().Value);
+
+        // Configure media options (file size limits, upload expiration, local server URL)
+        services.AddOptions<MediaOptions>()
+            .Bind(Configuration.GetSection(MediaOptions.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<MediaOptions>, MediaOptionsValidator>();
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<MediaOptions>>().Value);
 
         // Configure Facebook insights service for fetching post engagement
         ConfigureInsightsService(services, featureSettings);
@@ -169,21 +194,31 @@ public class Startup
         {
             // Local mode: filesystem storage
             services.AddSingleton<IMediaStorageProvider>(sp =>
-                new LocalDiskMediaStorageProvider(
-                    sp.GetRequiredService<ILogger<LocalDiskMediaStorageProvider>>()));
+            {
+                var mediaOpts = sp.GetRequiredService<MediaOptions>();
+                return new LocalDiskMediaStorageProvider(
+                    sp.GetRequiredService<ILogger<LocalDiskMediaStorageProvider>>(),
+                    mediaOpts.LocalServerBaseUrl);
+            });
         }
 
-        // Parse configurable expiration values
+        // Upload URL expiration: env var overrides config, config overrides default
         var uploadExpMinutes = int.TryParse(
-            Environment.GetEnvironmentVariable("MEDIA_UPLOAD_URL_EXPIRATION_MINUTES"), out var uem) ? uem : 60;
+            Environment.GetEnvironmentVariable("MEDIA_UPLOAD_URL_EXPIRATION_MINUTES"), out var uem) ? uem : -1;
 
         // Register the unified MediaService
         services.AddSingleton<IMediaService>(sp =>
-            new MediaService(
+        {
+            var mediaOpts = sp.GetRequiredService<MediaOptions>();
+            var effectiveUploadExp = uploadExpMinutes > 0 ? uploadExpMinutes : mediaOpts.UploadUrlExpirationMinutes;
+            return new MediaService(
                 sp.GetRequiredService<IMediaStorageProvider>(),
                 runMode,
                 sp.GetRequiredService<ILogger<MediaService>>(),
-                uploadUrlExpiration: TimeSpan.FromMinutes(uploadExpMinutes)));
+                uploadUrlExpiration: TimeSpan.FromMinutes(effectiveUploadExp),
+                maxImageFileSizeBytes: mediaOpts.MaxImageFileSizeBytes,
+                maxVideoFileSizeBytes: mediaOpts.MaxVideoFileSizeBytes);
+        });
     }
 
     private static void ConfigureMediaValidationServices(IServiceCollection services)
@@ -217,33 +252,46 @@ public class Startup
         // Memory cache for AI responses and rate limiting
         services.AddMemoryCache();
 
-        services.Configure<AiRateLimiterOptions>(
-            configuration.GetSection("Ai:RateLimiter"));
+        // AI rate limiter options (validated at startup)
+        services.AddOptions<AiRateLimiterOptions>()
+            .Bind(configuration.GetSection("Ai:RateLimiter"))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<AiRateLimiterOptions>, AiRateLimiterOptionsValidator>();
 
-        // Gemini settings from environment variables only (no hardcoded defaults)
-        var apiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? string.Empty;
-        var model = Environment.GetEnvironmentVariable("GEMINI_MODEL")
-            ?? throw new InvalidOperationException("Required environment variable 'GEMINI_MODEL' is missing.");
+        // AI cache duration options (validated at startup)
+        services.AddOptions<AiCacheOptions>()
+            .Bind(configuration.GetSection(AiCacheOptions.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<AiCacheOptions>, AiCacheOptionsValidator>();
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<AiCacheOptions>>().Value);
 
-        // Optional separate vision model for image analysis (needed when primary model is Gemma)
-        var visionModel = Environment.GetEnvironmentVariable("GEMINI_VISION_MODEL");
+        // Gemini settings: non-secret defaults from config, secrets from env vars (validated at startup)
+        services.AddOptions<GeminiSettings>()
+            .Bind(configuration.GetSection(GeminiSettings.SectionName))
+            .PostConfigure(settings =>
+            {
+                settings.ApiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? string.Empty;
+                settings.Model = Environment.GetEnvironmentVariable("GEMINI_MODEL")
+                    ?? throw new InvalidOperationException("Required environment variable 'GEMINI_MODEL' is missing.");
+                settings.VisionModel = Environment.GetEnvironmentVariable("GEMINI_VISION_MODEL");
+            })
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<GeminiSettings>, GeminiSettingsValidator>();
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<GeminiSettings>>().Value);
 
-        var geminiSettings = new GeminiSettings
-        {
-            ApiKey = apiKey,
-            Model = model,
-            VisionModel = visionModel
-        };
-
-        services.AddSingleton(geminiSettings);
-
-        // AI Provider settings
-        var aiProviderSettings = new AiProviderSettings
-        {
-            LanguageDetectorProvider = Environment.GetEnvironmentVariable("AI_LANGUAGE_DETECTOR_PROVIDER") ?? "gemini",
-            CaptionGeneratorProvider = Environment.GetEnvironmentVariable("AI_CAPTION_GENERATOR_PROVIDER") ?? "gemini"
-        };
-        services.AddSingleton(aiProviderSettings);
+        // AI Provider settings: defaults from config, env var overrides (validated at startup)
+        services.AddOptions<AiProviderSettings>()
+            .Bind(configuration.GetSection(AiProviderSettings.SectionName))
+            .PostConfigure(settings =>
+            {
+                var langDetectorEnv = Environment.GetEnvironmentVariable("AI_LANGUAGE_DETECTOR_PROVIDER");
+                if (!string.IsNullOrEmpty(langDetectorEnv)) settings.LanguageDetectorProvider = langDetectorEnv;
+                var captionGenEnv = Environment.GetEnvironmentVariable("AI_CAPTION_GENERATOR_PROVIDER");
+                if (!string.IsNullOrEmpty(captionGenEnv)) settings.CaptionGeneratorProvider = captionGenEnv;
+            })
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<AiProviderSettings>, AiProviderSettingsValidator>();
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<AiProviderSettings>>().Value);
 
         // Google AI client with typed HttpClient
         // GoogleAiClientRouter automatically routes to GeminiTextClient or GemmaTextClient

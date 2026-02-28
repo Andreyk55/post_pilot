@@ -11,12 +11,10 @@ public class LocalDiskMediaStorageProvider : IMediaStorageProvider
     private readonly string _baseUrl;
     private readonly ILogger<LocalDiskMediaStorageProvider> _logger;
 
-    public LocalDiskMediaStorageProvider(ILogger<LocalDiskMediaStorageProvider> logger, string? baseUrl = null)
+    public LocalDiskMediaStorageProvider(ILogger<LocalDiskMediaStorageProvider> logger, string baseUrl)
     {
         _uploadPath = Path.Combine(Directory.GetCurrentDirectory(), "uploads");
-        _baseUrl = Environment.GetEnvironmentVariable("PUBLIC_URL")
-                   ?? baseUrl
-                   ?? "http://localhost:5122";
+        _baseUrl = Environment.GetEnvironmentVariable("PUBLIC_URL") ?? baseUrl;
         _logger = logger;
 
         Directory.CreateDirectory(_uploadPath);

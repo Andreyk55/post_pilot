@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Caching.Memory;
 using PostPilot.Api.DTOs;
 using PostPilot.Api.Entities;
+using PostPilot.Api.Settings;
 
 namespace PostPilot.Api.Services.Ai;
 
@@ -21,7 +22,8 @@ public class GoogleAiClientRouter : IGeminiClient
         HttpClient httpClient,
         GeminiSettings settings,
         IMemoryCache cache,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        AiCacheOptions cacheOptions)
     {
         _logger = loggerFactory.CreateLogger<GoogleAiClientRouter>();
 
@@ -36,7 +38,8 @@ public class GoogleAiClientRouter : IGeminiClient
                 httpClient,
                 settings,
                 cache,
-                loggerFactory.CreateLogger<GemmaTextClient>());
+                loggerFactory.CreateLogger<GemmaTextClient>(),
+                cacheOptions);
         }
         else
         {
@@ -47,7 +50,8 @@ public class GoogleAiClientRouter : IGeminiClient
                 httpClient,
                 settings,
                 cache,
-                loggerFactory.CreateLogger<GeminiTextClient>());
+                loggerFactory.CreateLogger<GeminiTextClient>(),
+                cacheOptions);
         }
 
         // Vision client: use dedicated VisionModel if configured, otherwise fall back to primary client
@@ -67,7 +71,8 @@ public class GoogleAiClientRouter : IGeminiClient
                 httpClient,
                 visionSettings,
                 cache,
-                loggerFactory.CreateLogger<GeminiTextClient>());
+                loggerFactory.CreateLogger<GeminiTextClient>(),
+                cacheOptions);
         }
         else
         {

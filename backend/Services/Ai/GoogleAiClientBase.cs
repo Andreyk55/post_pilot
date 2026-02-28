@@ -21,7 +21,10 @@ public abstract class GoogleAiClientBase
     protected readonly IMemoryCache Cache;
     protected readonly ILogger Logger;
 
-    protected static readonly TimeSpan CacheDuration = TimeSpan.FromHours(1);
+    /// <summary>
+    /// Cache duration for AI responses. Set from config (Ai:CacheDurations) per concrete class.
+    /// </summary>
+    protected TimeSpan CacheDuration { get; }
 
     protected static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -34,12 +37,14 @@ public abstract class GoogleAiClientBase
         HttpClient httpClient,
         GeminiSettings settings,
         IMemoryCache cache,
-        ILogger logger)
+        ILogger logger,
+        TimeSpan cacheDuration)
     {
         HttpClient = httpClient;
         Settings = settings;
         Cache = cache;
         Logger = logger;
+        CacheDuration = cacheDuration;
 
         HttpClient.Timeout = TimeSpan.FromSeconds(Settings.TimeoutSeconds);
     }

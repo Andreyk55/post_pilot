@@ -7,6 +7,7 @@ using PostPilot.Api.Entities;
 using PostPilot.Api.Enums;
 using PostPilot.Api.Services.Media;
 using PostPilot.Api.Services.Scheduling;
+using PostPilot.Api.Settings;
 
 namespace PostPilot.Api.Services.Publishing;
 
@@ -38,13 +39,11 @@ public class InstagramPublisher : IPostPublisher
     private readonly IMediaService _mediaService;
     private readonly HttpClient _httpClient;
     private readonly ILogger<InstagramPublisher> _logger;
-
-    private const string GraphApiBaseUrl = "https://graph.facebook.com/v21.0";
-    private static readonly TimeSpan MediaDownloadUrlExpiration = TimeSpan.FromHours(1);
-
-    // Container polling settings (for images - quick in-process polling)
-    private const int MaxImagePollAttempts = 30;
-    private static readonly TimeSpan ImagePollInterval = TimeSpan.FromSeconds(2);
+    private readonly string _graphApiBaseUrl;
+    private readonly TimeSpan _mediaDownloadUrlExpiration;
+    private readonly TimeSpan _videoDownloadUrlExpiration;
+    private readonly int _maxImagePollAttempts;
+    private readonly TimeSpan _imagePollInterval;
 
     // Video processing retry interval (set as NextRetryAt, not in-process wait)
     /// <summary>
@@ -96,13 +95,20 @@ public class InstagramPublisher : IPostPublisher
         IPostScheduler scheduler,
         IMediaService mediaService,
         HttpClient httpClient,
-        ILogger<InstagramPublisher> logger)
+        ILogger<InstagramPublisher> logger,
+        MetaApiOptions metaApiOptions,
+        PublishingOptions publishingOptions)
     {
         _dbContext = dbContext;
         _scheduler = scheduler;
         _mediaService = mediaService;
         _httpClient = httpClient;
         _logger = logger;
+        _graphApiBaseUrl = metaApiOptions.GraphApiBaseUrl;
+        _mediaDownloadUrlExpiration = TimeSpan.FromMinutes(publishingOptions.MediaDownloadUrlExpirationMinutes);
+        _videoDownloadUrlExpiration = TimeSpan.FromMinutes(publishingOptions.VideoDownloadUrlExpirationMinutes);
+        _maxImagePollAttempts = publishingOptions.ImagePollMaxAttempts;
+        _imagePollInterval = TimeSpan.FromSeconds(publishingOptions.ImagePollIntervalSeconds);
     }
 
     public async Task<PublishResult> PublishAsync(Guid postId, CancellationToken cancellationToken = default)
@@ -361,7 +367,7 @@ public class InstagramPublisher : IPostPublisher
 
         // Poll for container to be ready (images are fast)
         var pollResult = await PollContainerStatusInProcessAsync(
-            creationId, accessToken, MaxImagePollAttempts, ImagePollInterval, cancellationToken);
+            creationId, accessToken, _maxImagePollAttempts, _imagePollInterval, cancellationToken);
 
         if (!pollResult.Success)
             return pollResult;
@@ -723,7 +729,7 @@ public class InstagramPublisher : IPostPublisher
             for (int i = childIds.Count; i < mediaItems.Count; i++)
             {
                 var item = mediaItems[i];
-                var videoUrl = ResolveMediaUrlForItem(item, TimeSpan.FromHours(2));
+                var videoUrl = ResolveMediaUrlForItem(item, _videoDownloadUrlExpiration);
                 perItemTags.TryGetValue(item.Order, out var itemTagsJson);
 
                 var childResult = await CreateCarouselVideoChildContainerAsync(
@@ -894,7 +900,7 @@ public class InstagramPublisher : IPostPublisher
 
                 if (item.MediaType == Enums.MediaType.Video)
                 {
-                    var videoUrl = ResolveMediaUrlForItem(item, TimeSpan.FromHours(2));
+                    var videoUrl = ResolveMediaUrlForItem(item, _videoDownloadUrlExpiration);
                     childResult = await CreateCarouselVideoChildContainerAsync(
                         igUserId, videoUrl, accessToken, cancellationToken, itemTagsJson);
                 }
@@ -1034,7 +1040,7 @@ public class InstagramPublisher : IPostPublisher
         string accessToken, CancellationToken cancellationToken,
         string? userTagsJson = null)
     {
-        var url = $"{GraphApiBaseUrl}/{igUserId}/media";
+        var url = $"{_graphApiBaseUrl}/{igUserId}/media";
         var formFields = new Dictionary<string, string>
         {
             ["media_type"] = "VIDEO",
@@ -1074,7 +1080,7 @@ public class InstagramPublisher : IPostPublisher
         string accessToken, CancellationToken cancellationToken,
         string? userTagsJson = null)
     {
-        var url = $"{GraphApiBaseUrl}/{igUserId}/media";
+        var url = $"{_graphApiBaseUrl}/{igUserId}/media";
         var formFields = new Dictionary<string, string>
         {
             ["image_url"] = imageUrl,
@@ -1111,7 +1117,7 @@ public class InstagramPublisher : IPostPublisher
         string igUserId, List<string> childCreationIds, string caption,
         string accessToken, CancellationToken cancellationToken)
     {
-        var url = $"{GraphApiBaseUrl}/{igUserId}/media";
+        var url = $"{_graphApiBaseUrl}/{igUserId}/media";
         var content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["media_type"] = "CAROUSEL",
@@ -1140,7 +1146,7 @@ public class InstagramPublisher : IPostPublisher
     {
         if (_mediaService.IsStorageKey(item.MediaUrl))
         {
-            return _mediaService.GenerateDownloadUrl(item.MediaUrl, expiration ?? MediaDownloadUrlExpiration);
+            return _mediaService.GenerateDownloadUrl(item.MediaUrl, expiration ?? _mediaDownloadUrlExpiration);
         }
         return item.MediaUrl;
     }
@@ -1207,7 +1213,7 @@ public class InstagramPublisher : IPostPublisher
     {
         if (_mediaService.IsStorageKey(post.MediaUrl!))
         {
-            var url = _mediaService.GenerateDownloadUrl(post.MediaUrl!, MediaDownloadUrlExpiration);
+            var url = _mediaService.GenerateDownloadUrl(post.MediaUrl!, _mediaDownloadUrlExpiration);
             _logger.LogInformation("Generated download URL for storage key {StorageKey} for IG post {PostId}",
                 post.MediaUrl, post.Id);
             return url;
@@ -1248,7 +1254,7 @@ public class InstagramPublisher : IPostPublisher
         string accessToken, CancellationToken cancellationToken,
         string? userTagsJson = null)
     {
-        var url = $"{GraphApiBaseUrl}/{igUserId}/media";
+        var url = $"{_graphApiBaseUrl}/{igUserId}/media";
         var formFields = new Dictionary<string, string>
         {
             ["image_url"] = imageUrl,
@@ -1309,7 +1315,7 @@ public class InstagramPublisher : IPostPublisher
         string accessToken, CancellationToken cancellationToken,
         string? userTagsJson = null)
     {
-        var url = $"{GraphApiBaseUrl}/{igUserId}/media";
+        var url = $"{_graphApiBaseUrl}/{igUserId}/media";
 
         // Build base form fields (always present)
         var baseFields = new Dictionary<string, string>
@@ -1478,7 +1484,7 @@ public class InstagramPublisher : IPostPublisher
     private async Task<ContainerStatusResult> CheckContainerStatusAsync(
         string creationId, string accessToken, CancellationToken cancellationToken)
     {
-        var url = $"{GraphApiBaseUrl}/{creationId}?fields=status_code,status&access_token={accessToken}";
+        var url = $"{_graphApiBaseUrl}/{creationId}?fields=status_code,status&access_token={accessToken}";
 
         var response = await _httpClient.GetAsync(url, cancellationToken);
         var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -1563,7 +1569,7 @@ public class InstagramPublisher : IPostPublisher
         string igUserId, string creationId,
         string accessToken, CancellationToken cancellationToken)
     {
-        var url = $"{GraphApiBaseUrl}/{igUserId}/media_publish";
+        var url = $"{_graphApiBaseUrl}/{igUserId}/media_publish";
         var content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["creation_id"] = creationId,
@@ -1605,7 +1611,7 @@ public class InstagramPublisher : IPostPublisher
     {
         try
         {
-            var url = $"{GraphApiBaseUrl}/{mediaId}?fields=permalink,media_type&access_token={accessToken}";
+            var url = $"{_graphApiBaseUrl}/{mediaId}?fields=permalink,media_type&access_token={accessToken}";
             var response = await _httpClient.GetAsync(url, cancellationToken);
 
             if (response.IsSuccessStatusCode)

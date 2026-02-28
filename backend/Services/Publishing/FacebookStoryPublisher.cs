@@ -6,6 +6,7 @@ using PostPilot.Api.Entities;
 using PostPilot.Api.Enums;
 using PostPilot.Api.Services.Media;
 using PostPilot.Api.Services.Scheduling;
+using PostPilot.Api.Settings;
 
 namespace PostPilot.Api.Services.Publishing;
 
@@ -32,10 +33,9 @@ public class FacebookStoryPublisher : IStoryPublisher
     private readonly IMediaService _mediaService;
     private readonly HttpClient _httpClient;
     private readonly ILogger<FacebookStoryPublisher> _logger;
-
-    private const string GraphApiBaseUrl = "https://graph.facebook.com/v21.0";
-    private static readonly TimeSpan MediaDownloadUrlExpiration = TimeSpan.FromHours(1);
-    private static readonly TimeSpan VideoDownloadUrlExpiration = TimeSpan.FromHours(2);
+    private readonly string _graphApiBaseUrl;
+    private readonly TimeSpan _mediaDownloadUrlExpiration;
+    private readonly TimeSpan _videoDownloadUrlExpiration;
 
     // Meta error codes — transient (retry)
     private static readonly HashSet<int> TransientErrorCodes = new()
@@ -75,13 +75,18 @@ public class FacebookStoryPublisher : IStoryPublisher
         IPostScheduler scheduler,
         IMediaService mediaService,
         HttpClient httpClient,
-        ILogger<FacebookStoryPublisher> logger)
+        ILogger<FacebookStoryPublisher> logger,
+        MetaApiOptions metaApiOptions,
+        PublishingOptions publishingOptions)
     {
         _dbContext = dbContext;
         _scheduler = scheduler;
         _mediaService = mediaService;
         _httpClient = httpClient;
         _logger = logger;
+        _graphApiBaseUrl = metaApiOptions.GraphApiBaseUrl;
+        _mediaDownloadUrlExpiration = TimeSpan.FromMinutes(publishingOptions.MediaDownloadUrlExpirationMinutes);
+        _videoDownloadUrlExpiration = TimeSpan.FromMinutes(publishingOptions.VideoDownloadUrlExpirationMinutes);
     }
 
     public async Task<PublishResult> PublishAsync(Guid postId, CancellationToken cancellationToken = default)
@@ -213,7 +218,7 @@ public class FacebookStoryPublisher : IStoryPublisher
             string imageUrl;
             if (_mediaService.IsStorageKey(post.MediaUrl!))
             {
-                imageUrl = _mediaService.GenerateDownloadUrl(post.MediaUrl!, MediaDownloadUrlExpiration);
+                imageUrl = _mediaService.GenerateDownloadUrl(post.MediaUrl!, _mediaDownloadUrlExpiration);
                 _logger.LogInformation("Generated download URL for storage key {StorageKey} for FB story {PostId}",
                     post.MediaUrl, post.Id);
             }
@@ -255,7 +260,7 @@ public class FacebookStoryPublisher : IStoryPublisher
         string videoUrl;
         if (_mediaService.IsStorageKey(post.MediaUrl!))
         {
-            videoUrl = _mediaService.GenerateDownloadUrl(post.MediaUrl!, VideoDownloadUrlExpiration);
+            videoUrl = _mediaService.GenerateDownloadUrl(post.MediaUrl!, _videoDownloadUrlExpiration);
             _logger.LogInformation("Generated download URL for video storage key {StorageKey} for FB story {PostId}",
                 post.MediaUrl, post.Id);
         }
@@ -326,7 +331,7 @@ public class FacebookStoryPublisher : IStoryPublisher
     private async Task<PublishResult> UploadUnpublishedPhotoAsync(
         string pageId, string imageUrl, string accessToken, CancellationToken cancellationToken)
     {
-        var url = $"{GraphApiBaseUrl}/{pageId}/photos";
+        var url = $"{_graphApiBaseUrl}/{pageId}/photos";
         var content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["url"] = imageUrl,
@@ -351,7 +356,7 @@ public class FacebookStoryPublisher : IStoryPublisher
     private async Task<PublishResult> CreatePhotoStoryAsync(
         string pageId, string photoId, string accessToken, CancellationToken cancellationToken)
     {
-        var url = $"{GraphApiBaseUrl}/{pageId}/photo_stories";
+        var url = $"{_graphApiBaseUrl}/{pageId}/photo_stories";
         var content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["photo_id"] = photoId,
@@ -376,7 +381,7 @@ public class FacebookStoryPublisher : IStoryPublisher
     private async Task<VideoStoryStartResult> VideoStoryStartAsync(
         string pageId, long fileSize, string accessToken, CancellationToken cancellationToken)
     {
-        var url = $"{GraphApiBaseUrl}/{pageId}/video_stories";
+        var url = $"{_graphApiBaseUrl}/{pageId}/video_stories";
         var content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["upload_phase"] = "start",
@@ -467,7 +472,7 @@ public class FacebookStoryPublisher : IStoryPublisher
         string pageId, string videoId, string accessToken,
         CancellationToken cancellationToken)
     {
-        var url = $"{GraphApiBaseUrl}/{pageId}/video_stories";
+        var url = $"{_graphApiBaseUrl}/{pageId}/video_stories";
         var content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["upload_phase"] = "finish",
@@ -700,7 +705,7 @@ public class FacebookStoryPublisher : IStoryPublisher
         string storyId, string pageId, string accessToken, CancellationToken cancellationToken)
     {
         // Try 1: Direct story ID
-        var url1 = $"{GraphApiBaseUrl}/{storyId}?fields=permalink_url&access_token={accessToken}";
+        var url1 = $"{_graphApiBaseUrl}/{storyId}?fields=permalink_url&access_token={accessToken}";
 
         try
         {
@@ -727,7 +732,7 @@ public class FacebookStoryPublisher : IStoryPublisher
 
         // Try 2: pageId_storyId format
         var compositeId = $"{pageId}_{storyId}";
-        var url2 = $"{GraphApiBaseUrl}/{compositeId}?fields=permalink_url&access_token={accessToken}";
+        var url2 = $"{_graphApiBaseUrl}/{compositeId}?fields=permalink_url&access_token={accessToken}";
 
         try
         {

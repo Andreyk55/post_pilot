@@ -20,6 +20,8 @@ public class FacebookPagePublisherTests : IDisposable
     private readonly Mock<IPostScheduler> _schedulerMock;
     private readonly Mock<IMediaService> _mediaServiceMock;
     private readonly FeatureSettings _featureSettings;
+    private readonly MetaApiOptions _metaApiOptions;
+    private readonly PublishingOptions _publishingOptions;
     private readonly Mock<ILogger<FacebookPagePublisher>> _loggerMock;
 
     public FacebookPagePublisherTests()
@@ -40,6 +42,22 @@ public class FacebookPagePublisherTests : IDisposable
             .Returns<string, TimeSpan>((key, _) => $"https://storage.example.com/{key}?signed=1");
 
         _featureSettings = new FeatureSettings();
+        _metaApiOptions = new MetaApiOptions
+        {
+            GraphApiBaseUrl = "https://graph.facebook.com/v21.0",
+            OAuthDialogBaseUrl = "https://www.facebook.com/v21.0/dialog/oauth"
+        };
+        _publishingOptions = new PublishingOptions
+        {
+            WorkerPollIntervalSeconds = 30,
+            StuckPostThresholdMinutes = 5,
+            StuckPostRetryDelaySeconds = 10,
+            MediaDownloadUrlExpirationMinutes = 60,
+            VideoDownloadUrlExpirationMinutes = 120,
+            ImagePollMaxAttempts = 30,
+            ImagePollIntervalSeconds = 2,
+            OAuthStateExpirationMinutes = 10
+        };
         _loggerMock = new Mock<ILogger<FacebookPagePublisher>>();
     }
 
@@ -60,7 +78,9 @@ public class FacebookPagePublisherTests : IDisposable
             _mediaServiceMock.Object,
             _featureSettings,
             httpClient,
-            _loggerMock.Object);
+            _loggerMock.Object,
+            _metaApiOptions,
+            _publishingOptions);
     }
 
     private Post CreateMultiPhotoPost(int imageCount, string content = "Hello FB!")

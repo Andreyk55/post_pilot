@@ -51,6 +51,9 @@
       "WebFetch(domain:dailydevsblog.com)",
       "WebFetch(domain:code.peren.gouv.fr)",
       "Bash(grep:*)"
+    ],
+    "additionalDirectories": [
+      "d:\\dev\\projects\\post_pilot\\backend"
     ]
   }
 }

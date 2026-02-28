@@ -7,6 +7,7 @@ using Moq;
 using Moq.Protected;
 using PostPilot.Api.DTOs;
 using PostPilot.Api.Services.Ai;
+using PostPilot.Api.Settings;
 using Xunit;
 
 namespace PostPilot.Api.Tests.Services.Ai;
@@ -32,11 +33,21 @@ public class GeminiClientTests
             TimeoutSeconds = 30
         };
 
+        var cacheOptions = new AiCacheOptions
+        {
+            CaptionAssistMinutes = 60,
+            LanguageDetectionMinutes = 1440,
+            GoogleAiClientMinutes = 60,
+            PostTimeSuggestionMinutes = 10,
+            AssetResolverDownloadUrlExpirationMinutes = 15
+        };
+
         _client = new GeminiTextClient(
             _httpClient,
             _settings,
             _cache,
-            NullLogger<GeminiTextClient>.Instance);
+            NullLogger<GeminiTextClient>.Instance,
+            cacheOptions);
     }
 
     [Fact]

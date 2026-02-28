@@ -1,4 +1,5 @@
 using PostPilot.Api.Services.Media;
+using PostPilot.Api.Settings;
 
 namespace PostPilot.Api.Services.Ai;
 
@@ -12,16 +13,18 @@ public class AssetResolver : IAssetResolver
     private readonly HttpClient _httpClient;
     private readonly ILogger<AssetResolver> _logger;
 
-    private static readonly TimeSpan DownloadUrlExpiration = TimeSpan.FromMinutes(15);
+    private readonly TimeSpan _downloadUrlExpiration;
 
     public AssetResolver(
         IMediaService mediaService,
         HttpClient httpClient,
-        ILogger<AssetResolver> logger)
+        ILogger<AssetResolver> logger,
+        AiCacheOptions cacheOptions)
     {
         _mediaService = mediaService;
         _httpClient = httpClient;
         _logger = logger;
+        _downloadUrlExpiration = TimeSpan.FromMinutes(cacheOptions.AssetResolverDownloadUrlExpirationMinutes);
     }
 
     public async Task<ResolvedAsset> ResolveAsync(string assetUrl, CancellationToken cancellationToken = default)
@@ -50,7 +53,7 @@ public class AssetResolver : IAssetResolver
 
         if (_mediaService.IsStorageKey(assetUrl))
         {
-            return _mediaService.GenerateDownloadUrl(assetUrl, DownloadUrlExpiration);
+            return _mediaService.GenerateDownloadUrl(assetUrl, _downloadUrlExpiration);
         }
 
         // Already a public URL
@@ -78,7 +81,7 @@ public class AssetResolver : IAssetResolver
         }
 
         // Fallback: generate a download URL and fetch via HTTP
-        var downloadUrl = _mediaService.GenerateDownloadUrl(storageKey, DownloadUrlExpiration);
+        var downloadUrl = _mediaService.GenerateDownloadUrl(storageKey, _downloadUrlExpiration);
         return await ResolveExternalUrlAsync(downloadUrl, cancellationToken);
     }
 

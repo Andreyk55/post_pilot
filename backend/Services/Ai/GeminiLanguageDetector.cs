@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
+using PostPilot.Api.Settings;
 
 namespace PostPilot.Api.Services.Ai;
 
@@ -9,14 +10,14 @@ namespace PostPilot.Api.Services.Ai;
 /// </summary>
 public class GeminiLanguageDetector : GoogleAiClientBase, ILanguageDetector
 {
-    private new static readonly TimeSpan CacheDuration = TimeSpan.FromHours(24);
-
     public GeminiLanguageDetector(
         HttpClient httpClient,
         GeminiSettings settings,
         IMemoryCache cache,
-        ILogger<GeminiLanguageDetector> logger)
-        : base(httpClient, settings, cache, logger)
+        ILogger<GeminiLanguageDetector> logger,
+        AiCacheOptions cacheOptions)
+        : base(httpClient, settings, cache, logger,
+              TimeSpan.FromMinutes(cacheOptions.LanguageDetectionMinutes))
     {
     }
 

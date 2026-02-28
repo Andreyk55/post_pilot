@@ -129,7 +129,6 @@ D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\binTestBuild\BuildHos
 D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\appsettings.Development.json
 D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\appsettings.json
 D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\appsettings.Production.json
-D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\aws-lambda-tools-defaults.json
 D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\binTestBuild\appsettings.Development.json
 D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\binTestBuild\appsettings.json
 D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\binTestBuild\appsettings.Production.json
@@ -261,3 +260,7 @@ D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\zh-Hant\Microsoft.Tes
 D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\zh-Hant\Microsoft.VisualStudio.TestPlatform.Common.resources.dll
 D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\PostPilot.Api.dll
 D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\PostPilot.Api.pdb
+D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\config\appsettings.common.json
+D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\config\appsettings.dev.json
+D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\config\appsettings.local.json
+D:\dev\projects\post_pilot\backend.Tests\bin\Debug\net10.0\config\appsettings.prod.json

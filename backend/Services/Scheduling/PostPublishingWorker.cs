@@ -3,6 +3,7 @@ using PostPilot.Api;
 using PostPilot.Api.Data;
 using PostPilot.Api.Enums;
 using PostPilot.Api.Services.Publishing;
+using PostPilot.Api.Settings;
 
 namespace PostPilot.Api.Services.Scheduling;
 
@@ -15,14 +16,20 @@ public class PostPublishingWorker : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<PostPublishingWorker> _logger;
-    private readonly TimeSpan _pollInterval = TimeSpan.FromSeconds(30);
+    private readonly TimeSpan _pollInterval;
+    private readonly int _stuckPostThresholdMinutes;
+    private readonly int _stuckPostRetryDelaySeconds;
 
     public PostPublishingWorker(
         IServiceProvider serviceProvider,
-        ILogger<PostPublishingWorker> logger)
+        ILogger<PostPublishingWorker> logger,
+        PublishingOptions publishingOptions)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
+        _pollInterval = TimeSpan.FromSeconds(publishingOptions.WorkerPollIntervalSeconds);
+        _stuckPostThresholdMinutes = publishingOptions.StuckPostThresholdMinutes;
+        _stuckPostRetryDelaySeconds = publishingOptions.StuckPostRetryDelaySeconds;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -56,7 +63,7 @@ public class PostPublishingWorker : BackgroundService
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var now = DateTime.UtcNow;
-            var stuckThreshold = now.AddMinutes(-5); // Posts stuck in Publishing for 5+ minutes
+            var stuckThreshold = now.AddMinutes(-_stuckPostThresholdMinutes); // Posts stuck in Publishing
 
             // Recover posts stuck in Publishing status (safety net for crashes)
             // Increment RetryCount; if max retries exceeded, fail permanently.
@@ -73,7 +80,7 @@ public class PostPublishingWorker : BackgroundService
                 if (stuck.RetryCount >= stuck.MaxRetries)
                 {
                     stuck.Status = PostStatus.Failed;
-                    stuck.ErrorMessage = $"Stuck in Publishing for >5 minutes (recovered {stuck.RetryCount}/{stuck.MaxRetries} times)";
+                    stuck.ErrorMessage = $"Stuck in Publishing for >{_stuckPostThresholdMinutes} minutes (recovered {stuck.RetryCount}/{stuck.MaxRetries} times)";
                     stuck.NextRetryAt = null;
 
                     _logger.LogWarning(
@@ -83,7 +90,7 @@ public class PostPublishingWorker : BackgroundService
                 else
                 {
                     stuck.Status = PostStatus.RetryPending;
-                    stuck.NextRetryAt = now.AddSeconds(10);
+                    stuck.NextRetryAt = now.AddSeconds(_stuckPostRetryDelaySeconds);
                     stuck.ErrorMessage = $"Recovered from stuck Publishing (attempt {stuck.RetryCount}/{stuck.MaxRetries})";
 
                     _logger.LogWarning(

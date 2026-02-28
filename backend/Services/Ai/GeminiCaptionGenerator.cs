@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using PostPilot.Api.DTOs;
 using PostPilot.Api.Entities;
+using PostPilot.Api.Settings;
 
 namespace PostPilot.Api.Services.Ai;
 
@@ -15,8 +16,10 @@ public class GeminiCaptionGenerator : GoogleAiClientBase, ICaptionGenerator
         HttpClient httpClient,
         GeminiSettings settings,
         IMemoryCache cache,
-        ILogger<GeminiCaptionGenerator> logger)
-        : base(httpClient, settings, cache, logger)
+        ILogger<GeminiCaptionGenerator> logger,
+        AiCacheOptions cacheOptions)
+        : base(httpClient, settings, cache, logger,
+              TimeSpan.FromMinutes(cacheOptions.GoogleAiClientMinutes))
     {
     }
 

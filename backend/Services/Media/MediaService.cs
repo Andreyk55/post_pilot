@@ -27,29 +27,30 @@ public class MediaService : IMediaService
         "video/mp4"
     };
 
-    private const long DefaultMaxImageFileSizeBytes = 20 * 1024 * 1024; // 20MB
-    private const long DefaultMaxVideoFileSizeBytes = 200 * 1024 * 1024; // 200MB
+    private readonly long _maxImageFileSizeBytes;
 
     public AppRunMode RunMode => _runMode;
     public IMediaStorageProvider StorageProvider => _storage;
     public IReadOnlyCollection<string> AllowedImageTypes => _allowedImageTypes;
     public IReadOnlyCollection<string> AllowedVideoTypes => _allowedVideoTypes;
     public IReadOnlyCollection<string> AllowedContentTypes => _allowedImageTypes.Concat(_allowedVideoTypes).ToArray();
-    public long MaxImageFileSizeBytes => DefaultMaxImageFileSizeBytes;
+    public long MaxImageFileSizeBytes => _maxImageFileSizeBytes;
     public long MaxVideoFileSizeBytes => _maxVideoFileSizeBytes;
 
     public MediaService(
         IMediaStorageProvider storage,
         AppRunMode runMode,
         ILogger<MediaService> logger,
-        TimeSpan? uploadUrlExpiration = null,
-        long? maxVideoFileSizeBytes = null)
+        TimeSpan uploadUrlExpiration,
+        long maxImageFileSizeBytes,
+        long maxVideoFileSizeBytes)
     {
         _storage = storage;
         _runMode = runMode;
         _logger = logger;
-        _uploadUrlExpiration = uploadUrlExpiration ?? TimeSpan.FromMinutes(60);
-        _maxVideoFileSizeBytes = maxVideoFileSizeBytes ?? DefaultMaxVideoFileSizeBytes;
+        _uploadUrlExpiration = uploadUrlExpiration;
+        _maxImageFileSizeBytes = maxImageFileSizeBytes;
+        _maxVideoFileSizeBytes = maxVideoFileSizeBytes;
     }
 
     public async Task<UploadUrlResult> GenerateUploadUrlAsync(string fileName, string contentType)

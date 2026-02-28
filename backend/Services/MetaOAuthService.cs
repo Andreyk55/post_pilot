@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using PostPilot.Api.Data;
 using PostPilot.Api.DTOs;
 using PostPilot.Api.Entities;
+using PostPilot.Api.Settings;
 
 namespace PostPilot.Api.Services;
 
@@ -14,20 +15,25 @@ public class MetaOAuthService : IMetaOAuthService
     private readonly HttpClient _httpClient;
     private readonly MetaOAuthSettings _settings;
     private readonly ILogger<MetaOAuthService> _logger;
-
-    private const string GraphApiBaseUrl = "https://graph.facebook.com/v21.0";
-    private const string OAuthBaseUrl = "https://www.facebook.com/v21.0/dialog/oauth";
+    private readonly string _graphApiBaseUrl;
+    private readonly string _oAuthBaseUrl;
+    private readonly int _oAuthStateExpirationMinutes;
 
     public MetaOAuthService(
         AppDbContext context,
         HttpClient httpClient,
         MetaOAuthSettings settings,
-        ILogger<MetaOAuthService> logger)
+        ILogger<MetaOAuthService> logger,
+        MetaApiOptions metaApiOptions,
+        PublishingOptions publishingOptions)
     {
         _context = context;
         _httpClient = httpClient;
         _settings = settings;
         _logger = logger;
+        _graphApiBaseUrl = metaApiOptions.GraphApiBaseUrl;
+        _oAuthBaseUrl = metaApiOptions.OAuthDialogBaseUrl;
+        _oAuthStateExpirationMinutes = publishingOptions.OAuthStateExpirationMinutes;
     }
 
     public async Task<MetaOAuthStartResponse> StartOAuthAsync()
@@ -41,7 +47,7 @@ public class MetaOAuthService : IMetaOAuthService
             Id = Guid.NewGuid(),
             State = state,
             CreatedAt = DateTime.UtcNow,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(10)
+            ExpiresAt = DateTime.UtcNow.AddMinutes(_oAuthStateExpirationMinutes)
         };
 
         _context.MetaOAuthStates.Add(oauthState);
@@ -66,7 +72,7 @@ public class MetaOAuthService : IMetaOAuthService
 
         _logger.LogInformation("Meta OAuth requested scopes: {Scopes}", scopes);
 
-        var authUrl = $"{OAuthBaseUrl}?" +
+        var authUrl = $"{_oAuthBaseUrl}?" +
             $"client_id={_settings.AppId}" +
             $"&redirect_uri={Uri.EscapeDataString(_settings.RedirectUri)}" +
             $"&state={state}" +
@@ -89,7 +95,7 @@ public class MetaOAuthService : IMetaOAuthService
         }
 
         // Exchange code for access token
-        var tokenUrl = $"{GraphApiBaseUrl}/oauth/access_token?" +
+        var tokenUrl = $"{_graphApiBaseUrl}/oauth/access_token?" +
             $"client_id={_settings.AppId}" +
             $"&client_secret={_settings.AppSecret}" +
             $"&redirect_uri={Uri.EscapeDataString(_settings.RedirectUri)}" +
@@ -108,7 +114,7 @@ public class MetaOAuthService : IMetaOAuthService
         await DebugPermissionsAsync(tokenData.AccessToken);
 
         // Exchange for long-lived token
-        var longLivedTokenUrl = $"{GraphApiBaseUrl}/oauth/access_token?" +
+        var longLivedTokenUrl = $"{_graphApiBaseUrl}/oauth/access_token?" +
             $"grant_type=fb_exchange_token" +
             $"&client_id={_settings.AppId}" +
             $"&client_secret={_settings.AppSecret}" +
@@ -155,7 +161,7 @@ public class MetaOAuthService : IMetaOAuthService
         _logger.LogInformation("State validated successfully. Exchanging code for token...");
 
         // Exchange code for access token
-        var tokenUrl = $"{GraphApiBaseUrl}/oauth/access_token?" +
+        var tokenUrl = $"{_graphApiBaseUrl}/oauth/access_token?" +
             $"client_id={_settings.AppId}" +
             $"&client_secret={_settings.AppSecret}" +
             $"&redirect_uri={Uri.EscapeDataString(_settings.RedirectUri)}" +
@@ -182,7 +188,7 @@ public class MetaOAuthService : IMetaOAuthService
         _logger.LogInformation("Short-lived token obtained. Exchanging for long-lived token...");
 
         // Exchange for long-lived token
-        var longLivedTokenUrl = $"{GraphApiBaseUrl}/oauth/access_token?" +
+        var longLivedTokenUrl = $"{_graphApiBaseUrl}/oauth/access_token?" +
             $"grant_type=fb_exchange_token" +
             $"&client_id={_settings.AppId}" +
             $"&client_secret={_settings.AppSecret}" +
@@ -258,7 +264,7 @@ public class MetaOAuthService : IMetaOAuthService
     private async Task DebugWhoLoggedInAsync(string accessToken)
     {
         var resp = await _httpClient.GetAsync(
-            $"https://graph.facebook.com/v21.0/me?fields=id,name&access_token={accessToken}");
+            $"{_graphApiBaseUrl}/me?fields=id,name&access_token={accessToken}");
 
         var body = await resp.Content.ReadAsStringAsync();
         _logger.LogInformation("Meta /me response: {Body}", body);
@@ -267,7 +273,7 @@ public class MetaOAuthService : IMetaOAuthService
     private async Task DebugPermissionsAsync(string accessToken)
     {
         var resp = await _httpClient.GetAsync(
-            $"https://graph.facebook.com/v21.0/me/permissions?access_token={accessToken}");
+            $"{_graphApiBaseUrl}/me/permissions?access_token={accessToken}");
 
         var body = await resp.Content.ReadAsStringAsync();
         _logger.LogInformation("Meta /me/permissions response: {Body}", body);
@@ -317,7 +323,7 @@ public class MetaOAuthService : IMetaOAuthService
                 // Step 1: Try with subfield expansion for full profile details
                 var fields = "name,instagram_business_account{id,username,name,profile_picture_url}," +
                              "connected_instagram_account{id,username,name,profile_picture_url}";
-                var igUrl = $"{GraphApiBaseUrl}/{page.Id}?fields={fields}&access_token={page.AccessToken}";
+                var igUrl = $"{_graphApiBaseUrl}/{page.Id}?fields={fields}&access_token={page.AccessToken}";
                 var response = await _httpClient.GetAsync(igUrl);
 
                 if (!response.IsSuccessStatusCode) continue;
@@ -331,7 +337,7 @@ public class MetaOAuthService : IMetaOAuthService
                 if (ig == null || string.IsNullOrEmpty(ig.Id))
                 {
                     var plainFields = "name,instagram_business_account,connected_instagram_account";
-                    var plainUrl = $"{GraphApiBaseUrl}/{page.Id}?fields={plainFields}&access_token={page.AccessToken}";
+                    var plainUrl = $"{_graphApiBaseUrl}/{page.Id}?fields={plainFields}&access_token={page.AccessToken}";
                     var plainResponse = await _httpClient.GetAsync(plainUrl);
 
                     if (plainResponse.IsSuccessStatusCode)
@@ -580,7 +586,7 @@ public class MetaOAuthService : IMetaOAuthService
         // Optionally revoke token with Meta
         try
         {
-            var revokeUrl = $"{GraphApiBaseUrl}/me/permissions?access_token={connection.AccessToken}";
+            var revokeUrl = $"{_graphApiBaseUrl}/me/permissions?access_token={connection.AccessToken}";
             await _httpClient.DeleteAsync(revokeUrl);
         }
         catch (Exception ex)
@@ -641,7 +647,7 @@ public class MetaOAuthService : IMetaOAuthService
         try
         {
             var permResp = await _httpClient.GetAsync(
-                $"{GraphApiBaseUrl}/me/permissions?access_token={connection.AccessToken}");
+                $"{_graphApiBaseUrl}/me/permissions?access_token={connection.AccessToken}");
             permissionsJson = await permResp.Content.ReadAsStringAsync();
         }
         catch (Exception ex)
@@ -662,7 +668,7 @@ public class MetaOAuthService : IMetaOAuthService
             // Query A: with subfield expansion
             var expandedFields = "name,instagram_business_account{id,username,name,profile_picture_url}," +
                          "connected_instagram_account{id,username,name,profile_picture_url}";
-            var expandedUrl = $"{GraphApiBaseUrl}/{page.Id}?fields={expandedFields}&access_token={page.AccessToken}";
+            var expandedUrl = $"{_graphApiBaseUrl}/{page.Id}?fields={expandedFields}&access_token={page.AccessToken}";
 
             string? expandedResponse = null;
             int expandedStatus = 0;
@@ -682,7 +688,7 @@ public class MetaOAuthService : IMetaOAuthService
 
             // Query B: without subfield expansion (plain)
             var plainFields = "name,instagram_business_account,connected_instagram_account";
-            var plainUrl = $"{GraphApiBaseUrl}/{page.Id}?fields={plainFields}&access_token={page.AccessToken}";
+            var plainUrl = $"{_graphApiBaseUrl}/{page.Id}?fields={plainFields}&access_token={page.AccessToken}";
 
             string? plainResponse = null;
             int plainStatus = 0;
@@ -705,7 +711,7 @@ public class MetaOAuthService : IMetaOAuthService
             int userTokenStatus = 0;
             try
             {
-                var userUrl = $"{GraphApiBaseUrl}/{page.Id}?fields={expandedFields}&access_token={connection.AccessToken}";
+                var userUrl = $"{_graphApiBaseUrl}/{page.Id}?fields={expandedFields}&access_token={connection.AccessToken}";
                 var resp3 = await _httpClient.GetAsync(userUrl);
                 userTokenStatus = (int)resp3.StatusCode;
                 userTokenResponse = await resp3.Content.ReadAsStringAsync();
@@ -823,7 +829,7 @@ public class MetaOAuthService : IMetaOAuthService
             var expandedFields = "name," +
                          "instagram_business_account{id,username,name,profile_picture_url}," +
                          "connected_instagram_account{id,username,name,profile_picture_url}";
-            var igUrl = $"{GraphApiBaseUrl}/{page.Id}?fields={expandedFields}&access_token={page.AccessToken}";
+            var igUrl = $"{_graphApiBaseUrl}/{page.Id}?fields={expandedFields}&access_token={page.AccessToken}";
 
             _logger.LogDebug(
                 "IG discovery: querying page {PageId} ({PageName}), fields={Fields}, tokenType=page_token, graphVersion=v21.0",
@@ -869,7 +875,7 @@ public class MetaOAuthService : IMetaOAuthService
             if (!hasIgFromExpanded)
             {
                 var plainFields = "name,instagram_business_account,connected_instagram_account";
-                var plainUrl = $"{GraphApiBaseUrl}/{page.Id}?fields={plainFields}&access_token={page.AccessToken}";
+                var plainUrl = $"{_graphApiBaseUrl}/{page.Id}?fields={plainFields}&access_token={page.AccessToken}";
 
                 _logger.LogDebug(
                     "IG discovery: retrying page {PageId} without subfield expansion, fields={Fields}",
@@ -918,7 +924,7 @@ public class MetaOAuthService : IMetaOAuthService
         try
         {
             var resp = await _httpClient.GetAsync(
-                $"{GraphApiBaseUrl}/me/permissions?access_token={accessToken}");
+                $"{_graphApiBaseUrl}/me/permissions?access_token={accessToken}");
             if (resp.IsSuccessStatusCode)
             {
                 var body = await resp.Content.ReadAsStringAsync();
@@ -934,7 +940,7 @@ public class MetaOAuthService : IMetaOAuthService
     private async Task<List<FacebookPageDto>> FetchUserPagesAsync(string accessToken)
     {
         var pages = new List<FacebookPageDto>();
-        var url = $"{GraphApiBaseUrl}/me/accounts?fields=id,name,category,picture{{url}},access_token&access_token={accessToken}";
+        var url = $"{_graphApiBaseUrl}/me/accounts?fields=id,name,category,picture{{url}},access_token&access_token={accessToken}";
 
         while (!string.IsNullOrEmpty(url))
         {
@@ -1092,7 +1098,7 @@ internal class MetaInstagramAccount
 // Settings class
 public class MetaOAuthSettings
 {
-    public string AppId { get; set; } = "";
-    public string AppSecret { get; set; } = "";
-    public string RedirectUri { get; set; } = "";
+    public string AppId { get; set; } = null!;
+    public string AppSecret { get; set; } = null!;
+    public string RedirectUri { get; set; } = null!;
 }

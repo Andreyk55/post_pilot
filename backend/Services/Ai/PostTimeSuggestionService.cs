@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Caching.Memory;
 using PostPilot.Api.DTOs;
+using PostPilot.Api.Settings;
 
 namespace PostPilot.Api.Services.Ai;
 
@@ -18,7 +19,7 @@ public class PostTimeSuggestionService
     private readonly IMemoryCache _cache;
     private readonly ILogger<PostTimeSuggestionService> _logger;
 
-    private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(10);
+    private readonly TimeSpan _cacheDuration;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -64,12 +65,14 @@ public class PostTimeSuggestionService
         HttpClient httpClient,
         GeminiSettings settings,
         IMemoryCache cache,
-        ILogger<PostTimeSuggestionService> logger)
+        ILogger<PostTimeSuggestionService> logger,
+        AiCacheOptions cacheOptions)
     {
         _httpClient = httpClient;
         _settings = settings;
         _cache = cache;
         _logger = logger;
+        _cacheDuration = TimeSpan.FromMinutes(cacheOptions.PostTimeSuggestionMinutes);
 
         _httpClient.Timeout = TimeSpan.FromSeconds(settings.TimeoutSeconds);
     }
@@ -94,7 +97,7 @@ public class PostTimeSuggestionService
             _logger.LogInformation("Post time suggestion response:\n{Response}", responseText);
             var result = ParseResponse(responseText);
 
-            _cache.Set(cacheKey, result, CacheDuration);
+            _cache.Set(cacheKey, result, _cacheDuration);
             return result;
         }
         catch (Exception ex)

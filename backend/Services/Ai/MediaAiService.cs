@@ -1,5 +1,6 @@
 using PostPilot.Api.DTOs;
 using PostPilot.Api.Services.Media;
+using PostPilot.Api.Settings;
 
 namespace PostPilot.Api.Services.Ai;
 
@@ -14,6 +15,7 @@ public class MediaAiService : IMediaAiService
     private readonly IVideoFrameExtractor _videoFrameExtractor;
     private readonly IMediaService _mediaService;
     private readonly ILogger<MediaAiService> _logger;
+    private readonly string _localServerBaseUrl;
 
     // Temporary storage for extracted frames
     private readonly string _framesDirectory;
@@ -23,13 +25,15 @@ public class MediaAiService : IMediaAiService
         IAssetResolver assetResolver,
         IVideoFrameExtractor videoFrameExtractor,
         IMediaService mediaService,
-        ILogger<MediaAiService> logger)
+        ILogger<MediaAiService> logger,
+        MediaOptions mediaOptions)
     {
         _geminiClient = geminiClient;
         _assetResolver = assetResolver;
         _videoFrameExtractor = videoFrameExtractor;
         _mediaService = mediaService;
         _logger = logger;
+        _localServerBaseUrl = mediaOptions.LocalServerBaseUrl;
 
         _framesDirectory = Path.Combine(Directory.GetCurrentDirectory(), "uploads", "frames");
         Directory.CreateDirectory(_framesDirectory);
@@ -219,7 +223,7 @@ public class MediaAiService : IMediaAiService
         var storageKey = $"media/frames/{frameId}";
 
         // Frames are always saved locally (both modes) for AI processing
-        var baseUrl = Environment.GetEnvironmentVariable("PUBLIC_URL") ?? "http://localhost:5122";
+        var baseUrl = Environment.GetEnvironmentVariable("PUBLIC_URL") ?? _localServerBaseUrl;
         return $"{baseUrl}/api/media/frames/{frameId}";
     }
 
@@ -296,7 +300,7 @@ public class MediaAiService : IMediaAiService
         _logger.LogDebug("Saved client-extracted frame: {FramePath}", framePath);
 
         // Generate URL
-        var publicUrl = Environment.GetEnvironmentVariable("PUBLIC_URL") ?? "http://localhost:5122";
+        var publicUrl = Environment.GetEnvironmentVariable("PUBLIC_URL") ?? _localServerBaseUrl;
         return $"{publicUrl}/api/media/frames/{frameId}";
     }
 

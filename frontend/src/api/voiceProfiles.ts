@@ -1,4 +1,6 @@
-const API_URL = 'http://localhost:5122/api'
+import { config } from '../config/appConfig'
+
+const API_URL = config.apiBaseUrl
 
 export interface VoiceProfile {
   id: string

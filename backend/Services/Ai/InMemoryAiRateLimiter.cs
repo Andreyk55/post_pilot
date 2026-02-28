@@ -18,11 +18,9 @@ public class InMemoryAiRateLimiter : IAiRateLimiter
     {
         _cache = cache;
         _logger = logger;
-        var resolvedOptions = options.Value ?? new AiRateLimiterOptions();
-        _maxCallsPerDay = resolvedOptions.MaxCallsPerDay > 0 ? resolvedOptions.MaxCallsPerDay : 20;
-        _windowDuration = resolvedOptions.WindowHours > 0
-            ? TimeSpan.FromHours(resolvedOptions.WindowHours)
-            : TimeSpan.FromHours(24);
+        var resolvedOptions = options.Value;
+        _maxCallsPerDay = resolvedOptions.MaxCallsPerDay;
+        _windowDuration = TimeSpan.FromHours(resolvedOptions.WindowHours);
     }
 
     public Task<bool> TryAcquireAsync(Guid userId, CancellationToken cancellationToken = default)

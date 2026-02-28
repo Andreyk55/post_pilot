@@ -12,8 +12,9 @@ import type {
   ValidationLimitsResponse,
   InstagramDiscoveryResponse,
 } from '../types/meta'
+import { config } from '../config/appConfig'
 
-const API_URL = 'http://localhost:5122/api'
+const API_URL = config.apiBaseUrl
 
 export const metaApi = {
   /**

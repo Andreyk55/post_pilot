@@ -6,6 +6,23 @@ using PostPilot.Api.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ── Additional config: load backend/config/ layered files ─────────────────
+// Precedence (last wins): appsettings.json → appsettings.{env}.json
+//   → config/appsettings.common.json → config/appsettings.{appEnv}.json → env vars
+var aspEnv = builder.Environment.EnvironmentName; // e.g. "Development"
+var appEnv = aspEnv switch
+{
+    "Development" => "local",
+    "Staging"     => "dev",
+    "Production"  => "prod",
+    _             => aspEnv.ToLowerInvariant()
+};
+
+builder.Configuration
+    .AddJsonFile("config/appsettings.common.json", optional: true, reloadOnChange: true)
+    .AddJsonFile($"config/appsettings.{appEnv}.json", optional: true, reloadOnChange: true)
+    .AddEnvironmentVariables();
+
 // ── Console logging: single-line with timestamp + scopes ──────────────────
 builder.Logging.AddSimpleConsole(options =>
 {

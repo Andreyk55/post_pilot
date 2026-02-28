@@ -1,6 +1,7 @@
 import type { MediaType } from './media'
+import { config } from '../config/appConfig'
 
-const API_URL = 'http://localhost:5122/api'
+const API_URL = config.apiBaseUrl
 
 export type Platform = 'Twitter' | 'Instagram' | 'Facebook' | 'LinkedIn'
 

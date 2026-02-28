@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Caching.Memory;
 using PostPilot.Api.DTOs;
 using PostPilot.Api.Entities;
+using PostPilot.Api.Settings;
 
 namespace PostPilot.Api.Services.Ai;
 
@@ -18,8 +19,10 @@ public class GemmaTextClient : GoogleAiClientBase, IGeminiClient
         HttpClient httpClient,
         GeminiSettings settings,
         IMemoryCache cache,
-        ILogger<GemmaTextClient> logger)
-        : base(httpClient, settings, cache, logger)
+        ILogger<GemmaTextClient> logger,
+        AiCacheOptions cacheOptions)
+        : base(httpClient, settings, cache, logger,
+              TimeSpan.FromMinutes(cacheOptions.GoogleAiClientMinutes))
     {
     }
 

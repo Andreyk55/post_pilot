@@ -1,5 +1,6 @@
 using Xunit;
 using PostPilot.Api.Services.Ai;
+using PostPilot.Api.Settings;
 
 namespace PostPilot.Api.Tests.Services;
 
@@ -165,7 +166,16 @@ public class CaptionAssistServiceTests
             new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions());
         var logger = new Microsoft.Extensions.Logging.Abstractions.NullLogger<CaptionAssistService>();
 
-        return new CaptionAssistService(languageService, captionGenerator, cache, logger);
+        var cacheOptions = new AiCacheOptions
+        {
+            CaptionAssistMinutes = 60,
+            LanguageDetectionMinutes = 1440,
+            GoogleAiClientMinutes = 60,
+            PostTimeSuggestionMinutes = 10,
+            AssetResolverDownloadUrlExpirationMinutes = 15
+        };
+
+        return new CaptionAssistService(languageService, captionGenerator, cache, logger, cacheOptions);
     }
 
     private T InvokePrivateMethod<T>(object obj, string methodName, params object[] parameters)

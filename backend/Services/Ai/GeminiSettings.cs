@@ -1,7 +1,14 @@
 namespace PostPilot.Api.Services.Ai;
 
+/// <summary>
+/// Configuration for Gemini AI service.
+/// Non-secret values (BaseUrl, TimeoutSeconds) from "Ai:Gemini" config section.
+/// Secrets (ApiKey, Model, VisionModel) from environment variables only.
+/// </summary>
 public class GeminiSettings
 {
+    public const string SectionName = "Ai:Gemini";
+
     public string ApiKey { get; set; } = string.Empty;
     public string Model { get; set; } = string.Empty;
 
@@ -11,16 +18,19 @@ public class GeminiSettings
     /// </summary>
     public string? VisionModel { get; set; }
 
-    public string BaseUrl { get; set; } = "https://generativelanguage.googleapis.com/v1beta";
-    public int TimeoutSeconds { get; set; } = 30;
+    public string BaseUrl { get; set; } = null!;
+    public int TimeoutSeconds { get; set; }
 }
 
 /// <summary>
 /// Configuration for AI provider selection.
+/// Bound from "Ai:Providers" config section. All defaults in appsettings.common.json.
 /// </summary>
 public class AiProviderSettings
 {
-    public string LanguageDetectorProvider { get; set; } = "gemini";
-    public string CaptionGeneratorProvider { get; set; } = "gemini";
+    public const string SectionName = "Ai:Providers";
+
+    public string LanguageDetectorProvider { get; set; } = null!;
+    public string CaptionGeneratorProvider { get; set; } = null!;
 }
 

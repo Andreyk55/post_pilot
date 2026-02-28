@@ -6,6 +6,7 @@ using PostPilot.Api.Entities;
 using PostPilot.Api.Enums;
 using PostPilot.Api.Services.Media;
 using PostPilot.Api.Services.Scheduling;
+using PostPilot.Api.Settings;
 
 namespace PostPilot.Api.Services.Publishing;
 
@@ -34,13 +35,10 @@ public class InstagramStoryPublisher : IStoryPublisher
     private readonly IMediaService _mediaService;
     private readonly HttpClient _httpClient;
     private readonly ILogger<InstagramStoryPublisher> _logger;
-
-    private const string GraphApiBaseUrl = "https://graph.facebook.com/v21.0";
-    private static readonly TimeSpan MediaDownloadUrlExpiration = TimeSpan.FromHours(1);
-
-    // Container polling settings (for images — quick in-process polling)
-    private const int MaxImagePollAttempts = 30;
-    private static readonly TimeSpan ImagePollInterval = TimeSpan.FromSeconds(2);
+    private readonly string _graphApiBaseUrl;
+    private readonly TimeSpan _mediaDownloadUrlExpiration;
+    private readonly int _maxImagePollAttempts;
+    private readonly TimeSpan _imagePollInterval;
 
     // Video processing retry interval
     /// <summary>
@@ -92,13 +90,19 @@ public class InstagramStoryPublisher : IStoryPublisher
         IPostScheduler scheduler,
         IMediaService mediaService,
         HttpClient httpClient,
-        ILogger<InstagramStoryPublisher> logger)
+        ILogger<InstagramStoryPublisher> logger,
+        MetaApiOptions metaApiOptions,
+        PublishingOptions publishingOptions)
     {
         _dbContext = dbContext;
         _scheduler = scheduler;
         _mediaService = mediaService;
         _httpClient = httpClient;
         _logger = logger;
+        _graphApiBaseUrl = metaApiOptions.GraphApiBaseUrl;
+        _mediaDownloadUrlExpiration = TimeSpan.FromMinutes(publishingOptions.MediaDownloadUrlExpirationMinutes);
+        _maxImagePollAttempts = publishingOptions.ImagePollMaxAttempts;
+        _imagePollInterval = TimeSpan.FromSeconds(publishingOptions.ImagePollIntervalSeconds);
     }
 
     public async Task<PublishResult> PublishAsync(Guid postId, CancellationToken cancellationToken = default)
@@ -249,7 +253,7 @@ public class InstagramStoryPublisher : IStoryPublisher
 
         // Poll for container to be ready (images are fast)
         var pollResult = await PollContainerStatusInProcessAsync(
-            creationId, accessToken, MaxImagePollAttempts, ImagePollInterval, cancellationToken);
+            creationId, accessToken, _maxImagePollAttempts, _imagePollInterval, cancellationToken);
 
         if (!pollResult.Success)
             return pollResult;
@@ -387,7 +391,7 @@ public class InstagramStoryPublisher : IStoryPublisher
         string igUserId, string mediaUrl, string? caption,
         string mediaUrlParam, string accessToken, CancellationToken cancellationToken)
     {
-        var url = $"{GraphApiBaseUrl}/{igUserId}/media";
+        var url = $"{_graphApiBaseUrl}/{igUserId}/media";
         var parameters = new Dictionary<string, string>
         {
             ["media_type"] = "STORIES",
@@ -415,7 +419,7 @@ public class InstagramStoryPublisher : IStoryPublisher
     private async Task<StoryContainerStatusResult> CheckContainerStatusAsync(
         string creationId, string accessToken, CancellationToken cancellationToken)
     {
-        var url = $"{GraphApiBaseUrl}/{creationId}?fields=status_code,status&access_token={accessToken}";
+        var url = $"{_graphApiBaseUrl}/{creationId}?fields=status_code,status&access_token={accessToken}";
 
         var response = await _httpClient.GetAsync(url, cancellationToken);
         var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -493,7 +497,7 @@ public class InstagramStoryPublisher : IStoryPublisher
         string igUserId, string creationId,
         string accessToken, CancellationToken cancellationToken)
     {
-        var url = $"{GraphApiBaseUrl}/{igUserId}/media_publish";
+        var url = $"{_graphApiBaseUrl}/{igUserId}/media_publish";
         var content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["creation_id"] = creationId,
@@ -520,7 +524,7 @@ public class InstagramStoryPublisher : IStoryPublisher
     {
         if (_mediaService.IsStorageKey(post.MediaUrl!))
         {
-            var url = _mediaService.GenerateDownloadUrl(post.MediaUrl!, MediaDownloadUrlExpiration);
+            var url = _mediaService.GenerateDownloadUrl(post.MediaUrl!, _mediaDownloadUrlExpiration);
             _logger.LogInformation("Generated download URL for storage key {StorageKey} for IG story {PostId}",
                 post.MediaUrl, post.Id);
             return url;

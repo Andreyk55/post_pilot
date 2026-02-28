@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using PostPilot.Api.DTOs;
+using PostPilot.Api.Settings;
 
 namespace PostPilot.Api.Services.Publishing;
 
@@ -11,15 +12,16 @@ public class FacebookInsightsService : IFacebookInsightsService
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<FacebookInsightsService> _logger;
-
-    private const string GraphApiBaseUrl = "https://graph.facebook.com/v21.0";
+    private readonly string _graphApiBaseUrl;
 
     public FacebookInsightsService(
         HttpClient httpClient,
-        ILogger<FacebookInsightsService> logger)
+        ILogger<FacebookInsightsService> logger,
+        MetaApiOptions metaApiOptions)
     {
         _httpClient = httpClient;
         _logger = logger;
+        _graphApiBaseUrl = metaApiOptions.GraphApiBaseUrl;
     }
 
     public async Task<PostEngagementDto?> GetPostEngagementAsync(
@@ -39,7 +41,7 @@ public class FacebookInsightsService : IFacebookInsightsService
             // Use reactions (modern) and likes (legacy) for broader compatibility
             // Also include shares and comments with summaries
             var fields = "reactions.summary(total_count),likes.summary(true),comments.summary(true),shares";
-            var url = $"{GraphApiBaseUrl}/{externalPostId}?fields={fields}&access_token={pageAccessToken}";
+            var url = $"{_graphApiBaseUrl}/{externalPostId}?fields={fields}&access_token={pageAccessToken}";
 
             _logger.LogInformation("Fetching engagement for post {PostId} from URL: {Url}",
                 externalPostId, url.Replace(pageAccessToken, "[REDACTED]"));

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Caching.Memory;
+using PostPilot.Api.Settings;
 
 namespace PostPilot.Api.Services.Ai;
 
@@ -17,7 +18,8 @@ public static class CaptionGeneratorFactory
                 serviceProvider.GetRequiredService<HttpClient>(),
                 serviceProvider.GetRequiredService<GeminiSettings>(),
                 serviceProvider.GetRequiredService<IMemoryCache>(),
-                serviceProvider.GetRequiredService<ILogger<GeminiCaptionGenerator>>()),
+                serviceProvider.GetRequiredService<ILogger<GeminiCaptionGenerator>>(),
+                serviceProvider.GetRequiredService<AiCacheOptions>()),
             
             // Future providers can be added here:
             // "openai" => new OpenAICaptionGenerator(...),

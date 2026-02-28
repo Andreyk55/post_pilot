@@ -1,4 +1,6 @@
-const API_URL = 'http://localhost:5122/api'
+import { config } from '../config/appConfig'
+
+const API_URL = config.apiBaseUrl
 
 export type AiTextAction = 'Polish' | 'RewriteTone' | 'Shorten' | 'Expand' | 'Hashtags' | 'PreFlight' | 'GenerateVariants'
 export type AiTone = 'Professional' | 'Casual' | 'Funny' | 'Sales' | 'Humorous' | 'Urgent' | 'Inspirational'

@@ -16,7 +16,11 @@ public class AiRateLimiterTests
     {
         var cache = new MemoryCache(new MemoryCacheOptions());
         var logger = NullLogger<InMemoryAiRateLimiter>.Instance;
-        _rateLimiter = new InMemoryAiRateLimiter(cache, logger, Options.Create(new AiRateLimiterOptions()));
+        _rateLimiter = new InMemoryAiRateLimiter(cache, logger, Options.Create(new AiRateLimiterOptions
+        {
+            MaxCallsPerDay = 20,
+            WindowHours = 24
+        }));
     }
 
     [Fact]

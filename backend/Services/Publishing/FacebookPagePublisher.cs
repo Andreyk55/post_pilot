@@ -23,9 +23,9 @@ public class FacebookPagePublisher : IPostPublisher
     private readonly FeatureSettings _featureSettings;
     private readonly HttpClient _httpClient;
     private readonly ILogger<FacebookPagePublisher> _logger;
-
-    private const string GraphApiBaseUrl = "https://graph.facebook.com/v21.0";
-    private static readonly TimeSpan MetaDownloadUrlExpiration = TimeSpan.FromHours(1);
+    private readonly string _graphApiBaseUrl;
+    private readonly TimeSpan _metaDownloadUrlExpiration;
+    private readonly TimeSpan _videoDownloadUrlExpiration;
 
     // Meta error codes - transient (retry)
     private static readonly HashSet<int> TransientErrorCodes = new()
@@ -66,7 +66,9 @@ public class FacebookPagePublisher : IPostPublisher
         IMediaService mediaService,
         FeatureSettings featureSettings,
         HttpClient httpClient,
-        ILogger<FacebookPagePublisher> logger)
+        ILogger<FacebookPagePublisher> logger,
+        MetaApiOptions metaApiOptions,
+        PublishingOptions publishingOptions)
     {
         _dbContext = dbContext;
         _scheduler = scheduler;
@@ -74,6 +76,9 @@ public class FacebookPagePublisher : IPostPublisher
         _featureSettings = featureSettings;
         _httpClient = httpClient;
         _logger = logger;
+        _graphApiBaseUrl = metaApiOptions.GraphApiBaseUrl;
+        _metaDownloadUrlExpiration = TimeSpan.FromMinutes(publishingOptions.MediaDownloadUrlExpirationMinutes);
+        _videoDownloadUrlExpiration = TimeSpan.FromMinutes(publishingOptions.VideoDownloadUrlExpirationMinutes);
     }
 
     public async Task<PublishResult> PublishAsync(Guid postId, CancellationToken cancellationToken = default)
@@ -234,7 +239,7 @@ public class FacebookPagePublisher : IPostPublisher
             string imageUrl;
             if (_mediaService.IsStorageKey(post.MediaUrl))
             {
-                imageUrl = _mediaService.GenerateDownloadUrl(post.MediaUrl, MetaDownloadUrlExpiration);
+                imageUrl = _mediaService.GenerateDownloadUrl(post.MediaUrl, _metaDownloadUrlExpiration);
                 _logger.LogInformation("Generated download URL for storage key {StorageKey} for post {PostId}",
                     post.MediaUrl, post.Id);
             }
@@ -243,7 +248,7 @@ public class FacebookPagePublisher : IPostPublisher
                 imageUrl = post.MediaUrl;
             }
 
-            url = $"{GraphApiBaseUrl}/{pageId}/photos";
+            url = $"{_graphApiBaseUrl}/{pageId}/photos";
             content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["message"] = post.Content,
@@ -264,7 +269,7 @@ public class FacebookPagePublisher : IPostPublisher
             string imageUrl;
             if (_mediaService.IsStorageKey(post.MediaUrl))
             {
-                imageUrl = _mediaService.GenerateDownloadUrl(post.MediaUrl, MetaDownloadUrlExpiration);
+                imageUrl = _mediaService.GenerateDownloadUrl(post.MediaUrl, _metaDownloadUrlExpiration);
                 _logger.LogInformation("Generated download URL for storage key {StorageKey} for post {PostId}",
                     post.MediaUrl, post.Id);
             }
@@ -273,7 +278,7 @@ public class FacebookPagePublisher : IPostPublisher
                 imageUrl = post.MediaUrl;
             }
 
-            url = $"{GraphApiBaseUrl}/{pageId}/photos";
+            url = $"{_graphApiBaseUrl}/{pageId}/photos";
             content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["message"] = post.Content,
@@ -284,7 +289,7 @@ public class FacebookPagePublisher : IPostPublisher
         else
         {
             // Text-only post
-            url = $"{GraphApiBaseUrl}/{pageId}/feed";
+            url = $"{_graphApiBaseUrl}/{pageId}/feed";
             content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["message"] = post.Content,
@@ -403,7 +408,7 @@ public class FacebookPagePublisher : IPostPublisher
     private async Task<PublishResult> UploadUnpublishedPhotoAsync(
         string pageId, string imageUrl, string accessToken, CancellationToken cancellationToken)
     {
-        var url = $"{GraphApiBaseUrl}/{pageId}/photos";
+        var url = $"{_graphApiBaseUrl}/{pageId}/photos";
         var content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["url"] = imageUrl,
@@ -442,7 +447,7 @@ public class FacebookPagePublisher : IPostPublisher
                 ErrorMessage: "Cannot create multi-photo feed post without any uploaded photos.");
         }
 
-        var url = $"{GraphApiBaseUrl}/{pageId}/feed";
+        var url = $"{_graphApiBaseUrl}/{pageId}/feed";
 
         // FB requires "message" to be non-empty even for photo-only posts (error 197).
         // Use a single space as safe fallback when the user provides no caption.
@@ -489,7 +494,7 @@ public class FacebookPagePublisher : IPostPublisher
     {
         if (_mediaService.IsStorageKey(item.MediaUrl))
         {
-            return _mediaService.GenerateDownloadUrl(item.MediaUrl, MetaDownloadUrlExpiration);
+            return _mediaService.GenerateDownloadUrl(item.MediaUrl, _metaDownloadUrlExpiration);
         }
         return item.MediaUrl;
     }
@@ -501,7 +506,7 @@ public class FacebookPagePublisher : IPostPublisher
         if (_mediaService.IsStorageKey(post.MediaUrl!))
         {
             // Use longer expiration for videos since processing takes time
-            videoUrl = _mediaService.GenerateDownloadUrl(post.MediaUrl!, TimeSpan.FromHours(2));
+            videoUrl = _mediaService.GenerateDownloadUrl(post.MediaUrl!, _videoDownloadUrlExpiration);
             _logger.LogInformation("Generated download URL for video storage key {StorageKey} for post {PostId}",
                 post.MediaUrl, post.Id);
         }
@@ -511,7 +516,7 @@ public class FacebookPagePublisher : IPostPublisher
         }
 
         // Use the videos endpoint for video uploads
-        var url = $"{GraphApiBaseUrl}/{pageId}/videos";
+        var url = $"{_graphApiBaseUrl}/{pageId}/videos";
 
         // Build parameters dictionary
         var parameters = new Dictionary<string, string>
@@ -561,7 +566,7 @@ public class FacebookPagePublisher : IPostPublisher
         // If it's a storage key, generate a download URL
         if (_mediaService.IsStorageKey(thumbnailUrl))
         {
-            return _mediaService.GenerateDownloadUrl(thumbnailUrl, MetaDownloadUrlExpiration);
+            return _mediaService.GenerateDownloadUrl(thumbnailUrl, _metaDownloadUrlExpiration);
         }
 
         // If it's a local API path, we can't use it directly with Meta

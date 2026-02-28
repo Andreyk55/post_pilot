@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Caching.Memory;
 using PostPilot.Api.DTOs;
 using PostPilot.Api.Entities;
+using PostPilot.Api.Settings;
 
 namespace PostPilot.Api.Services.Ai;
 
@@ -17,7 +18,7 @@ public class CaptionAssistService
     private readonly IMemoryCache _cache;
     private readonly ILogger<CaptionAssistService> _logger;
 
-    private static readonly TimeSpan CacheDuration = TimeSpan.FromHours(1);
+    private readonly TimeSpan _cacheDuration;
 
     // Regex patterns for strict validation
     private static readonly Regex NumberPattern = new Regex(@"\b\d+([.,]\d+)?\b", RegexOptions.Compiled);
@@ -31,12 +32,14 @@ public class CaptionAssistService
         LanguageService languageService,
         ICaptionGenerator captionGenerator,
         IMemoryCache cache,
-        ILogger<CaptionAssistService> logger)
+        ILogger<CaptionAssistService> logger,
+        AiCacheOptions cacheOptions)
     {
         _languageService = languageService;
         _captionGenerator = captionGenerator;
         _cache = cache;
         _logger = logger;
+        _cacheDuration = TimeSpan.FromMinutes(cacheOptions.CaptionAssistMinutes);
     }
 
     public async Task<(LanguageDetectResult detection, string[] captions, string[] warnings)> GenerateCaptionsAsync(
@@ -112,7 +115,7 @@ public class CaptionAssistService
         }
 
         var finalResult = (validatedCaptions, allWarnings.ToArray());
-        _cache.Set(cacheKey, finalResult, CacheDuration);
+        _cache.Set(cacheKey, finalResult, _cacheDuration);
 
         return (detection, validatedCaptions, allWarnings.ToArray());
     }

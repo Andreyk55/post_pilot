@@ -2,12 +2,12 @@ namespace PostPilot.Api.Settings;
 
 /// <summary>
 /// Configuration options for platform selection behavior.
+/// Bound from "Features:PlatformSelection" config section. All defaults in appsettings.common.json.
 /// </summary>
 public class PlatformSelectionOptions
 {
     /// <summary>
     /// Maximum number of platforms that can be selected per post.
-    /// Default is 1 (single platform selection).
     /// </summary>
-    public int MaxPlatformsPerPost { get; set; } = 1;
+    public int MaxPlatformsPerPost { get; set; }
 }
