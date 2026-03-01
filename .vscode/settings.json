@@ -1,0 +1,10 @@
+{
+  "files.exclude": {
+    "**/tmpclaude-*": true,
+    "**/tmpclaude-*-cwd": true
+  },
+  "search.exclude": {
+    "**/tmpclaude-*": true,
+    "**/tmpclaude-*-cwd": true
+  }
+}
