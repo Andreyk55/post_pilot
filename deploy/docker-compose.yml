@@ -4,7 +4,7 @@ services:
     pull_policy: build
     build:
       context: ../backend
-      dockerfile: Dockerfile
+      dockerfile: ../deploy/Dockerfile
     env_file:
       - ${ENV_FILE}
     environment:

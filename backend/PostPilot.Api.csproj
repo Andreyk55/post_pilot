@@ -10,12 +10,16 @@
     <InternalsVisibleTo Include="PostPilot.Api.Tests" />
   </ItemGroup>
 
-  <!-- Exclude test project from compilation -->
+  <!-- Exclude test projects from compilation -->
   <ItemGroup>
     <Compile Remove="PostPilot.Api.Tests\**" />
     <Content Remove="PostPilot.Api.Tests\**" />
     <EmbeddedResource Remove="PostPilot.Api.Tests\**" />
     <None Remove="PostPilot.Api.Tests\**" />
+    <Compile Remove="backend.Tests\**" />
+    <Content Remove="backend.Tests\**" />
+    <EmbeddedResource Remove="backend.Tests\**" />
+    <None Remove="backend.Tests\**" />
   </ItemGroup>
 
   <ItemGroup>
