@@ -3,6 +3,10 @@ nul
 # Temporary Claude files
 tmpclaude-*
 
+# Real env files (contain secrets – do not commit)
+deploy/env/local.env
+deploy/env/server.env
+
 # .NET build outputs
 **/bin/
 **/obj/

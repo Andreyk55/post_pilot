@@ -1,0 +1,13 @@
+services:
+  api:
+    image: postpilot-api:latest
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    env_file:
+      - ${ENV_FILE}
+    environment:
+      ASPNETCORE_URLS: ${ASPNETCORE_URLS:-http://0.0.0.0:5122}
+    ports:
+      - "${API_PORT:-5122}:5122"
+    restart: unless-stopped
