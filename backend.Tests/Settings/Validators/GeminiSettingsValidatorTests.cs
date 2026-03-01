@@ -37,7 +37,7 @@ public class GeminiSettingsValidatorTests
         var result = _validator.Validate(null, settings);
 
         Assert.True(result.Failed);
-        Assert.Contains("Gemini API key", result.FailureMessage);
+        Assert.Contains("Gemini:ApiKey", result.FailureMessage);
     }
 
     [Theory]
@@ -52,7 +52,7 @@ public class GeminiSettingsValidatorTests
         var result = _validator.Validate(null, settings);
 
         Assert.True(result.Failed);
-        Assert.Contains("Gemini model", result.FailureMessage);
+        Assert.Contains("Gemini:Model", result.FailureMessage);
     }
 
     [Fact]
@@ -65,8 +65,8 @@ public class GeminiSettingsValidatorTests
         var result = _validator.Validate(null, settings);
 
         Assert.True(result.Failed);
-        Assert.Contains("Gemini API key", result.FailureMessage);
-        Assert.Contains("Gemini model", result.FailureMessage);
+        Assert.Contains("Gemini:ApiKey", result.FailureMessage);
+        Assert.Contains("Gemini:Model", result.FailureMessage);
     }
 
     [Theory]

@@ -1,20 +1,11 @@
 namespace PostPilot.Api.Settings;
 
 /// <summary>
-/// Configuration options for Meta (Facebook/Instagram) Graph API.
-/// Bound from "Meta:Api" config section.
+/// Meta Graph API URL constants, exposed as a singleton for DI.
+/// Defaults are code constants — not in appsettings.
 /// </summary>
 public class MetaApiOptions
 {
-    public const string SectionName = "Meta:Api";
-
-    /// <summary>
-    /// Base URL for Meta Graph API requests.
-    /// </summary>
-    public string GraphApiBaseUrl { get; set; } = null!;
-
-    /// <summary>
-    /// Base URL for Meta OAuth dialog.
-    /// </summary>
-    public string OAuthDialogBaseUrl { get; set; } = null!;
+    public string GraphApiBaseUrl { get; } = "https://graph.facebook.com/v21.0";
+    public string OAuthDialogBaseUrl { get; } = "https://www.facebook.com/v21.0/dialog/oauth";
 }

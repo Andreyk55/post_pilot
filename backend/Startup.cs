@@ -51,36 +51,19 @@ public class Startup
         services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(connectionString));
 
-        // ── App-level options (run mode, public URL) ──────────────────────────
-        // Secrets flow through flat env var mapping (EnvVarMapper) or
-        // canonical env vars (App__RunMode, App__PublicUrl).
+        // ── App options (RunMode from env var, PublicUrl from appsettings) ────
         services.AddOptions<AppOptions>()
             .Bind(Configuration.GetSection(AppOptions.SectionName))
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<AppOptions>, AppOptionsValidator>();
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<AppOptions>>().Value);
 
-        // ── Meta OAuth options (AppId, AppSecret, RedirectUri) ──────────────────
-        // Secrets flow through legacy env var mapping or canonical env vars
-        // (Meta__AppId, Meta__AppSecret, Meta__RedirectUri).
+        // ── Meta OAuth options (AppId/AppSecret from env vars, RedirectUri from config) ──
         services.AddOptions<MetaOptions>()
             .Bind(Configuration.GetSection(MetaOptions.SectionName))
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<MetaOptions>, MetaOptionsValidator>();
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<MetaOptions>>().Value);
-
-        // Bridge: expose MetaOAuthSettings for existing consumers (MetaOAuthService)
-        // TODO: Migrate MetaOAuthService to use IOptions<MetaOptions> directly, then remove this.
-        services.AddSingleton(sp =>
-        {
-            var meta = sp.GetRequiredService<MetaOptions>();
-            return new MetaOAuthSettings
-            {
-                AppId = meta.AppId,
-                AppSecret = meta.AppSecret,
-                RedirectUri = meta.RedirectUri
-            };
-        });
 
         // Register Meta OAuth service
         services.AddHttpClient<IMetaOAuthService, MetaOAuthService>();
@@ -124,12 +107,8 @@ public class Startup
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<PlatformSelectionOptions>, PlatformSelectionOptionsValidator>();
 
-        // Configure Meta API options (Graph API base URL, OAuth dialog URL)
-        services.AddOptions<MetaApiOptions>()
-            .Bind(Configuration.GetSection(MetaApiOptions.SectionName))
-            .ValidateOnStart();
-        services.AddSingleton<IValidateOptions<MetaApiOptions>, MetaApiOptionsValidator>();
-        services.AddSingleton(sp => sp.GetRequiredService<IOptions<MetaApiOptions>>().Value);
+        // Meta API URLs — code constants, no config binding needed
+        services.AddSingleton(new MetaApiOptions());
 
         // Configure publishing options (polling intervals, retry settings, URL expirations)
         services.AddOptions<PublishingOptions>()
@@ -138,8 +117,7 @@ public class Startup
         services.AddSingleton<IValidateOptions<PublishingOptions>, PublishingOptionsValidator>();
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<PublishingOptions>>().Value);
 
-        // Configure media options (file size limits, upload expiration, local server URL)
-        // PUBLIC_URL is now centralized in AppOptions; propagated here via PostConfigure.
+        // Media options (PublicUrl propagated from AppOptions via PostConfigure)
         services.AddOptions<MediaOptions>()
             .Bind(Configuration.GetSection(MediaOptions.SectionName))
             .PostConfigure<IOptions<AppOptions>>((options, appOpts) =>
@@ -271,26 +249,19 @@ public class Startup
         services.AddSingleton<IValidateOptions<AiCacheOptions>, AiCacheOptionsValidator>();
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<AiCacheOptions>>().Value);
 
-        // Gemini settings: non-secret defaults (BaseUrl, TimeoutSeconds) from Ai:Gemini config section.
-        // Secrets (ApiKey, Model, VisionModel) flow through legacy env var mapping or canonical env vars:
-        //   Gemini__ApiKey, Gemini__Model, Gemini__VisionModel
-        // The EnvVarMapper in Program.cs maps GEMINI_API_KEY → Gemini:ApiKey etc.
+        // Gemini settings: all from "Gemini" section (ApiKey from env var, rest from appsettings)
         services.AddOptions<GeminiSettings>()
             .Bind(configuration.GetSection(GeminiSettings.SectionName))
-            .Bind(configuration.GetSection("Gemini")) // Bind secrets from Gemini:ApiKey, Gemini:Model, Gemini:VisionModel
             .PostConfigure(settings =>
             {
-                // VisionModel fallback: if not set, use Model.
                 if (string.IsNullOrWhiteSpace(settings.VisionModel))
-                {
                     settings.VisionModel = settings.Model;
-                }
             })
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<GeminiSettings>, GeminiSettingsValidator>();
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<GeminiSettings>>().Value);
 
-        // AI Provider settings: bound from config (use Ai__Providers__LanguageDetectorProvider etc. env vars to override)
+        // AI Provider settings
         services.AddOptions<AiProviderSettings>()
             .Bind(configuration.GetSection(AiProviderSettings.SectionName))
             .ValidateOnStart();

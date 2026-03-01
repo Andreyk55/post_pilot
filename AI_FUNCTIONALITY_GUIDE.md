@@ -354,8 +354,8 @@ Forces Gemini to return valid JSON. Without this, it might add extra text like "
 Set these environment variables:
 
 ```bash
-GEMINI_API_KEY=your-api-key-here    # Required
-GEMINI_MODEL=gemini-2.0-flash       # Required
+Gemini__ApiKey=your-api-key-here    # Required (env var)
+# Model defaults to gemini-2.0-flash (set in config/appsettings.common.json)
 ```
 
 Get an API key at: https://aistudio.google.com/app/apikey

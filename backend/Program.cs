@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging.Console;
+using Microsoft.Extensions.Options;
 using PostPilot.Api;
 using PostPilot.Api.Middleware;
+using PostPilot.Api.Services.Ai;
 using PostPilot.Api.Settings;
 
 // Entry point: long-running ASP.NET Core server (Kestrel)
@@ -24,8 +26,6 @@ builder.Configuration
     .AddJsonFile("config/appsettings.common.json", optional: true, reloadOnChange: true)
     .AddJsonFile($"config/appsettings.{appEnv}.json", optional: true, reloadOnChange: true)
     .AddEnvironmentVariables()
-    // Map flat env vars (APP_RUN_MODE, META_APP_ID, etc.) into canonical config keys.
-    // Both flat and canonical __ names are supported; canonical wins when both are set.
     .AddFlatEnvironmentVariables();
 
 // ── Console logging: single-line with timestamp + scopes ──────────────────
@@ -50,6 +50,19 @@ var startup = new Startup(builder.Configuration);
 startup.ConfigureServices(builder.Services);
 
 var app = builder.Build();
+
+// ── Startup configuration log ────────────────────────────────────────────
+{
+    var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("PostPilot.Startup");
+    var appOpts = app.Services.GetRequiredService<IOptions<AppOptions>>().Value;
+    var geminiOpts = app.Services.GetRequiredService<IOptions<GeminiSettings>>().Value;
+    logger.LogInformation(
+        "PostPilot started — RunMode={RunMode}, PublicUrl={PublicUrl}, GeminiModel={Model}, GeminiVisionModel={VisionModel}",
+        appOpts.RunMode,
+        string.IsNullOrEmpty(appOpts.PublicUrl) ? "(none)" : "(set)",
+        geminiOpts.Model,
+        geminiOpts.VisionModel);
+}
 
 // Configure the middleware pipeline
 startup.Configure(app, app.Environment);

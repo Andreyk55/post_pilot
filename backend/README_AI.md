@@ -10,11 +10,10 @@ Set the following environment variable to enable AI features:
 
 ```bash
 # Required: Your Google Gemini API key
-GEMINI_API_KEY=your-api-key-here
-
-# Optional: Model to use (default: gemini-2.0-flash)
-GEMINI_MODEL=gemma-3-27b-it
+Gemini__ApiKey=your-api-key-here
 ```
+
+The model name defaults to `gemini-2.0-flash` (set in `config/appsettings.common.json`).
 
 ### Getting a Gemini API Key
 
@@ -22,7 +21,7 @@ GEMINI_MODEL=gemma-3-27b-it
 2. Sign in with your Google account
 3. Click "Create API key"
 4. Copy the generated key
-5. Set it as the `GEMINI_API_KEY` environment variable
+5. Set it as the `Gemini__ApiKey` environment variable
 
 ### Running Locally
 
@@ -32,7 +31,7 @@ GEMINI_MODEL=gemma-3-27b-it
 cd backend
 
 # Set the API key (PowerShell)
-$env:GEMINI_API_KEY="your-api-key-here"
+$env:Gemini__ApiKey="your-api-key-here"
 
 # Or set it in your shell profile / .env file
 

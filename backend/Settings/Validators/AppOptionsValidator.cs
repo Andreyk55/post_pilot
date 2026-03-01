@@ -11,7 +11,7 @@ public class AppOptionsValidator : IValidateOptions<AppOptions>
         var failures = new List<string>();
 
         if (string.IsNullOrWhiteSpace(options.RunMode))
-            failures.Add("App:RunMode is required. Set via App__RunMode or APP_RUN_MODE env var.");
+            failures.Add("App:RunMode is required. Set via App__RunMode env var.");
         else if (!ValidRunModes.Contains(options.RunMode, StringComparer.OrdinalIgnoreCase))
             failures.Add($"App:RunMode must be 'local' or 'server', got '{options.RunMode}'.");
 

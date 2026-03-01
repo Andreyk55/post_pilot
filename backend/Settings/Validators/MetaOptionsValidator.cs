@@ -9,10 +9,10 @@ public class MetaOptionsValidator : IValidateOptions<MetaOptions>
         var failures = new List<string>();
 
         if (string.IsNullOrWhiteSpace(options.AppId))
-            failures.Add("Meta:AppId is required. Set via Meta__AppId or META_APP_ID env var.");
+            failures.Add("Meta:AppId is required. Set via Meta__AppId env var.");
 
         if (string.IsNullOrWhiteSpace(options.AppSecret))
-            failures.Add("Meta:AppSecret is required. Set via Meta__AppSecret or META_APP_SECRET env var.");
+            failures.Add("Meta:AppSecret is required. Set via Meta__AppSecret env var.");
 
         if (string.IsNullOrWhiteSpace(options.RedirectUri))
             failures.Add("Meta:RedirectUri is required. Set via Meta__RedirectUri env var or config.");

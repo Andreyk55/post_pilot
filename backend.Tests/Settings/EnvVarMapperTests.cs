@@ -74,12 +74,9 @@ public class EnvVarMapperTests
         var legacyVars = new Dictionary<string, (string envName, string configKey)>
         {
             ["APP_RUN_MODE"] = ("APP_RUN_MODE", "App:RunMode"),
-            ["PUBLIC_URL"] = ("PUBLIC_URL", "App:PublicUrl"),
             ["META_APP_ID"] = ("META_APP_ID", "Meta:AppId"),
             ["META_APP_SECRET"] = ("META_APP_SECRET", "Meta:AppSecret"),
             ["GEMINI_API_KEY"] = ("GEMINI_API_KEY", "Gemini:ApiKey"),
-            ["GEMINI_MODEL"] = ("GEMINI_MODEL", "Gemini:Model"),
-            ["GEMINI_VISION_MODEL"] = ("GEMINI_VISION_MODEL", "Gemini:VisionModel"),
         };
 
         foreach (var (_, (envName, _)) in legacyVars)

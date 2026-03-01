@@ -42,11 +42,7 @@ public class FacebookPagePublisherTests : IDisposable
             .Returns<string, TimeSpan>((key, _) => $"https://storage.example.com/{key}?signed=1");
 
         _featureSettings = new FeatureSettings();
-        _metaApiOptions = new MetaApiOptions
-        {
-            GraphApiBaseUrl = "https://graph.facebook.com/v21.0",
-            OAuthDialogBaseUrl = "https://www.facebook.com/v21.0/dialog/oauth"
-        };
+        _metaApiOptions = new MetaApiOptions();
         _publishingOptions = new PublishingOptions
         {
             WorkerPollIntervalSeconds = 30,

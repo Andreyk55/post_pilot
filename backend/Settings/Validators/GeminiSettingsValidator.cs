@@ -10,10 +10,10 @@ public class GeminiSettingsValidator : IValidateOptions<GeminiSettings>
         var failures = new List<string>();
 
         if (string.IsNullOrWhiteSpace(options.ApiKey))
-            failures.Add("Gemini API key is required. Set via Gemini__ApiKey or GEMINI_API_KEY (legacy) env var.");
+            failures.Add("Gemini:ApiKey is required. Set via Gemini__ApiKey env var.");
 
         if (string.IsNullOrWhiteSpace(options.Model))
-            failures.Add("Gemini model is required. Set via Gemini__Model or GEMINI_MODEL (legacy) env var.");
+            failures.Add("Gemini:Model is required. Set in appsettings or via Gemini__Model env var.");
 
         if (string.IsNullOrWhiteSpace(options.BaseUrl))
             failures.Add($"{nameof(options.BaseUrl)} is required.");

@@ -13,7 +13,7 @@ public class MetaOAuthService : IMetaOAuthService
 {
     private readonly AppDbContext _context;
     private readonly HttpClient _httpClient;
-    private readonly MetaOAuthSettings _settings;
+    private readonly MetaOptions _settings;
     private readonly ILogger<MetaOAuthService> _logger;
     private readonly string _graphApiBaseUrl;
     private readonly string _oAuthBaseUrl;
@@ -22,7 +22,7 @@ public class MetaOAuthService : IMetaOAuthService
     public MetaOAuthService(
         AppDbContext context,
         HttpClient httpClient,
-        MetaOAuthSettings settings,
+        MetaOptions settings,
         ILogger<MetaOAuthService> logger,
         MetaApiOptions metaApiOptions,
         PublishingOptions publishingOptions)
@@ -1093,12 +1093,4 @@ internal class MetaInstagramAccount
 
     [System.Text.Json.Serialization.JsonPropertyName("profile_picture_url")]
     public string? ProfilePictureUrl { get; set; }
-}
-
-// Settings class
-public class MetaOAuthSettings
-{
-    public string AppId { get; set; } = null!;
-    public string AppSecret { get; set; } = null!;
-    public string RedirectUri { get; set; } = null!;
 }
