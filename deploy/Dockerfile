@@ -6,13 +6,16 @@ WORKDIR /src
 # Copy both project files before any source so the restore layer is reused.
 COPY PostPilot.Api.csproj ./
 COPY publisher/PostPilot.Publisher.csproj ./publisher/
-RUN dotnet restore PostPilot.Api.csproj
+# Restore via the publisher (which has a ProjectReference to the API),
+# so both projects are restored in one pass and their assets files stay consistent.
 RUN dotnet restore publisher/PostPilot.Publisher.csproj
 
 # Copy full source and publish both targets
 COPY . .
 RUN dotnet publish PostPilot.Api.csproj               -c Release -o /app/publish/api       --no-restore
-RUN dotnet publish publisher/PostPilot.Publisher.csproj -c Release -o /app/publish/publisher --no-restore
+# Publisher references the API project; skip --no-restore so MSBuild re-resolves
+# assets consistently (packages are already in the NuGet cache from restore above).
+RUN dotnet publish publisher/PostPilot.Publisher.csproj -c Release -o /app/publish/publisher
 
 # ── Stage 2 (target: api) ───────────────────────────────────────────────────
 # Runs the ASP.NET Core web server — controllers only, no background loop.
