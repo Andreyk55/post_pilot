@@ -1,0 +1,22 @@
+# Build artefacts
+bin/
+obj/
+
+# IDE / OS
+.vs/
+.vscode/
+*.user
+Thumbs.db
+.DS_Store
+
+# User secrets / local env files
+*.env
+*.env.local
+.env*
+
+# Runtime data (prefer volumes)
+uploads/*
+!uploads/.gitkeep
+
+# Temp files
+tmpclaude-*
