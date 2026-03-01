@@ -5,6 +5,7 @@ services:
     build:
       context: ../backend
       dockerfile: ../deploy/Dockerfile
+      target: api
     env_file:
       - ${ENV_FILE}
     environment:
@@ -12,3 +13,17 @@ services:
     ports:
       - "${API_PORT:-5122}:5122"
     restart: unless-stopped
+
+  publisher:
+    image: postpilot-publisher:local
+    pull_policy: build
+    build:
+      context: ../backend
+      dockerfile: ../deploy/Dockerfile
+      target: publisher
+    env_file:
+      - ${ENV_FILE}
+    depends_on:
+      - api
+    restart: unless-stopped
+    # No ports — the publisher is a background process only

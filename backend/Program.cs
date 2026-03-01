@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging.Console;
 using Microsoft.Extensions.Options;
+using Microsoft.EntityFrameworkCore;
 using PostPilot.Api;
+using PostPilot.Api.Data;
 using PostPilot.Api.Middleware;
 using PostPilot.Api.Services.Ai;
 using PostPilot.Api.Settings;
@@ -66,5 +68,15 @@ var app = builder.Build();
 
 // Configure the middleware pipeline
 startup.Configure(app, app.Environment);
+
+// ── Run EF Core migrations (API only — Worker does NOT run migrations) ────
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var migrLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("PostPilot.Migrations");
+    migrLogger.LogInformation("Applying pending EF Core migrations...");
+    await db.Database.MigrateAsync();
+    migrLogger.LogInformation("Migrations applied successfully.");
+}
 
 app.Run();

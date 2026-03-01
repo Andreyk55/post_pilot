@@ -10,7 +10,7 @@
     <InternalsVisibleTo Include="PostPilot.Api.Tests" />
   </ItemGroup>
 
-  <!-- Exclude test projects from compilation -->
+  <!-- Exclude test projects and worker project from compilation -->
   <ItemGroup>
     <Compile Remove="PostPilot.Api.Tests\**" />
     <Content Remove="PostPilot.Api.Tests\**" />
@@ -20,6 +20,11 @@
     <Content Remove="backend.Tests\**" />
     <EmbeddedResource Remove="backend.Tests\**" />
     <None Remove="backend.Tests\**" />
+    <!-- Publisher is a separate project; exclude it from the API build -->
+    <Compile Remove="publisher\**" />
+    <Content Remove="publisher\**" />
+    <EmbeddedResource Remove="publisher\**" />
+    <None Remove="publisher\**" />
   </ItemGroup>
 
   <ItemGroup>
