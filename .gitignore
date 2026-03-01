@@ -2,3 +2,10 @@ nul
 
 # Temporary Claude files
 tmpclaude-*
+
+# .NET build outputs
+**/bin/
+**/obj/
+*.dll
+*.exe
+*.pdb
