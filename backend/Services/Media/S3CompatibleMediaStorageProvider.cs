@@ -1,0 +1,172 @@
+using Amazon;
+using Amazon.S3;
+using Amazon.S3.Model;
+using PostPilot.Api.Settings;
+
+namespace PostPilot.Api.Services.Media;
+
+/// <summary>
+/// Storage provider for any S3-compatible backend (MinIO, AWS S3, Cloudflare R2,
+/// DigitalOcean Spaces, Backblaze B2, Wasabi, Hetzner Object Storage).
+///
+/// The AWS SDK is an implementation detail. Nothing else in the app references
+/// <c>Amazon.S3</c> — controllers, publishers, DB models, and the frontend stay
+/// provider-neutral via <see cref="IMediaStorageProvider"/>.
+///
+/// Why two clients:
+///   - Internal ops (HeadObject, GetObject, DeleteObject, PutObject) must hit the
+///     bucket over the Docker network — endpoint = http://minio:9000.
+///   - Presigned upload URLs must be signed against the host the browser will
+///     hit — http://localhost:9000. S3 signature v4 binds the signature to the
+///     endpoint, so we can't sign-internal and serve-public from one client.
+/// </summary>
+public class S3CompatibleMediaStorageProvider : IMediaStorageProvider, IDisposable
+{
+    private readonly AmazonS3Client _internalClient;
+    private readonly AmazonS3Client _publicClient;
+    private readonly string _bucket;
+    private readonly Protocol _signedUrlProtocol;
+    private readonly ILogger<S3CompatibleMediaStorageProvider> _logger;
+    private bool _disposed;
+
+    public S3CompatibleMediaStorageProvider(
+        MediaStorageOptions options,
+        ILogger<S3CompatibleMediaStorageProvider> logger)
+    {
+        _logger = logger;
+        _bucket = options.Bucket;
+
+        // GetPreSignedURL ignores ServiceURL's scheme and defaults to HTTPS unless the
+        // request explicitly sets Protocol. For plain-HTTP MinIO local dev we need
+        // Protocol.HTTP — and we derive it from UseSSL so prod stays on HTTPS.
+        _signedUrlProtocol = options.UseSSL ? Protocol.HTTPS : Protocol.HTTP;
+
+        var credentials = new Amazon.Runtime.BasicAWSCredentials(options.AccessKey, options.SecretKey);
+
+        _internalClient = new AmazonS3Client(credentials, new AmazonS3Config
+        {
+            ServiceURL = options.InternalEndpoint,
+            ForcePathStyle = true,
+            UseHttp = !options.UseSSL,
+        });
+
+        _publicClient = new AmazonS3Client(credentials, new AmazonS3Config
+        {
+            ServiceURL = options.PublicUploadEndpoint,
+            ForcePathStyle = true,
+            UseHttp = !options.UseSSL,
+        });
+
+        _logger.LogInformation(
+            "S3CompatibleMediaStorageProvider initialized. Bucket={Bucket} Internal={Internal} Public={Public}",
+            _bucket, options.InternalEndpoint, options.PublicUploadEndpoint);
+    }
+
+    public Task<string> CreateUploadUrlAsync(string storageKey, string contentType, TimeSpan expires, CancellationToken cancellationToken = default)
+    {
+        var url = _publicClient.GetPreSignedURL(new GetPreSignedUrlRequest
+        {
+            BucketName = _bucket,
+            Key = storageKey,
+            Verb = HttpVerb.PUT,
+            Expires = DateTime.UtcNow.Add(expires),
+            ContentType = contentType,
+            Protocol = _signedUrlProtocol,
+        });
+        _logger.LogInformation("Generated presigned PUT URL for key {Key} (expires in {Expires})", storageKey, expires);
+        return Task.FromResult(url);
+    }
+
+    public Task<string> CreateDownloadUrlAsync(string storageKey, TimeSpan expires, CancellationToken cancellationToken = default)
+    {
+        var url = _publicClient.GetPreSignedURL(new GetPreSignedUrlRequest
+        {
+            BucketName = _bucket,
+            Key = storageKey,
+            Verb = HttpVerb.GET,
+            Expires = DateTime.UtcNow.Add(expires),
+            Protocol = _signedUrlProtocol,
+        });
+        return Task.FromResult(url);
+    }
+
+    public async Task<Stream?> OpenReadAsync(string storageKey, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var response = await _internalClient.GetObjectAsync(_bucket, storageKey, cancellationToken);
+            return response.ResponseStream;
+        }
+        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    }
+
+    public async Task DeleteAsync(string storageKey, CancellationToken cancellationToken = default)
+    {
+        await _internalClient.DeleteObjectAsync(_bucket, storageKey, cancellationToken);
+        _logger.LogInformation("Deleted object {Key} from bucket {Bucket}", storageKey, _bucket);
+    }
+
+    public Task<string?> GetLocalFilePathAsync(string storageKey, CancellationToken cancellationToken = default)
+    {
+        // No local fallback for object storage. Callers that need bytes must use OpenReadAsync.
+        return Task.FromResult<string?>(null);
+    }
+
+    public Task SaveAsync(string storageKey, Stream content, CancellationToken cancellationToken = default)
+    {
+        // The legacy "PUT through the API" upload path is local-disk only. When
+        // s3-compatible storage is active, clients upload directly to the bucket
+        // via a presigned URL — there's no reason for the API to receive the bytes.
+        throw new InvalidOperationException(
+            "Direct save is not supported by S3CompatibleMediaStorageProvider. " +
+            "Use the presigned upload URL from /api/media/uploads/init instead.");
+    }
+
+    [Obsolete("Use ObjectExistsAsync.")]
+    public bool Exists(string storageKey)
+    {
+        return ObjectExistsAsync(storageKey).GetAwaiter().GetResult();
+    }
+
+    public async Task<bool> ObjectExistsAsync(string storageKey, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await _internalClient.GetObjectMetadataAsync(_bucket, storageKey, cancellationToken);
+            return true;
+        }
+        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+    }
+
+    public async Task<StoredObjectInfo?> GetObjectInfoAsync(string storageKey, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var metadata = await _internalClient.GetObjectMetadataAsync(_bucket, storageKey, cancellationToken);
+            return new StoredObjectInfo(
+                SizeBytes: metadata.ContentLength,
+                ContentType: metadata.Headers.ContentType,
+                ETag: metadata.ETag,
+                LastModified: metadata.LastModified);
+        }
+        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _internalClient.Dispose();
+        _publicClient.Dispose();
+        _disposed = true;
+        GC.SuppressFinalize(this);
+    }
+}

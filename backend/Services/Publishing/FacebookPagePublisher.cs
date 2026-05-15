@@ -239,8 +239,8 @@ public class FacebookPagePublisher : IPostPublisher
             string imageUrl;
             if (_mediaService.IsStorageKey(post.MediaUrl))
             {
-                imageUrl = _mediaService.GenerateDownloadUrl(post.MediaUrl, _metaDownloadUrlExpiration);
-                _logger.LogInformation("Generated download URL for storage key {StorageKey} for post {PostId}",
+                imageUrl = _mediaService.GetPublishingUrl(post.MediaUrl, _metaDownloadUrlExpiration);
+                _logger.LogInformation("Generated publishing URL for storage key {StorageKey} for post {PostId}",
                     post.MediaUrl, post.Id);
             }
             else
@@ -269,8 +269,8 @@ public class FacebookPagePublisher : IPostPublisher
             string imageUrl;
             if (_mediaService.IsStorageKey(post.MediaUrl))
             {
-                imageUrl = _mediaService.GenerateDownloadUrl(post.MediaUrl, _metaDownloadUrlExpiration);
-                _logger.LogInformation("Generated download URL for storage key {StorageKey} for post {PostId}",
+                imageUrl = _mediaService.GetPublishingUrl(post.MediaUrl, _metaDownloadUrlExpiration);
+                _logger.LogInformation("Generated publishing URL for storage key {StorageKey} for post {PostId}",
                     post.MediaUrl, post.Id);
             }
             else
@@ -494,7 +494,7 @@ public class FacebookPagePublisher : IPostPublisher
     {
         if (_mediaService.IsStorageKey(item.MediaUrl))
         {
-            return _mediaService.GenerateDownloadUrl(item.MediaUrl, _metaDownloadUrlExpiration);
+            return _mediaService.GetPublishingUrl(item.MediaUrl, _metaDownloadUrlExpiration);
         }
         return item.MediaUrl;
     }
@@ -506,8 +506,8 @@ public class FacebookPagePublisher : IPostPublisher
         if (_mediaService.IsStorageKey(post.MediaUrl!))
         {
             // Use longer expiration for videos since processing takes time
-            videoUrl = _mediaService.GenerateDownloadUrl(post.MediaUrl!, _videoDownloadUrlExpiration);
-            _logger.LogInformation("Generated download URL for video storage key {StorageKey} for post {PostId}",
+            videoUrl = _mediaService.GetPublishingUrl(post.MediaUrl!, _videoDownloadUrlExpiration);
+            _logger.LogInformation("Generated publishing URL for video storage key {StorageKey} for post {PostId}",
                 post.MediaUrl, post.Id);
         }
         else
@@ -563,10 +563,10 @@ public class FacebookPagePublisher : IPostPublisher
 
     private string? GetThumbnailUrl(string thumbnailUrl)
     {
-        // If it's a storage key, generate a download URL
+        // If it's a storage key, route the thumbnail fetch through the API.
         if (_mediaService.IsStorageKey(thumbnailUrl))
         {
-            return _mediaService.GenerateDownloadUrl(thumbnailUrl, _metaDownloadUrlExpiration);
+            return _mediaService.GetPublishingUrl(thumbnailUrl, _metaDownloadUrlExpiration);
         }
 
         // If it's a local API path, we can't use it directly with Meta

@@ -524,8 +524,8 @@ public class InstagramStoryPublisher : IStoryPublisher
     {
         if (_mediaService.IsStorageKey(post.MediaUrl!))
         {
-            var url = _mediaService.GenerateDownloadUrl(post.MediaUrl!, _mediaDownloadUrlExpiration);
-            _logger.LogInformation("Generated download URL for storage key {StorageKey} for IG story {PostId}",
+            var url = _mediaService.GetPublishingUrl(post.MediaUrl!, _mediaDownloadUrlExpiration);
+            _logger.LogInformation("Generated publishing URL for storage key {StorageKey} for IG story {PostId}",
                 post.MediaUrl, post.Id);
             return url;
         }

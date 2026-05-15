@@ -82,6 +82,13 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IValidateOptions<MediaOptions>, MediaOptionsValidator>();
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<MediaOptions>>().Value);
 
+        // ── Media storage backend options ────────────────────────────────────
+        services.AddOptions<MediaStorageOptions>()
+            .Bind(configuration.GetSection(MediaStorageOptions.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<MediaStorageOptions>, MediaStorageOptionsValidator>();
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<MediaStorageOptions>>().Value);
+
         // ── Feature settings ─────────────────────────────────────────────────
         var featureSettings = configuration.GetSection("Features").Get<FeatureSettings>() ?? new FeatureSettings();
         services.AddSingleton(featureSettings);
@@ -125,12 +132,18 @@ public static class ServiceCollectionExtensions
     {
         services.AddSingleton<IMediaStorageProvider>(sp =>
         {
-            var runMode = sp.GetRequiredService<AppOptions>().RunModeEnum;
-            if (runMode == AppRunMode.Server)
+            // MediaStorage.Provider is the authoritative switch for the storage backend.
+            // AppOptions.RunMode is kept for legacy callers but does not select storage.
+            var storageOpts = sp.GetRequiredService<MediaStorageOptions>();
+
+            if (storageOpts.IsS3Compatible)
             {
-                return new ServerMediaStorageProvider();
+                return new S3CompatibleMediaStorageProvider(
+                    storageOpts,
+                    sp.GetRequiredService<ILogger<S3CompatibleMediaStorageProvider>>());
             }
 
+            // Default to local-disk for development without MinIO.
             var mediaOpts = sp.GetRequiredService<MediaOptions>();
             return new LocalDiskMediaStorageProvider(
                 sp.GetRequiredService<ILogger<LocalDiskMediaStorageProvider>>(),
@@ -147,8 +160,11 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<ILogger<MediaService>>(),
                 uploadUrlExpiration: TimeSpan.FromMinutes(mediaOpts.UploadUrlExpirationMinutes),
                 maxImageFileSizeBytes: mediaOpts.MaxImageFileSizeBytes,
-                maxVideoFileSizeBytes: mediaOpts.MaxVideoFileSizeBytes);
+                maxVideoFileSizeBytes: mediaOpts.MaxVideoFileSizeBytes,
+                publishingBaseUrl: mediaOpts.EffectiveBaseUrl);
         });
+
+        services.AddScoped<IMediaUploadService, MediaUploadService>();
     }
 
     private static void ConfigureMediaValidationServices(IServiceCollection services)

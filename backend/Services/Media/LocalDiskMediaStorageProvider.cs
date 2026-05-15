@@ -85,6 +85,35 @@ public class LocalDiskMediaStorageProvider : IMediaStorageProvider
         return File.Exists(GetLocalPath(storageKey));
     }
 
+    public Task<bool> ObjectExistsAsync(string storageKey, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(File.Exists(GetLocalPath(storageKey)));
+    }
+
+    public Task<StoredObjectInfo?> GetObjectInfoAsync(string storageKey, CancellationToken cancellationToken = default)
+    {
+        var path = GetLocalPath(storageKey);
+        if (!File.Exists(path))
+            return Task.FromResult<StoredObjectInfo?>(null);
+
+        var info = new FileInfo(path);
+        var contentType = SniffContentType(Path.GetExtension(path));
+        return Task.FromResult<StoredObjectInfo?>(new StoredObjectInfo(
+            SizeBytes: info.Length,
+            ContentType: contentType,
+            ETag: null,
+            LastModified: info.LastWriteTimeUtc));
+    }
+
+    private static string? SniffContentType(string extension) => extension.ToLowerInvariant() switch
+    {
+        ".jpg" or ".jpeg" => "image/jpeg",
+        ".png" => "image/png",
+        ".gif" => "image/gif",
+        ".mp4" => "video/mp4",
+        _ => null
+    };
+
     /// <summary>
     /// Gets the local filesystem path for a storage key.
     /// </summary>

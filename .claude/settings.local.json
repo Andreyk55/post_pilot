@@ -50,7 +50,21 @@
       "WebFetch(domain:gist.github.com)",
       "WebFetch(domain:dailydevsblog.com)",
       "WebFetch(domain:code.peren.gouv.fr)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(Get-ChildItem -Path \"d:\\\\dev\\\\projects\\\\post_pilot\" -Recurse -Depth 2 -Directory)",
+      "Bash(Select-Object FullName)",
+      "Bash(ls \"C:\\\\Users\\\\KTZ\\\\.claude\\\\plans\\\\\" 2>&1 | head -20)",
+      "Read(//c/Users/KTZ/.claude/**)",
+      "Bash(ConnectionStrings__DefaultConnection=\"Host=localhost;Port=5432;Database=postpilot;Username=postgres;Password=postgres\" App__RunMode=local dotnet ef migrations add AddMediaTable --no-build)",
+      "Bash(ConnectionStrings__DefaultConnection=\"Host=localhost;Port=5432;Database=postpilot;Username=postgres;Password=postgres\" App__RunMode=local dotnet ef migrations remove)",
+      "Bash(docker version *)",
+      "Bash(docker compose *)",
+      "Bash(docker run *)",
+      "Bash(curl -s -o /tmp/fetched.bin -w \"STATUS=%{http_code}\\\\nCONTENT_TYPE=%{content_type}\\\\nSIZE=%{size_download}\\\\n\" \"http://localhost:5122/api/media/files/media/e59c6613-51be-4269-bbdb-3147f3240d33.jpg\" && cat /tmp/fetched.bin)",
+      "Read(//tmp/**)",
+      "Bash(where ngrok *)",
+      "Bash(ngrok version *)",
+      "Bash(ngrok http *)"
     ],
     "additionalDirectories": [
       "d:\\dev\\projects\\post_pilot\\backend"

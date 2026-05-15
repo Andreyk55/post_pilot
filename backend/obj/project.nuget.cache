@@ -1,9 +1,11 @@
 {
   "version": 2,
-  "dgSpecHash": "jg6P7HW0exY=",
+  "dgSpecHash": "eWqja6+g8eI=",
   "success": true,
-  "projectFilePath": "D:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj",
+  "projectFilePath": "d:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj",
   "expectedPackageFiles": [
+    "C:\\Users\\KTZ\\.nuget\\packages\\awssdk.core\\3.7.400.49\\awssdk.core.3.7.400.49.nupkg.sha512",
+    "C:\\Users\\KTZ\\.nuget\\packages\\awssdk.s3\\3.7.405.13\\awssdk.s3.3.7.405.13.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\humanizer.core\\2.14.1\\humanizer.core.2.14.1.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\microsoft.aspnetcore.openapi\\10.0.1\\microsoft.aspnetcore.openapi.10.0.1.nupkg.sha512",
     "C:\\Users\\KTZ\\.nuget\\packages\\microsoft.build\\17.7.2\\microsoft.build.17.7.2.nupkg.sha512",
@@ -55,9 +57,9 @@
       "code": "NU1902",
       "level": "Warning",
       "message": "Package 'SixLabors.ImageSharp' 3.1.7 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-rxmq-m78w-7wmc",
-      "projectPath": "D:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj",
+      "projectPath": "d:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj",
       "warningLevel": 1,
-      "filePath": "D:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj",
+      "filePath": "d:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj",
       "libraryId": "SixLabors.ImageSharp",
       "targetGraphs": [
         "net10.0"

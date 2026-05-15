@@ -10,37 +10,42 @@ A social media post management and scheduling tool.
 
 ## Quick Start
 
-### 1. Start Database (PostgreSQL + pgAdmin)
+### 1. Bring up the full local stack (API + Worker + Postgres + pgAdmin + MinIO)
 
-```bash
-docker-compose up -d
+From `deploy/`:
+
+```powershell
+docker compose --env-file ./env/local.env `
+  -f docker-compose.yml `
+  -f docker-compose.local.db.yml `
+  -f docker-compose.local.storage.yml `
+  up -d --build
 ```
 
-This starts:
-- **PostgreSQL** on port 5432
-- **pgAdmin** on port 5050
+cmd.exe equivalent:
 
-### 2. Run Database Migrations
-
-```bash
-cd backend
-dotnet ef database update
+```cmd
+docker compose --env-file ./env/local.env ^
+  -f docker-compose.yml ^
+  -f docker-compose.local.db.yml ^
+  -f docker-compose.local.storage.yml ^
+  up -d --build
 ```
 
-### 3. Start Backend API
+Long-running containers: **api** (5122), **publisher** (Worker, no port), **postgres** (5432), **pgadmin** (5050), **minio** (9000 API / 9001 console).
+Setup container that creates the `postpilot-media` bucket and exits: **minio-init**.
 
-```bash
-cd backend
-dotnet run
-```
+Migrations run automatically on API startup.
 
-### 4. Start Frontend
+### 2. Start the frontend (stays outside Docker)
 
 ```bash
 cd frontend
 npm install   # first time only
 npm run dev
 ```
+
+The frontend talks to the API at `http://localhost:5122` and uploads media directly to MinIO at `http://localhost:9000` via presigned PUT URLs.
 
 ## Access Points
 
@@ -50,6 +55,23 @@ npm run dev
 | Backend API | http://localhost:5122 | - |
 | Swagger UI | http://localhost:5122/swagger | - |
 | pgAdmin | http://localhost:5050 | admin@postpilot.com / admin |
+| MinIO Console | http://localhost:9001 | postpilot / postpilot-password |
+| MinIO Bucket | `postpilot-media` | - |
+
+## Local Object Storage (MinIO)
+
+Media uploads go directly from the browser to MinIO via S3-compatible presigned PUT URLs:
+
+1. Browser calls `POST /api/media/uploads/init` with `{ fileName, contentType, sizeBytes }`.
+2. API creates a `Media` row (status `PendingUpload`), returns a presigned `uploadUrl` (host `localhost:9000`), a `storageKey`, and a `mediaId`.
+3. Browser `PUT`s the bytes directly to the `uploadUrl`.
+4. Browser calls `POST /api/media/uploads/complete` with `{ mediaId }`; the API verifies the object via a HEAD request and flips the row to `Uploaded`.
+
+Why the URL uses `localhost:9000` (public) while the API talks to `minio:9000` (internal): the browser cannot resolve Docker DNS, but the S3 signature is bound to the endpoint it was signed against — so the provider keeps two `AmazonS3Client` instances and uses the public one only for presigning.
+
+For real Meta publishing from a local dev environment, set `App__PublicUrl` to a public tunnel URL (ngrok/cloudflared) pointing at the API on `5122`. Meta will fetch media via `{App.PublicUrl}/api/media/files/{storageKey}`, which the API streams from MinIO.
+
+Production storage provider is intentionally not implemented yet — the `IMediaStorageProvider` abstraction is in place for any S3-compatible backend (S3, R2, Spaces, B2, Wasabi, Hetzner) once a production provider is chosen.
 
 ## Database Connection (pgAdmin)
 
@@ -80,30 +102,42 @@ When connecting pgAdmin to PostgreSQL:
 
 ```
 post_pilot/
-├── backend/                 # .NET 10 Web API
+├── backend/                 # .NET 10 Web API + Worker (publisher) projects
 │   ├── Controllers/         # API endpoints
 │   ├── Data/                # DbContext
-│   ├── Entities/            # Database models
-│   ├── Enums/               # Platform, PostStatus
-│   └── Migrations/          # EF Core migrations
+│   ├── Entities/            # Database models (includes Media side-table)
+│   ├── Enums/               # Platform, PostStatus, MediaUploadStatus
+│   ├── Services/Media/      # IMediaStorageProvider, S3CompatibleMediaStorageProvider, etc.
+│   ├── Migrations/          # EF Core migrations
+│   └── publisher/           # PostPilot.Publisher worker project
 ├── frontend/                # React + TypeScript + Vite
-│   ├── src/
-│   │   ├── api/             # API client
-│   │   ├── components/      # React components
-│   │   └── pages/           # Page components
-│   └── package.json
-├── docker-compose.yml       # PostgreSQL + pgAdmin
-└── README.md
+│   └── src/api/media.ts     # init/complete upload flow
+├── deploy/
+│   ├── Dockerfile                          # multi-stage: api + publisher targets
+│   ├── docker-compose.yml                  # api + publisher
+│   ├── docker-compose.local.db.yml         # postgres + pgadmin
+│   ├── docker-compose.local.storage.yml    # minio + minio-init (+ depends_on overrides)
+│   └── env/local.env                       # local env file (MediaStorage__*, etc.)
+└── docs/
+    └── README.md
 ```
 
 ## Stopping Services
 
-```bash
-# Stop database containers
-docker-compose down
+```powershell
+# Stop everything
+docker compose --env-file ./env/local.env `
+  -f docker-compose.yml `
+  -f docker-compose.local.db.yml `
+  -f docker-compose.local.storage.yml `
+  down
 
-# Stop with data cleanup (removes database data)
-docker-compose down -v
+# Stop with data cleanup (removes Postgres + MinIO data)
+docker compose --env-file ./env/local.env `
+  -f docker-compose.yml `
+  -f docker-compose.local.db.yml `
+  -f docker-compose.local.storage.yml `
+  down -v
 ```
 
 ## Environment Configuration

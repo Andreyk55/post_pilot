@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "D:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj": {}
+    "d:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj": {}
   },
   "projects": {
-    "D:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj": {
+    "d:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj",
+        "projectUniqueName": "d:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj",
         "projectName": "PostPilot.Api",
-        "projectPath": "D:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj",
+        "projectPath": "d:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj",
         "packagesPath": "C:\\Users\\KTZ\\.nuget\\packages\\",
-        "outputPath": "D:\\dev\\projects\\post_pilot\\backend\\obj\\",
+        "outputPath": "d:\\dev\\projects\\post_pilot\\backend\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\KTZ\\AppData\\Roaming\\NuGet\\NuGet.Config"
@@ -44,6 +44,10 @@
         "net10.0": {
           "targetAlias": "net10.0",
           "dependencies": {
+            "AWSSDK.S3": {
+              "target": "Package",
+              "version": "[3.7.405.13, )"
+            },
             "Microsoft.AspNetCore.OpenApi": {
               "target": "Package",
               "version": "[10.0.1, )"

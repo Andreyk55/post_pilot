@@ -7,17 +7,16 @@ export type MediaType = 'None' | 'Image' | 'Video'
 
 /**
  * Generates a URL for viewing/downloading media from its storage key.
- * In local development, this uses a relative URL (proxied by Vite) to avoid CORS issues.
- * In server mode, the storage provider generates a download URL.
+ * Uses a relative URL so Vite proxies it to the API in dev (same-origin, no CORS).
+ * The backend route is a catch-all that preserves the full key (including any "media/" prefix),
+ * so we do NOT slice the prefix here.
  */
 export function getMediaUrl(storageKey: string | null | undefined): string | null {
   if (!storageKey) return null
 
-  // Extract filename from storageKey (e.g., "media/guid.jpg" -> "guid.jpg")
-  const filename = storageKey.startsWith('media/') ? storageKey.slice(6) : storageKey
-
-  // Use relative URL so Vite proxy can handle it (same-origin for canvas operations)
-  return `/api/media/files/${filename}`
+  // Preserve "/" between segments; encode each piece.
+  const encoded = storageKey.split('/').map(encodeURIComponent).join('/')
+  return `/api/media/files/${encoded}`
 }
 
 /**
@@ -43,6 +42,34 @@ export interface GenerateUploadUrlResponse {
   allowedVideoTypes: string[]
   maxImageFileSizeBytes: number
   maxVideoFileSizeBytes: number
+}
+
+export interface InitUploadRequest {
+  fileName: string
+  contentType: string
+  sizeBytes: number
+}
+
+export interface InitUploadResponse {
+  mediaId: string
+  storageKey: string
+  uploadUrl: string
+  method: 'PUT'
+  contentType: string
+  expiresAt: string
+  mediaType: MediaType
+}
+
+export interface CompleteUploadRequest {
+  mediaId: string
+}
+
+export interface CompleteUploadResponse {
+  mediaId: string
+  storageKey: string
+  sizeBytes: number
+  contentType: string
+  uploadedAt: string
 }
 
 export interface MediaConstraintsResponse {
@@ -175,10 +202,60 @@ export const mediaApi = {
 
       xhr.open('PUT', uploadUrl)
       xhr.setRequestHeader('Content-Type', file.type)
-      // Skip ngrok's browser warning page for tunneled requests
-      xhr.setRequestHeader('ngrok-skip-browser-warning', 'true')
+
+      // The ngrok-skip-browser-warning header is only meaningful for requests
+      // tunneled through ngrok (i.e. requests to the API origin in some dev
+      // setups). When uploading directly to MinIO via a presigned URL, this
+      // header is not part of the signed headers and would invalidate the
+      // signature on stricter S3 servers — and CORS preflight would fail
+      // unless MinIO is configured to allow it.
+      try {
+        const target = new URL(uploadUrl)
+        const isDirectToObjectStorage =
+          target.host === 'localhost:9000' || target.host.startsWith('minio:')
+        if (!isDirectToObjectStorage) {
+          xhr.setRequestHeader('ngrok-skip-browser-warning', 'true')
+        }
+      } catch {
+        // If URL parsing fails for some reason, fall back to the safer default.
+      }
+
       xhr.send(file)
     })
+  },
+
+  /**
+   * Step 1 of the direct-upload flow. Server creates a Media row in PendingUpload
+   * status and returns a presigned PUT URL the client should upload the bytes to.
+   */
+  async initUpload(request: InitUploadRequest): Promise<InitUploadResponse> {
+    const response = await fetch(`${API_URL}/media/uploads/init`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    })
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Failed to initiate upload' }))
+      throw new Error(error.error || 'Failed to initiate upload')
+    }
+    return response.json()
+  },
+
+  /**
+   * Step 2 of the direct-upload flow. Server verifies the object exists in storage
+   * and flips the Media row to Uploaded. Idempotent.
+   */
+  async completeUpload(request: CompleteUploadRequest): Promise<CompleteUploadResponse> {
+    const response = await fetch(`${API_URL}/media/uploads/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    })
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Failed to complete upload' }))
+      throw new Error(error.error || 'Failed to complete upload')
+    }
+    return response.json()
   },
 
   // ============================================

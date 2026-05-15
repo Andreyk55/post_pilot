@@ -45,4 +45,14 @@ public class ServerMediaStorageProvider : IMediaStorageProvider
     {
         throw new NotImplementedException(NotImplementedMessage);
     }
+
+    public Task<bool> ObjectExistsAsync(string storageKey, CancellationToken cancellationToken = default)
+    {
+        throw new NotImplementedException(NotImplementedMessage);
+    }
+
+    public Task<StoredObjectInfo?> GetObjectInfoAsync(string storageKey, CancellationToken cancellationToken = default)
+    {
+        throw new NotImplementedException(NotImplementedMessage);
+    }
 }

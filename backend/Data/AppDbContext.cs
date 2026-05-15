@@ -16,6 +16,7 @@ public class AppDbContext : DbContext
     public DbSet<ConnectedInstagramAccount> ConnectedInstagramAccounts => Set<ConnectedInstagramAccount>();
     public DbSet<MetaOAuthState> MetaOAuthStates => Set<MetaOAuthState>();
     public DbSet<AiVoiceProfile> AiVoiceProfiles => Set<AiVoiceProfile>();
+    public DbSet<Media> Media => Set<Media>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -109,6 +110,19 @@ public class AppDbContext : DbContext
             entity.Property(e => e.DontRules).HasMaxLength(2000);
             entity.Property(e => e.BannedWords).HasMaxLength(1000);
             entity.Property(e => e.ExamplePosts).HasMaxLength(5000);
+        });
+
+        modelBuilder.Entity<Media>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.StorageKey).IsUnique();
+            entity.HasIndex(e => e.Status);
+            entity.Property(e => e.Status).HasConversion<string>();
+            entity.Property(e => e.StorageProvider).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Bucket).HasMaxLength(255);
+            entity.Property(e => e.StorageKey).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.OriginalFileName).HasMaxLength(500);
+            entity.Property(e => e.ContentType).HasMaxLength(100);
         });
 
     }

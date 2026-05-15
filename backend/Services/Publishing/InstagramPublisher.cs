@@ -1146,7 +1146,7 @@ public class InstagramPublisher : IPostPublisher
     {
         if (_mediaService.IsStorageKey(item.MediaUrl))
         {
-            return _mediaService.GenerateDownloadUrl(item.MediaUrl, expiration ?? _mediaDownloadUrlExpiration);
+            return _mediaService.GetPublishingUrl(item.MediaUrl, expiration ?? _mediaDownloadUrlExpiration);
         }
         return item.MediaUrl;
     }
@@ -1213,8 +1213,8 @@ public class InstagramPublisher : IPostPublisher
     {
         if (_mediaService.IsStorageKey(post.MediaUrl!))
         {
-            var url = _mediaService.GenerateDownloadUrl(post.MediaUrl!, _mediaDownloadUrlExpiration);
-            _logger.LogInformation("Generated download URL for storage key {StorageKey} for IG post {PostId}",
+            var url = _mediaService.GetPublishingUrl(post.MediaUrl!, _mediaDownloadUrlExpiration);
+            _logger.LogInformation("Generated publishing URL for storage key {StorageKey} for IG post {PostId}",
                 post.MediaUrl, post.Id);
             return url;
         }

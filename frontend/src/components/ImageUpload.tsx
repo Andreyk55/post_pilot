@@ -51,15 +51,20 @@ export function ImageUpload({ onUploadComplete, onUploadError, onClear, onUpload
       onUploadingChange?.(true)
       setProgress(10)
 
-      // Get pre-signed upload URL
-      const { uploadUrl, storageKey } = await mediaApi.generateUploadUrl({
+      // Step 1: server issues a presigned PUT URL and creates a Media row (PendingUpload).
+      const { uploadUrl, storageKey, mediaId } = await mediaApi.initUpload({
         fileName: file.name,
         contentType: file.type,
+        sizeBytes: file.size,
       })
       setProgress(30)
 
-      // Upload to storage provider (or local endpoint in dev)
+      // Step 2: client uploads bytes directly to object storage (or local endpoint in dev).
       await mediaApi.uploadFile(uploadUrl, file)
+      setProgress(80)
+
+      // Step 3: server verifies the object landed in storage and flips Media row to Uploaded.
+      await mediaApi.completeUpload({ mediaId })
       setProgress(100)
 
       onUploadComplete(storageKey)

@@ -1,0 +1,55 @@
+services:
+  minio:
+    image: minio/minio
+    container_name: postpilot-minio
+    command: server /data --console-address ":9001"
+    env_file:
+      - ${ENV_FILE:-env/local.env}
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      # Allow browser PUT uploads from the Vite dev origin and the API origin.
+      # MINIO_API_CORS_ALLOW_ORIGIN is a comma-separated list of allowed origins.
+      MINIO_API_CORS_ALLOW_ORIGIN: "http://localhost:5173,http://localhost:5122"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc
+    depends_on:
+      minio:
+        condition: service_healthy
+    env_file:
+      - ${ENV_FILE:-env/local.env}
+    entrypoint: >
+      sh -c "
+      mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD &&
+      mc mb --ignore-existing local/$$MEDIA_STORAGE_BUCKET &&
+      echo 'bucket ready: '$$MEDIA_STORAGE_BUCKET
+      "
+    restart: "no"
+
+  # Overrides into the base compose: ensure the API and the Worker only start
+  # after the bucket exists. Kept in the storage overlay so the base file is
+  # not coupled to the storage stack.
+  api:
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+
+  publisher:
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+
+volumes:
+  minio_data:

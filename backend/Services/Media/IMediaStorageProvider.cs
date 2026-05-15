@@ -68,5 +68,29 @@ public interface IMediaStorageProvider
     /// <summary>
     /// Checks if a file exists at the given key.
     /// </summary>
+    [Obsolete("Use ObjectExistsAsync. This synchronous overload will be removed.")]
     bool Exists(string storageKey);
+
+    /// <summary>
+    /// Checks whether an object exists at the given storage key.
+    /// Cheap boolean check — prefer <see cref="GetObjectInfoAsync"/> when size/content-type
+    /// are also needed (same network round-trip, more data).
+    /// </summary>
+    Task<bool> ObjectExistsAsync(string storageKey, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Fetches metadata about an object (HEAD-equivalent). Returns null if the object is missing.
+    /// Used by the upload-completion flow to verify the upload landed and capture its size.
+    /// </summary>
+    Task<StoredObjectInfo?> GetObjectInfoAsync(string storageKey, CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// Provider-neutral metadata for a stored object.
+/// </summary>
+public record StoredObjectInfo(
+    long SizeBytes,
+    string? ContentType,
+    string? ETag,
+    DateTime? LastModified
+);

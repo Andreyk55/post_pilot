@@ -11,15 +11,18 @@ namespace PostPilot.Api.Controllers;
 public class MediaController : ControllerBase
 {
     private readonly IMediaService _mediaService;
+    private readonly IMediaUploadService _uploadService;
     private readonly IMediaValidationService _validationService;
     private readonly ILogger<MediaController> _logger;
 
     public MediaController(
         IMediaService mediaService,
+        IMediaUploadService uploadService,
         IMediaValidationService validationService,
         ILogger<MediaController> logger)
     {
         _mediaService = mediaService;
+        _uploadService = uploadService;
         _validationService = validationService;
         _logger = logger;
     }
@@ -28,10 +31,13 @@ public class MediaController : ControllerBase
     /// Generates a pre-signed URL for uploading media (image or video).
     /// Works in both local and server mode.
     /// </summary>
+    [Obsolete("Use POST /api/media/uploads/init instead. This endpoint does not create a Media row.")]
     [HttpPost("upload-url")]
     public async Task<ActionResult<GenerateUploadUrlResponse>> GenerateUploadUrl(
         [FromBody] GenerateUploadUrlRequest request)
     {
+        _logger.LogInformation("Legacy /api/media/upload-url called. Prefer /api/media/uploads/init.");
+
         try
         {
             var result = await _mediaService.GenerateUploadUrlAsync(
@@ -60,6 +66,80 @@ public class MediaController : ControllerBase
         }
     }
 
+    // ============================================
+    // NEW UPLOAD FLOW: /uploads/init + /uploads/complete
+    // ============================================
+
+    /// <summary>
+    /// Step 1 of the direct-upload flow. Creates a Media row in PendingUpload status
+    /// and returns a presigned PUT URL the client should upload the bytes to directly.
+    /// </summary>
+    [HttpPost("uploads/init")]
+    public async Task<ActionResult<InitUploadResponse>> InitUpload([FromBody] InitUploadRequest request, CancellationToken ct)
+    {
+        try
+        {
+            var result = await _uploadService.InitAsync(request.FileName, request.ContentType, request.SizeBytes, ct);
+            return Ok(new InitUploadResponse(
+                MediaId: result.MediaId,
+                StorageKey: result.StorageKey,
+                UploadUrl: result.UploadUrl,
+                Method: "PUT",
+                ContentType: result.ContentType,
+                ExpiresAt: result.ExpiresAt,
+                MediaType: result.MediaType.ToString()
+            ));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (NotImplementedException ex)
+        {
+            return StatusCode(501, new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Step 2 of the direct-upload flow. Verifies the uploaded object exists in storage
+    /// (single HEAD round-trip), captures its real size, and flips the Media row to Uploaded.
+    /// Idempotent: a second call returns the existing state.
+    /// </summary>
+    [HttpPost("uploads/complete")]
+    public async Task<ActionResult<CompleteUploadResponse>> CompleteUpload([FromBody] CompleteUploadRequest request, CancellationToken ct)
+    {
+        try
+        {
+            var result = await _uploadService.CompleteAsync(request.MediaId, ct);
+            return Ok(new CompleteUploadResponse(
+                MediaId: result.MediaId,
+                StorageKey: result.StorageKey,
+                SizeBytes: result.SizeBytes,
+                ContentType: result.ContentType,
+                UploadedAt: result.UploadedAt
+            ));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Upload not yet present in storage.
+            return Conflict(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Marks the Media row as Deleted and best-effort removes the object from storage.
+    /// </summary>
+    [HttpDelete("{mediaId:guid}")]
+    public async Task<IActionResult> DeleteMedia(Guid mediaId, CancellationToken ct)
+    {
+        var removed = await _uploadService.DeleteAsync(mediaId, ct);
+        return removed ? NoContent() : NotFound();
+    }
+
     /// <summary>
     /// Gets the media upload constraints (allowed types and max sizes).
     /// </summary>
@@ -79,6 +159,7 @@ public class MediaController : ControllerBase
     /// In server mode, files are uploaded directly to object storage via pre-signed PUT URLs.
     /// Route: PUT /api/media/upload/{filename} where filename is just "guid.ext"
     /// </summary>
+    [Obsolete("Local-disk direct upload. Prefer the /uploads/init presigned-PUT flow.")]
     [HttpPut("upload/{filename}")]
     [RequestSizeLimit(250 * 1024 * 1024)] // 250MB to allow for video uploads + overhead
     public async Task<IActionResult> UploadFile(string filename)
@@ -118,25 +199,20 @@ public class MediaController : ControllerBase
     }
 
     /// <summary>
-    /// Local mode endpoint for serving uploaded files (images and videos).
-    /// In server mode, files are served via pre-signed download URLs from object storage.
-    /// Route: GET /api/media/files/{filename} where filename is just "guid.ext"
+    /// Streams a stored file by its full storage key. Catch-all route so keys like
+    /// "media/{guid}.jpg" are preserved end-to-end without slicing on the client.
+    /// This URL is also what is handed to Meta (via App.PublicUrl) for publishing,
+    /// so the API proxies reads from whatever backend (local disk or S3-compatible)
+    /// is configured.
+    /// Route: GET /api/media/files/{*storageKey}
     /// </summary>
-    [HttpGet("files/{filename}")]
-    public async Task<IActionResult> GetFile(string filename)
+    [HttpGet("files/{*storageKey}")]
+    public async Task<IActionResult> GetFile(string storageKey, CancellationToken ct)
     {
-        // Only available in local mode
-        if (_mediaService.RunMode != AppRunMode.Local)
-        {
-            return NotFound(new { error = "Direct file access only available in local mode" });
-        }
+        if (string.IsNullOrWhiteSpace(storageKey))
+            return NotFound(new { error = "Storage key is required" });
 
-        if (!_mediaService.StorageProvider.Exists(filename))
-        {
-            return NotFound(new { error = "File not found" });
-        }
-
-        var extension = Path.GetExtension(filename).ToLowerInvariant();
+        var extension = Path.GetExtension(storageKey).ToLowerInvariant();
         var contentType = extension switch
         {
             ".jpg" or ".jpeg" => "image/jpeg",
@@ -146,13 +222,12 @@ public class MediaController : ControllerBase
             _ => "application/octet-stream"
         };
 
-        var stream = await _mediaService.StorageProvider.OpenReadAsync(filename);
+        var stream = await _mediaService.StorageProvider.OpenReadAsync(storageKey, ct);
         if (stream == null)
         {
             return NotFound(new { error = "File not found" });
         }
 
-        // For video files, enable range requests for seeking/streaming
         if (contentType == "video/mp4")
         {
             return File(stream, contentType, enableRangeProcessing: true);
@@ -351,4 +426,36 @@ public record ValidateMediaByKeyRequest(
 public record ExtractMetadataRequest(
     string StorageKey,
     string MimeType
+);
+
+/// <summary>
+/// Step 1 of the direct upload flow. Client declares the file it intends to upload;
+/// server returns a presigned URL and creates a Media row to track it.
+/// </summary>
+public record InitUploadRequest(
+    string FileName,
+    string ContentType,
+    long SizeBytes
+);
+
+public record InitUploadResponse(
+    Guid MediaId,
+    string StorageKey,
+    string UploadUrl,
+    string Method,
+    string ContentType,
+    DateTime ExpiresAt,
+    string MediaType
+);
+
+public record CompleteUploadRequest(
+    Guid MediaId
+);
+
+public record CompleteUploadResponse(
+    Guid MediaId,
+    string StorageKey,
+    long SizeBytes,
+    string ContentType,
+    DateTime UploadedAt
 );

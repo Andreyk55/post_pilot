@@ -13,6 +13,7 @@ public class MediaService : IMediaService
     private readonly TimeSpan _uploadUrlExpiration;
     private readonly ILogger<MediaService> _logger;
     private readonly long _maxVideoFileSizeBytes;
+    private readonly string _publishingBaseUrl;
 
     private static readonly HashSet<string> _allowedImageTypes = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -43,7 +44,8 @@ public class MediaService : IMediaService
         ILogger<MediaService> logger,
         TimeSpan uploadUrlExpiration,
         long maxImageFileSizeBytes,
-        long maxVideoFileSizeBytes)
+        long maxVideoFileSizeBytes,
+        string publishingBaseUrl)
     {
         _storage = storage;
         _runMode = runMode;
@@ -51,6 +53,7 @@ public class MediaService : IMediaService
         _uploadUrlExpiration = uploadUrlExpiration;
         _maxImageFileSizeBytes = maxImageFileSizeBytes;
         _maxVideoFileSizeBytes = maxVideoFileSizeBytes;
+        _publishingBaseUrl = publishingBaseUrl.TrimEnd('/');
     }
 
     public async Task<UploadUrlResult> GenerateUploadUrlAsync(string fileName, string contentType)
@@ -87,6 +90,22 @@ public class MediaService : IMediaService
     public string GenerateDownloadUrl(string storageKey, TimeSpan expiration)
     {
         return _storage.CreateDownloadUrlAsync(storageKey, expiration).GetAwaiter().GetResult();
+    }
+
+    public Task<string> GetPublishingUrlAsync(string storageKey, TimeSpan? expiration = null, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(GetPublishingUrl(storageKey, expiration));
+    }
+
+    public string GetPublishingUrl(string storageKey, TimeSpan? expiration = null)
+    {
+        // Always route Meta-facing reads back through the API. The API streams from
+        // whatever backend is configured, so the public URL shape is stable across
+        // storage backends.
+        // The full storageKey (including any "media/" prefix) is preserved in the path —
+        // MediaController.GetFile uses a catch-all route.
+        var encoded = string.Join('/', storageKey.Split('/').Select(Uri.EscapeDataString));
+        return $"{_publishingBaseUrl}/api/media/files/{encoded}";
     }
 
     public bool IsStorageKey(string? mediaUrl)
