@@ -30,26 +30,51 @@ function Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Ok($msg)   { Write-Host "    $msg" -ForegroundColor Green }
 function Warn($msg) { Write-Host "    $msg" -ForegroundColor Yellow }
 
-# ── Stop the frontend window ────────────────────────────────────────────────
-# Heuristic: find PowerShell processes whose command line includes the frontend
-# directory + "npm run dev". This avoids killing unrelated PowerShell terminals.
-Step 'Stopping frontend (Vite)'
-$frontendKilled = 0
+# ── Stop the WT tabs the start script opened ────────────────────────────────
+# start.ps1 tags every tab's PowerShell host with a window title prefix
+# "postpilot:..." (e.g. postpilot:frontend, postpilot:log:api). We find those
+# hosts by title and kill them — that closes their WT tab. Other PowerShell
+# terminals on the machine are untouched.
+#
+# Also catch any orphaned npm/vite node.exe processes (they outlive their
+# PowerShell parent if it was killed ungracefully).
+Step 'Stopping frontend + log tabs'
+$tabsKilled = 0
 try {
-    $candidates = Get-CimInstance Win32_Process -Filter "Name='powershell.exe' OR Name='pwsh.exe' OR Name='node.exe'" -ErrorAction Stop
-    foreach ($p in $candidates) {
-        $cmd = $p.CommandLine
-        if (-not $cmd) { continue }
-        if ($cmd -match [regex]::Escape($FrontendDir) -or $cmd -match 'vite' -and $cmd -match 'node') {
+    $allPs = Get-Process powershell, pwsh -ErrorAction SilentlyContinue
+    foreach ($p in $allPs) {
+        $title = $null
+        try { $title = $p.MainWindowTitle } catch { }
+        if ($title -and $title -like 'postpilot:*') {
             try {
-                Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop
-                $frontendKilled++
+                Stop-Process -Id $p.Id -Force -ErrorAction Stop
+                $tabsKilled++
             } catch { }
         }
     }
-} catch { Warn "Could not enumerate processes via CIM: $_" }
-if ($frontendKilled -gt 0) { Ok "Stopped $frontendKilled frontend-related process(es)" }
-else                       { Warn 'No frontend process found (already stopped, or started outside this script).' }
+} catch { Warn "Could not enumerate PowerShell hosts: $_" }
+
+# Belt-and-braces: catch leftover npm/vite node.exe whose parent PS host died.
+$nodeKilled = 0
+try {
+    $candidates = Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction Stop
+    foreach ($p in $candidates) {
+        $cmd = $p.CommandLine
+        if (-not $cmd) { continue }
+        if ($cmd -match [regex]::Escape($FrontendDir) -or ($cmd -match 'vite' -and $cmd -match 'node')) {
+            try {
+                Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop
+                $nodeKilled++
+            } catch { }
+        }
+    }
+} catch { Warn "Could not enumerate node processes via CIM: $_" }
+
+if ($tabsKilled -gt 0)  { Ok "Closed $tabsKilled WT tab(s) opened by start.ps1" }
+if ($nodeKilled -gt 0)  { Ok "Cleaned up $nodeKilled orphan node.exe process(es)" }
+if ($tabsKilled -eq 0 -and $nodeKilled -eq 0) {
+    Warn 'No frontend/log tabs found (already stopped, or started outside this script).'
+}
 
 # ── Stop ngrok ──────────────────────────────────────────────────────────────
 Step 'Stopping ngrok'

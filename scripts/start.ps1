@@ -180,51 +180,74 @@ try {
 }
 Ok 'api + publisher restarted'
 
-# ── Frontend in a Windows Terminal tab ──────────────────────────────────────
-# Open a new WT tab in the SAME window the script is running from.
+# ── Helper: launch a payload in a new Windows Terminal tab ──────────────────
+# Why this is a function: we now open three tabs from the script (frontend +
+# two log tails), all with the same wt.exe quirks to navigate.
 #
-# Critical detail: wt.exe parses its own command line and uses ';' as a tab
-# separator. Passing a PowerShell payload with semicolons (e.g. `cd X; npm run
-# dev`) makes WT spawn one tab per segment. The bullet-proof workaround is to
-# encode the PowerShell payload as Base64-UTF16LE and pass it via
-# `-EncodedCommand`, which contains no special characters.
-Step 'Starting frontend (Vite) — npm run dev'
+# Quirks worked around:
+#   • wt.exe parses its own command line and uses ';' as a tab separator, so
+#     passing a multi-line PowerShell payload directly fragments it across
+#     multiple tabs. We encode the payload as Base64-UTF16LE and pass it via
+#     -EncodedCommand, which contains no special characters wt cares about.
+#   • The `--title` flag in `wt new-tab` is parsed brittlely — a title with
+#     spaces eats the next argument (the executable). We set the tab title
+#     from inside the PowerShell payload via an ANSI escape (ESC ]0;...BEL),
+#     which Windows Terminal honors at runtime.
+#   • We tag each tab's host process with a known `$Host.UI.RawUI.WindowTitle`
+#     prefix ("postpilot:...") so stop.ps1 can find and kill exactly those
+#     hosts without touching unrelated PowerShell windows.
+function Start-PostPilotTab {
+    param(
+        [Parameter(Mandatory)] [string]$Tag,        # e.g. "frontend", "log:api"
+        [Parameter(Mandatory)] [string]$DisplayName,# shown in the tab title
+        [Parameter(Mandatory)] [string]$Payload     # the PowerShell to run
+    )
 
-$frontendPs = @"
+    $hostTitle = "postpilot:$Tag"
+    $fullPayload = @"
+`$Host.UI.RawUI.WindowTitle = '$hostTitle'
+[Console]::Write([char]27 + ']0;$DisplayName' + [char]7)
+Write-Host '== $DisplayName ==' -ForegroundColor Cyan
+$Payload
+"@
+    $encoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($fullPayload))
+    $wtCmd   = Get-Command wt.exe -ErrorAction SilentlyContinue
+
+    if ($wtCmd) {
+        if (-not $env:WT_SESSION) {
+            Warn 'Not running inside Windows Terminal — new tab will open in the most-recent WT window, or create one.'
+        }
+        $wtArgs = @('-w', '0', 'new-tab',
+                    'powershell.exe', '-NoExit', '-EncodedCommand', $encoded)
+        Start-Process -FilePath $wtCmd.Source -ArgumentList $wtArgs | Out-Null
+    } else {
+        Start-Process -FilePath 'powershell.exe' `
+            -ArgumentList @('-NoExit', '-EncodedCommand', $encoded) `
+            -WindowStyle Normal | Out-Null
+    }
+}
+
+# ── Frontend tab ─────────────────────────────────────────────────────────────
+Step 'Starting frontend (Vite) — npm run dev'
+$fePayload = @"
 Set-Location -LiteralPath '$FrontendDir'
-`$Host.UI.RawUI.WindowTitle = 'post_pilot frontend'
-# ANSI escape that sets the WT tab title (separate from the host window title).
-[Console]::Write([char]27 + ']0;post_pilot frontend' + [char]7)
-Write-Host '== post_pilot frontend (npm run dev) ==' -ForegroundColor Cyan
 npm run dev
 "@
-$encodedCmd = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($frontendPs))
+Start-PostPilotTab -Tag 'frontend' -DisplayName 'post_pilot frontend' -Payload $fePayload
+Ok 'Frontend tab opened'
 
-$wtCmd = Get-Command wt.exe -ErrorAction SilentlyContinue
-
-if ($wtCmd -and $env:WT_SESSION) {
-    # `-w 0` = the current Windows Terminal window. -EncodedCommand keeps the
-    # PowerShell payload opaque to WT's parser.
-    # NOTE: do NOT pass `--title` here — WT's tab-args parser is fragile and a
-    # title with spaces causes the next argument (powershell.exe) to be eaten,
-    # producing "system cannot find the file specified". The tab will inherit
-    # the running process name; we set its title from PowerShell itself below.
-    $wtArgs = @('-w', '0', 'new-tab',
-                'powershell.exe', '-NoExit', '-EncodedCommand', $encodedCmd)
-    Start-Process -FilePath $wtCmd.Source -ArgumentList $wtArgs | Out-Null
-    Ok 'Frontend opened as a new tab in this Windows Terminal window'
-} elseif ($wtCmd) {
-    Warn 'Not running inside Windows Terminal — the new tab will open in the most-recent WT window, or create one.'
-    $wtArgs = @('-w', '0', 'new-tab',
-                'powershell.exe', '-NoExit', '-EncodedCommand', $encodedCmd)
-    Start-Process -FilePath $wtCmd.Source -ArgumentList $wtArgs | Out-Null
-    Ok 'Frontend launched via Windows Terminal'
-} else {
-    Start-Process -FilePath 'powershell.exe' `
-        -ArgumentList @('-NoExit', '-EncodedCommand', $encodedCmd) `
-        -WindowStyle Normal | Out-Null
-    Ok 'Frontend launched in a standalone PowerShell window (Windows Terminal not found)'
+# ── Container log tabs (api + publisher) ────────────────────────────────────
+# `docker logs -f` follows the container's stdout/stderr; tab closes when
+# stop.ps1 kills the powershell.exe host (which terminates the docker logs
+# child process). If the container exits on its own, `docker logs -f` exits
+# too and the tab shows "press any key" because of -NoExit.
+Step 'Starting container log tabs (api + publisher)'
+foreach ($svc in @('api', 'publisher')) {
+    $containerName = "deploy-$svc-1"
+    $logPayload = "docker logs -f --tail 50 $containerName"
+    Start-PostPilotTab -Tag "log:$svc" -DisplayName "post_pilot $svc logs" -Payload $logPayload
 }
+Ok 'Log tabs opened for api + publisher'
 
 # ── Final summary ───────────────────────────────────────────────────────────
 Write-Host ''
@@ -238,6 +261,11 @@ Write-Host ("  Swagger          : http://localhost:5122/swagger")
 Write-Host ("  pgAdmin          : http://localhost:5050   (admin@postpilot.com / admin)")
 Write-Host ("  MinIO console    : http://localhost:9001   (postpilot / postpilot-password)")
 Write-Host ("  ngrok inspector  : http://localhost:4040")
+Write-Host ''
+Write-Host '  Open tabs in this WT window:' -ForegroundColor DarkGray
+Write-Host '    • post_pilot frontend    (Vite dev server)'   -ForegroundColor DarkGray
+Write-Host '    • post_pilot api logs    (docker logs -f api)' -ForegroundColor DarkGray
+Write-Host '    • post_pilot publisher logs (docker logs -f publisher)' -ForegroundColor DarkGray
 Write-Host ''
 Write-Host '  Stop everything with:  ./scripts/stop.ps1' -ForegroundColor DarkGray
 Write-Host ''
