@@ -200,29 +200,30 @@ function Start-PostPilotTab {
     param(
         [Parameter(Mandatory)] [string]$Tag,        # e.g. "frontend", "log:api"
         [Parameter(Mandatory)] [string]$DisplayName,# shown in the tab title
-        [Parameter(Mandatory)] [string]$Payload     # the PowerShell to run
+        [Parameter(Mandatory)] [string]$Payload,    # the PowerShell to run
+        [switch]$ExitOnDone                         # if set, tab closes when payload finishes
     )
 
     $hostTitle = "postpilot:$Tag"
-    $fullPayload = @"
+    $header = @"
 `$Host.UI.RawUI.WindowTitle = '$hostTitle'
 [Console]::Write([char]27 + ']0;$DisplayName' + [char]7)
 Write-Host '== $DisplayName ==' -ForegroundColor Cyan
-$Payload
 "@
+    $fullPayload = $header + "`n" + $Payload
     $encoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($fullPayload))
     $wtCmd   = Get-Command wt.exe -ErrorAction SilentlyContinue
+    $psArgs  = if ($ExitOnDone) { @('-EncodedCommand', $encoded) } else { @('-NoExit', '-EncodedCommand', $encoded) }
 
     if ($wtCmd) {
         if (-not $env:WT_SESSION) {
             Warn 'Not running inside Windows Terminal — new tab will open in the most-recent WT window, or create one.'
         }
-        $wtArgs = @('-w', '0', 'new-tab',
-                    'powershell.exe', '-NoExit', '-EncodedCommand', $encoded)
+        $wtArgs = @('-w', '0', 'new-tab', 'powershell.exe') + $psArgs
         Start-Process -FilePath $wtCmd.Source -ArgumentList $wtArgs | Out-Null
     } else {
         Start-Process -FilePath 'powershell.exe' `
-            -ArgumentList @('-NoExit', '-EncodedCommand', $encoded) `
+            -ArgumentList $psArgs `
             -WindowStyle Normal | Out-Null
     }
 }
@@ -237,15 +238,31 @@ Start-PostPilotTab -Tag 'frontend' -DisplayName 'post_pilot frontend' -Payload $
 Ok 'Frontend tab opened'
 
 # ── Container log tabs (api + publisher) ────────────────────────────────────
-# `docker logs -f` follows the container's stdout/stderr; tab closes when
-# stop.ps1 kills the powershell.exe host (which terminates the docker logs
-# child process). If the container exits on its own, `docker logs -f` exits
-# too and the tab shows "press any key" because of -NoExit.
+# The payload starts `docker logs -f` as a child process, then watches for a
+# kill-flag file in .run/. When restart.ps1 creates that flag, the child is
+# killed and the tab exits (closing the WT tab). Restart.ps1 then opens fresh
+# tabs pointing at the new containers.
 Step 'Starting container log tabs (api + publisher)'
+$RunDirEsc = $RunDir.Replace("'", "''")
 foreach ($svc in @('api', 'publisher')) {
     $containerName = "deploy-$svc-1"
-    $logPayload = "docker logs -f --tail 50 $containerName"
-    Start-PostPilotTab -Tag "log:$svc" -DisplayName "post_pilot $svc logs" -Payload $logPayload
+    $killFlag = Join-Path $RunDir "log-$svc.kill"
+    if (Test-Path $killFlag) { Remove-Item $killFlag -Force -ErrorAction SilentlyContinue }
+    $killFlagEsc = $killFlag.Replace("'", "''")
+    $logPayload = @"
+`$killFlag = '$killFlagEsc'
+`$proc = Start-Process -FilePath 'docker' -ArgumentList @('logs','-f','--tail','50','$containerName') -NoNewWindow -PassThru
+while (-not `$proc.HasExited) {
+    if (Test-Path `$killFlag) {
+        try { Stop-Process -Id `$proc.Id -Force -ErrorAction SilentlyContinue } catch { }
+        Remove-Item `$killFlag -Force -ErrorAction SilentlyContinue
+        break
+    }
+    Start-Sleep -Milliseconds 500
+}
+exit
+"@
+    Start-PostPilotTab -Tag "log:$svc" -DisplayName "post_pilot $svc logs" -Payload $logPayload -ExitOnDone
 }
 Ok 'Log tabs opened for api + publisher'
 

@@ -25,14 +25,17 @@ var host = Host.CreateDefaultBuilder(args)
         config
             .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
             .AddJsonFile($"appsettings.{aspEnv}.json", optional: true, reloadOnChange: true)
+            .AddJsonFile("config/appsettings.json", optional: true, reloadOnChange: true)
+            .AddJsonFile($"config/appsettings.{aspEnv}.json", optional: true, reloadOnChange: true)
             .AddJsonFile("config/appsettings.common.json", optional: true, reloadOnChange: true)
             .AddJsonFile($"config/appsettings.{appEnv}.json", optional: true, reloadOnChange: true)
             .AddEnvironmentVariables()
             .AddFlatEnvironmentVariables(); // maps APP_RUN_MODE, META_APP_* etc.
     })
-    .ConfigureLogging(logging =>
+    .ConfigureLogging((ctx, logging) =>
     {
         logging.ClearProviders();
+        logging.AddConfiguration(ctx.Configuration.GetSection("Logging"));
         logging.AddSimpleConsole(options =>
         {
             options.IncludeScopes   = true;
