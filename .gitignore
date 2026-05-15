@@ -13,3 +13,6 @@ deploy/env/server.env
 *.dll
 *.exe
 *.pdb
+
+# Local script runtime state (ngrok pid, ngrok log, etc.)
+.run/

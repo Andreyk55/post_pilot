@@ -64,7 +64,8 @@
       "Read(//tmp/**)",
       "Bash(where ngrok *)",
       "Bash(ngrok version *)",
-      "Bash(ngrok http *)"
+      "Bash(ngrok http *)",
+      "Bash(git check-ignore *)"
     ],
     "additionalDirectories": [
       "d:\\dev\\projects\\post_pilot\\backend"
