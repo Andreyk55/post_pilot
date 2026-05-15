@@ -65,7 +65,13 @@
       "Bash(where ngrok *)",
       "Bash(ngrok version *)",
       "Bash(ngrok http *)",
-      "Bash(git check-ignore *)"
+      "Bash(git check-ignore *)",
+      "Bash(powershell.exe -NoProfile -Command 'Get-CimInstance Win32_Process -Filter \"Name='\\\\''powershell.exe'\\\\'' OR Name='\\\\''node.exe'\\\\''\" | Where-Object { $_.CommandLine -match '\\\\''npm|vite|frontend'\\\\'' } | Select-Object ProcessId, Name, CommandLine | Format-List')",
+      "Bash(where wt.exe)",
+      "Bash(wt.exe --version)",
+      "Bash(powershell.exe -NoProfile -Command \"Get-CimInstance Win32_Process -Filter \\\\\"Name='WindowsTerminal.exe'\\\\\" | Select-Object ProcessId, CommandLine | Format-List\")",
+      "Bash(powershell.exe -NoProfile -Command 'Get-CimInstance Win32_Process -Filter \"Name='\\\\''node.exe'\\\\'' OR Name='\\\\''powershell.exe'\\\\'' OR Name='\\\\''ngrok.exe'\\\\''\" | Where-Object { $_.CommandLine -match '\\\\''npm|vite|frontend|ngrok'\\\\'' } | Select-Object ProcessId, Name, @{n='\\\\''Cmd'\\\\'';e={\\($_.CommandLine -replace '\\\\''\\\\s+'\\\\'','\\\\'' '\\\\''\\).Substring\\(0,[Math]::Min\\(120,$_.CommandLine.Length\\)\\)}} | Format-Table -AutoSize')",
+      "Bash(powershell.exe -NoProfile -Command 'Get-CimInstance Win32_Process -Filter \"Name='\\\\''node.exe'\\\\'' OR Name='\\\\''powershell.exe'\\\\'' OR Name='\\\\''ngrok.exe'\\\\'' OR Name='\\\\''WindowsTerminal.exe'\\\\''\" | Where-Object { $_.CommandLine -match '\\\\''npm|vite|frontend|ngrok|EncodedCommand'\\\\'' } | Select-Object ProcessId, Name, @{n='\\\\''Cmd'\\\\'';e={\\($_.CommandLine -replace '\\\\''\\\\s+'\\\\'','\\\\'' '\\\\''\\).Substring\\(0,[Math]::Min\\(140,$_.CommandLine.Length\\)\\)}} | Format-Table -AutoSize')"
     ],
     "additionalDirectories": [
       "d:\\dev\\projects\\post_pilot\\backend"

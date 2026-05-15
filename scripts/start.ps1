@@ -180,13 +180,51 @@ try {
 }
 Ok 'api + publisher restarted'
 
-# ── Frontend in a new terminal window ───────────────────────────────────────
-Step 'Starting frontend (Vite) in a new PowerShell window'
-$frontendCmd = "Set-Location -LiteralPath `"$FrontendDir`"; Write-Host '== post_pilot frontend ==' -ForegroundColor Cyan; npm run dev"
-Start-Process -FilePath 'powershell.exe' `
-    -ArgumentList @('-NoExit', '-Command', $frontendCmd) `
-    -WindowStyle Normal | Out-Null
-Ok 'Frontend window launched'
+# ── Frontend in a Windows Terminal tab ──────────────────────────────────────
+# Open a new WT tab in the SAME window the script is running from.
+#
+# Critical detail: wt.exe parses its own command line and uses ';' as a tab
+# separator. Passing a PowerShell payload with semicolons (e.g. `cd X; npm run
+# dev`) makes WT spawn one tab per segment. The bullet-proof workaround is to
+# encode the PowerShell payload as Base64-UTF16LE and pass it via
+# `-EncodedCommand`, which contains no special characters.
+Step 'Starting frontend (Vite) — npm run dev'
+
+$frontendPs = @"
+Set-Location -LiteralPath '$FrontendDir'
+`$Host.UI.RawUI.WindowTitle = 'post_pilot frontend'
+# ANSI escape that sets the WT tab title (separate from the host window title).
+[Console]::Write([char]27 + ']0;post_pilot frontend' + [char]7)
+Write-Host '== post_pilot frontend (npm run dev) ==' -ForegroundColor Cyan
+npm run dev
+"@
+$encodedCmd = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($frontendPs))
+
+$wtCmd = Get-Command wt.exe -ErrorAction SilentlyContinue
+
+if ($wtCmd -and $env:WT_SESSION) {
+    # `-w 0` = the current Windows Terminal window. -EncodedCommand keeps the
+    # PowerShell payload opaque to WT's parser.
+    # NOTE: do NOT pass `--title` here — WT's tab-args parser is fragile and a
+    # title with spaces causes the next argument (powershell.exe) to be eaten,
+    # producing "system cannot find the file specified". The tab will inherit
+    # the running process name; we set its title from PowerShell itself below.
+    $wtArgs = @('-w', '0', 'new-tab',
+                'powershell.exe', '-NoExit', '-EncodedCommand', $encodedCmd)
+    Start-Process -FilePath $wtCmd.Source -ArgumentList $wtArgs | Out-Null
+    Ok 'Frontend opened as a new tab in this Windows Terminal window'
+} elseif ($wtCmd) {
+    Warn 'Not running inside Windows Terminal — the new tab will open in the most-recent WT window, or create one.'
+    $wtArgs = @('-w', '0', 'new-tab',
+                'powershell.exe', '-NoExit', '-EncodedCommand', $encodedCmd)
+    Start-Process -FilePath $wtCmd.Source -ArgumentList $wtArgs | Out-Null
+    Ok 'Frontend launched via Windows Terminal'
+} else {
+    Start-Process -FilePath 'powershell.exe' `
+        -ArgumentList @('-NoExit', '-EncodedCommand', $encodedCmd) `
+        -WindowStyle Normal | Out-Null
+    Ok 'Frontend launched in a standalone PowerShell window (Windows Terminal not found)'
+}
 
 # ── Final summary ───────────────────────────────────────────────────────────
 Write-Host ''
