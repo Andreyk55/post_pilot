@@ -40,7 +40,22 @@ public class PostListOrderTests : IDisposable
     [Fact]
     public async Task GetPosts_ReturnsPostsOrderedByCreatedAtDescending()
     {
-        // Arrange: 3 posts with different CreatedAt, ScheduledAt deliberately mismatched
+        // Arrange: 3 posts with different CreatedAt, ScheduledAt deliberately mismatched.
+        // GetPosts now filters by TargetPage.IsConnected, so we also need a real ConnectedPage
+        // row that the posts can FK to.
+        var page = new ConnectedPage
+        {
+            Id = Guid.NewGuid(),
+            PageId = "fb-page-test",
+            Name = "Test Page",
+            AccessToken = "tok",
+            CreatedAt = DateTime.UtcNow,
+            IsConnected = true,
+        };
+        _dbContext.ConnectedPages.Add(page);
+        await _dbContext.SaveChangesAsync();
+        var pageId = page.Id;
+
         var oldest = new Post
         {
             Id = Guid.NewGuid(),
@@ -48,6 +63,7 @@ public class PostListOrderTests : IDisposable
             Platform = Platform.Facebook,
             PostType = PostType.Feed,
             Status = PostStatus.Scheduled,
+            TargetPageId = pageId,
             CreatedAt = new DateTime(2026, 1, 1, 10, 0, 0, DateTimeKind.Utc),
             ScheduledAt = new DateTime(2026, 3, 1, 10, 0, 0, DateTimeKind.Utc), // scheduled latest
             UpdatedAt = DateTime.UtcNow
@@ -60,6 +76,7 @@ public class PostListOrderTests : IDisposable
             Platform = Platform.Facebook,
             PostType = PostType.Feed,
             Status = PostStatus.Scheduled,
+            TargetPageId = pageId,
             CreatedAt = new DateTime(2026, 1, 15, 10, 0, 0, DateTimeKind.Utc),
             ScheduledAt = new DateTime(2026, 1, 5, 10, 0, 0, DateTimeKind.Utc), // scheduled earliest
             UpdatedAt = DateTime.UtcNow
@@ -72,6 +89,7 @@ public class PostListOrderTests : IDisposable
             Platform = Platform.Facebook,
             PostType = PostType.Feed,
             Status = PostStatus.Scheduled,
+            TargetPageId = pageId,
             CreatedAt = new DateTime(2026, 2, 1, 10, 0, 0, DateTimeKind.Utc),
             ScheduledAt = new DateTime(2026, 2, 1, 10, 0, 0, DateTimeKind.Utc),
             UpdatedAt = DateTime.UtcNow

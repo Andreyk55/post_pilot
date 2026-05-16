@@ -5,16 +5,26 @@ using Microsoft.EntityFrameworkCore;
 using PostPilot.Api.Data;
 using PostPilot.Api.DTOs;
 using PostPilot.Api.Entities;
+using PostPilot.Api.Enums;
+using PostPilot.Api.Services.Scheduling;
 using PostPilot.Api.Settings;
 
 namespace PostPilot.Api.Services;
 
 public class MetaOAuthService : IMetaOAuthService
 {
+    // Reason codes stamped onto Post.ErrorMessage when a post is canceled because
+    // its connected asset/account went away. Format: "[ReasonCode] human message".
+    internal const string ReasonAssetUnlinked = "AssetUnlinked";
+    internal const string ReasonAccountDisconnected = "AccountDisconnected";
+    private const string MessageAssetUnlinked = "Post canceled because the target page or account was unlinked.";
+    private const string MessageAccountDisconnected = "Post canceled because the Meta account was disconnected.";
+
     private readonly AppDbContext _context;
     private readonly HttpClient _httpClient;
     private readonly MetaOptions _settings;
     private readonly ILogger<MetaOAuthService> _logger;
+    private readonly IPostScheduler _scheduler;
     private readonly string _graphApiBaseUrl;
     private readonly string _oAuthBaseUrl;
     private readonly int _oAuthStateExpirationMinutes;
@@ -24,6 +34,7 @@ public class MetaOAuthService : IMetaOAuthService
         HttpClient httpClient,
         MetaOptions settings,
         ILogger<MetaOAuthService> logger,
+        IPostScheduler scheduler,
         MetaApiOptions metaApiOptions,
         PublishingOptions publishingOptions)
     {
@@ -31,9 +42,64 @@ public class MetaOAuthService : IMetaOAuthService
         _httpClient = httpClient;
         _settings = settings;
         _logger = logger;
+        _scheduler = scheduler;
         _graphApiBaseUrl = metaApiOptions.GraphApiBaseUrl;
         _oAuthBaseUrl = metaApiOptions.OAuthDialogBaseUrl;
         _oAuthStateExpirationMinutes = publishingOptions.OAuthStateExpirationMinutes;
+    }
+
+    /// <summary>
+    /// Cancel any active (Scheduled/RetryPending/Processing) posts whose target page or
+    /// Instagram account is about to be removed. Must be called BEFORE the asset rows are
+    /// deleted, while TargetPageId / TargetInstagramAccountId still point at them.
+    /// </summary>
+    private async Task CancelPostsForRemovedAssetsAsync(
+        IEnumerable<Guid> removedPageIds,
+        IEnumerable<Guid> removedInstagramAccountIds,
+        string reasonCode,
+        string userMessage)
+    {
+        var pageIds = removedPageIds.ToHashSet();
+        var igIds = removedInstagramAccountIds.ToHashSet();
+        if (pageIds.Count == 0 && igIds.Count == 0) return;
+
+        var affected = await _context.Posts
+            .Where(p => p.Status == PostStatus.Scheduled
+                     || p.Status == PostStatus.RetryPending
+                     || p.Status == PostStatus.Processing)
+            .Where(p =>
+                (p.TargetPageId != null && pageIds.Contains(p.TargetPageId.Value)) ||
+                (p.TargetInstagramAccountId != null && igIds.Contains(p.TargetInstagramAccountId.Value)))
+            .ToListAsync();
+
+        if (affected.Count == 0) return;
+
+        var now = DateTime.UtcNow;
+        var stampedMessage = $"[{reasonCode}] {userMessage}";
+
+        foreach (var post in affected)
+        {
+            try
+            {
+                await _scheduler.CancelScheduleAsync(post);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "CancelScheduleAsync failed for post {PostId} during {ReasonCode}", post.Id, reasonCode);
+            }
+
+            post.Status = PostStatus.Canceled;
+            post.CanceledAt = now;
+            post.UpdatedAt = now;
+            post.ScheduleArn = null;
+            post.NextRetryAt = null;
+            post.ErrorMessage = stampedMessage;
+        }
+
+        await _context.SaveChangesAsync();
+        _logger.LogInformation(
+            "Canceled {Count} active post(s) due to {ReasonCode}", affected.Count, reasonCode);
     }
 
     public async Task<MetaOAuthStartResponse> StartOAuthAsync()
@@ -216,36 +282,54 @@ public class MetaOAuthService : IMetaOAuthService
         var userId = GetCurrentUserId();
         _logger.LogInformation("Saving connection for user {UserId}", userId);
 
-        // Use upsert pattern: update existing or create new
+        // Look up any existing connection for this user — connected OR disconnected.
+        // If a disconnected one is found we reattach it (resurrect the historical breadcrumb)
+        // along with any child pages/IGs that were previously soft-disconnected.
         var existingConnection = await _context.MetaConnections
             .Include(c => c.Pages)
             .Include(c => c.InstagramAccounts)
+            .OrderByDescending(c => c.IsConnected)         // prefer currently-connected if both somehow exist
+            .ThenByDescending(c => c.ConnectedAt)
             .FirstOrDefaultAsync(c => c.UserId == userId);
 
+        var now = DateTime.UtcNow;
         MetaConnection connection;
         if (existingConnection != null)
         {
-            // Update existing connection
+            // Refresh tokens. Never delete the child asset rows — existing Posts FK them.
             existingConnection.AccessToken = accessToken;
-            existingConnection.TokenExpiresAt = DateTime.UtcNow.AddSeconds(expiresIn);
-            existingConnection.UpdatedAt = DateTime.UtcNow;
-            // Clear pages and Instagram accounts (will be re-added in manage flow)
-            existingConnection.Pages.Clear();
-            existingConnection.InstagramAccounts.Clear();
+            existingConnection.TokenExpiresAt = now.AddSeconds(expiresIn);
+            existingConnection.UpdatedAt = now;
+
+            if (!existingConnection.IsConnected)
+            {
+                // Reattaching after a disconnect: clear the soft-delete marker.
+                existingConnection.IsConnected = true;
+                existingConnection.DisconnectedAt = null;
+                existingConnection.ConnectedAt = now;
+                _logger.LogInformation(
+                    "Reattaching previously-disconnected connection {ConnectionId} for user {UserId}",
+                    existingConnection.Id, userId);
+            }
+            else
+            {
+                _logger.LogInformation("Refreshing token on connection {ConnectionId}", existingConnection.Id);
+            }
+
             connection = existingConnection;
-            _logger.LogInformation("Updating existing connection {ConnectionId}", connection.Id);
         }
         else
         {
-            // Create new connection (identity-level only, no pages selected yet)
             connection = new MetaConnection
             {
                 Id = Guid.NewGuid(),
                 UserId = userId,
                 AccessToken = accessToken,
-                TokenExpiresAt = DateTime.UtcNow.AddSeconds(expiresIn),
-                ConnectedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
+                TokenExpiresAt = now.AddSeconds(expiresIn),
+                ConnectedAt = now,
+                UpdatedAt = now,
+                IsConnected = true,
+                DisconnectedAt = null,
             };
             _context.MetaConnections.Add(connection);
             _logger.LogInformation("Creating new connection {ConnectionId}", connection.Id);
@@ -387,16 +471,44 @@ public class MetaOAuthService : IMetaOAuthService
         }
 
         var userId = GetCurrentUserId();
+        var now = DateTime.UtcNow;
 
-        // Remove existing connection if any
-        var existingConnection = await _context.MetaConnections
+        // Reuse the existing connection (connected OR disconnected) for this user,
+        // or create a fresh one. We NEVER hard-delete — historical child rows are
+        // FK targets for Posts and must survive across disconnect/reconnect cycles.
+        var connection = await _context.MetaConnections
             .Include(c => c.Pages)
             .Include(c => c.InstagramAccounts)
+            .OrderByDescending(c => c.IsConnected)
+            .ThenByDescending(c => c.ConnectedAt)
             .FirstOrDefaultAsync(c => c.UserId == userId);
 
-        if (existingConnection != null)
+        if (connection == null)
         {
-            _context.MetaConnections.Remove(existingConnection);
+            connection = new MetaConnection
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                AccessToken = oauthState.TempAccessToken,
+                TokenExpiresAt = oauthState.TokenExpiresAt.Value,
+                ConnectedAt = now,
+                UpdatedAt = now,
+                IsConnected = true,
+                DisconnectedAt = null,
+            };
+            _context.MetaConnections.Add(connection);
+        }
+        else
+        {
+            connection.AccessToken = oauthState.TempAccessToken;
+            connection.TokenExpiresAt = oauthState.TokenExpiresAt.Value;
+            connection.UpdatedAt = now;
+            if (!connection.IsConnected)
+            {
+                connection.IsConnected = true;
+                connection.DisconnectedAt = null;
+                connection.ConnectedAt = now;
+            }
         }
 
         // Fetch pages with tokens
@@ -414,49 +526,7 @@ public class MetaOAuthService : IMetaOAuthService
             .Where(ig => selectedInstagramIds.Contains(ig.Id))
             .ToList();
 
-        // Create new connection
-        var connection = new MetaConnection
-        {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            AccessToken = oauthState.TempAccessToken,
-            TokenExpiresAt = oauthState.TokenExpiresAt.Value,
-            ConnectedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-
-        // Add pages
-        foreach (var page in selectedPages)
-        {
-            connection.Pages.Add(new ConnectedPage
-            {
-                Id = Guid.NewGuid(),
-                PageId = page.Id,
-                Name = page.Name,
-                Category = page.Category,
-                PictureUrl = page.PictureUrl,
-                AccessToken = page.AccessToken!,
-                CreatedAt = DateTime.UtcNow
-            });
-        }
-
-        // Add Instagram accounts
-        foreach (var ig in selectedIgAccounts)
-        {
-            connection.InstagramAccounts.Add(new ConnectedInstagramAccount
-            {
-                Id = Guid.NewGuid(),
-                IgBusinessId = ig.Id,
-                Username = ig.Username,
-                Name = ig.Name,
-                ProfilePictureUrl = ig.ProfilePictureUrl,
-                PageId = ig.PageId,
-                PageName = ig.PageName,
-                CreatedAt = DateTime.UtcNow
-            });
-        }
-
-        _context.MetaConnections.Add(connection);
+        await ReconcileSelectedAssetsAsync(connection, selectedPages, selectedIgAccounts, now);
 
         // Clean up OAuth state
         _context.MetaOAuthStates.Remove(oauthState);
@@ -466,12 +536,147 @@ public class MetaOAuthService : IMetaOAuthService
         return new MetaSaveConnectionResponse(MapToDto(connection));
     }
 
+    /// <summary>
+    /// Reconciles the set of pages/IG accounts attached to <paramref name="connection"/> against
+    /// the user's selection. Existing rows (connected or disconnected) with matching external IDs
+    /// are reattached and refreshed in-place; new ones are inserted; previously-connected ones
+    /// that are not in the selection are soft-disconnected (and their active posts canceled).
+    /// </summary>
+    private async Task ReconcileSelectedAssetsAsync(
+        MetaConnection connection,
+        List<FacebookPageDto> selectedPages,
+        List<InstagramAccountDto> selectedIgAccounts,
+        DateTime now)
+    {
+        var selectedFbPageIds = selectedPages.Select(p => p.Id).ToHashSet();
+        var selectedIgBusinessIds = selectedIgAccounts.Select(i => i.Id).ToHashSet();
+
+        var pagesToDisconnect = new List<ConnectedPage>();
+        var igsToDisconnect = new List<ConnectedInstagramAccount>();
+
+        // Reattach or disconnect existing pages
+        foreach (var existing in connection.Pages)
+        {
+            if (selectedFbPageIds.Contains(existing.PageId))
+            {
+                var src = selectedPages.First(p => p.Id == existing.PageId);
+                existing.Name = src.Name;
+                existing.Category = src.Category;
+                existing.PictureUrl = src.PictureUrl;
+                existing.AccessToken = src.AccessToken ?? existing.AccessToken;
+                if (!existing.IsConnected)
+                {
+                    existing.IsConnected = true;
+                    existing.DisconnectedAt = null;
+                }
+            }
+            else if (existing.IsConnected)
+            {
+                pagesToDisconnect.Add(existing);
+            }
+        }
+
+        // Insert pages that weren't already present.
+        // IMPORTANT: use _context.ConnectedPages.Add (not connection.Pages.Add) — when a
+        // new entity has a non-default key (Guid.NewGuid() ≠ Guid.Empty), adding via the
+        // tracked parent's navigation collection can land in Modified state. Using DbSet.Add
+        // forces Added state and generates the INSERT we want.
+        var existingPageFbIds = connection.Pages.Select(p => p.PageId).ToHashSet();
+        foreach (var page in selectedPages.Where(p => !existingPageFbIds.Contains(p.Id)))
+        {
+            var newPage = new ConnectedPage
+            {
+                Id = Guid.NewGuid(),
+                MetaConnectionId = connection.Id,
+                PageId = page.Id,
+                Name = page.Name,
+                Category = page.Category,
+                PictureUrl = page.PictureUrl,
+                AccessToken = page.AccessToken!,
+                CreatedAt = now,
+                IsConnected = true,
+                DisconnectedAt = null,
+            };
+            _context.ConnectedPages.Add(newPage);
+            connection.Pages.Add(newPage);
+        }
+
+        // Reattach or disconnect existing IG accounts
+        foreach (var existing in connection.InstagramAccounts)
+        {
+            if (selectedIgBusinessIds.Contains(existing.IgBusinessId))
+            {
+                var src = selectedIgAccounts.First(i => i.Id == existing.IgBusinessId);
+                existing.Username = src.Username;
+                existing.Name = src.Name;
+                existing.ProfilePictureUrl = src.ProfilePictureUrl;
+                existing.PageId = src.PageId;
+                existing.PageName = src.PageName;
+                if (!existing.IsConnected)
+                {
+                    existing.IsConnected = true;
+                    existing.DisconnectedAt = null;
+                }
+            }
+            else if (existing.IsConnected)
+            {
+                igsToDisconnect.Add(existing);
+            }
+        }
+
+        // Insert IGs that weren't already present (same rationale as the page insert above).
+        var existingIgBusinessIds = connection.InstagramAccounts.Select(i => i.IgBusinessId).ToHashSet();
+        foreach (var ig in selectedIgAccounts.Where(i => !existingIgBusinessIds.Contains(i.Id)))
+        {
+            var newIg = new ConnectedInstagramAccount
+            {
+                Id = Guid.NewGuid(),
+                MetaConnectionId = connection.Id,
+                IgBusinessId = ig.Id,
+                Username = ig.Username,
+                Name = ig.Name,
+                ProfilePictureUrl = ig.ProfilePictureUrl,
+                PageId = ig.PageId,
+                PageName = ig.PageName,
+                CreatedAt = now,
+                IsConnected = true,
+                DisconnectedAt = null,
+            };
+            _context.ConnectedInstagramAccounts.Add(newIg);
+            connection.InstagramAccounts.Add(newIg);
+        }
+
+        // Soft-disconnect the ones the user no longer wants, then cancel their active posts.
+        // (Schedule cancellation must happen against the same DbContext so it sees the new state.)
+        foreach (var page in pagesToDisconnect)
+        {
+            page.IsConnected = false;
+            page.DisconnectedAt = now;
+        }
+        foreach (var ig in igsToDisconnect)
+        {
+            ig.IsConnected = false;
+            ig.DisconnectedAt = now;
+        }
+
+        if (pagesToDisconnect.Count > 0 || igsToDisconnect.Count > 0)
+        {
+            await CancelPostsForRemovedAssetsAsync(
+                pagesToDisconnect.Select(p => p.Id),
+                igsToDisconnect.Select(i => i.Id),
+                ReasonAssetUnlinked,
+                MessageAssetUnlinked);
+        }
+    }
+
     public async Task<MetaConnectionResponse> GetConnectionAsync(Guid userId)
     {
+        // Only return the currently-connected MetaConnection. Disconnected rows are kept
+        // as historical breadcrumbs for posts but are never surfaced to the UI as "connected".
         var connection = await _context.MetaConnections
-            .Include(c => c.Pages)
-            .Include(c => c.InstagramAccounts)
-            .FirstOrDefaultAsync(c => c.UserId == userId);
+            .Include(c => c.Pages.Where(p => p.IsConnected))
+            .Include(c => c.InstagramAccounts.Where(i => i.IsConnected))
+            .FirstOrDefaultAsync(c => c.UserId == userId && c.IsConnected);
 
         if (connection == null)
         {
@@ -483,7 +688,8 @@ public class MetaOAuthService : IMetaOAuthService
 
     public async Task<MetaAvailablePagesResponse> GetAvailablePagesAsync(Guid userId)
     {
-        var connection = await _context.MetaConnections.FirstOrDefaultAsync(c => c.UserId == userId);
+        var connection = await _context.MetaConnections
+            .FirstOrDefaultAsync(c => c.UserId == userId && c.IsConnected);
         if (connection == null)
         {
             throw new InvalidOperationException("No Meta connection found");
@@ -500,7 +706,7 @@ public class MetaOAuthService : IMetaOAuthService
         var connection = await _context.MetaConnections
             .Include(c => c.Pages)
             .Include(c => c.InstagramAccounts)
-            .FirstOrDefaultAsync(c => c.UserId == userId);
+            .FirstOrDefaultAsync(c => c.UserId == userId && c.IsConnected);
 
         if (connection == null)
         {
@@ -511,9 +717,8 @@ public class MetaOAuthService : IMetaOAuthService
         var allPages = await FetchUserPagesAsync(connection.AccessToken);
         var selectedPages = allPages.Where(p => selectedPageIds.Contains(p.Id)).ToList();
 
-        // Allow zero pages - user can disconnect all pages while keeping Meta identity connected
-
-        // Discover Instagram accounts (only for selected pages)
+        // Discover Instagram accounts (only for selected pages). Zero is allowed —
+        // the user can soft-disconnect every page while keeping the Meta identity.
         var igResponse = selectedPageIds.Any()
             ? await DiscoverInstagramAccountsAsync("", selectedPageIds)
             : new MetaDiscoverInstagramResponse(new List<InstagramAccountDto>());
@@ -521,52 +726,12 @@ public class MetaOAuthService : IMetaOAuthService
             .Where(ig => selectedInstagramIds.Contains(ig.Id))
             .ToList();
 
-        // Explicitly remove existing pages and Instagram accounts from the context
-        _context.ConnectedPages.RemoveRange(connection.Pages);
-        _context.ConnectedInstagramAccounts.RemoveRange(connection.InstagramAccounts);
+        var now = DateTime.UtcNow;
+        connection.UpdatedAt = now;
 
-        connection.UpdatedAt = DateTime.UtcNow;
-
-        // Add new pages
-        foreach (var page in selectedPages)
-        {
-            var connectedPage = new ConnectedPage
-            {
-                Id = Guid.NewGuid(),
-                MetaConnectionId = connection.Id,
-                PageId = page.Id,
-                Name = page.Name,
-                Category = page.Category,
-                PictureUrl = page.PictureUrl,
-                AccessToken = page.AccessToken!,
-                CreatedAt = DateTime.UtcNow
-            };
-            _context.ConnectedPages.Add(connectedPage);
-        }
-
-        // Add new Instagram accounts
-        foreach (var ig in selectedIgAccounts)
-        {
-            var connectedIg = new ConnectedInstagramAccount
-            {
-                Id = Guid.NewGuid(),
-                MetaConnectionId = connection.Id,
-                IgBusinessId = ig.Id,
-                Username = ig.Username,
-                Name = ig.Name,
-                ProfilePictureUrl = ig.ProfilePictureUrl,
-                PageId = ig.PageId,
-                PageName = ig.PageName,
-                CreatedAt = DateTime.UtcNow
-            };
-            _context.ConnectedInstagramAccounts.Add(connectedIg);
-        }
+        await ReconcileSelectedAssetsAsync(connection, selectedPages, selectedIgAccounts, now);
 
         await _context.SaveChangesAsync();
-
-        // Reload the connection with the new pages/accounts for the response
-        await _context.Entry(connection).Collection(c => c.Pages).LoadAsync();
-        await _context.Entry(connection).Collection(c => c.InstagramAccounts).LoadAsync();
 
         return new MetaSaveConnectionResponse(MapToDto(connection));
     }
@@ -576,14 +741,22 @@ public class MetaOAuthService : IMetaOAuthService
         var connection = await _context.MetaConnections
             .Include(c => c.Pages)
             .Include(c => c.InstagramAccounts)
-            .FirstOrDefaultAsync(c => c.UserId == userId);
+            .FirstOrDefaultAsync(c => c.UserId == userId && c.IsConnected);
 
         if (connection == null)
         {
             return; // Already disconnected
         }
 
-        // Optionally revoke token with Meta
+        // Cancel any active posts targeting this connection's assets first so the worker
+        // never picks up something whose connection is gone.
+        await CancelPostsForRemovedAssetsAsync(
+            connection.Pages.Where(p => p.IsConnected).Select(p => p.Id),
+            connection.InstagramAccounts.Where(i => i.IsConnected).Select(i => i.Id),
+            ReasonAccountDisconnected,
+            MessageAccountDisconnected);
+
+        // Optionally revoke token with Meta — best-effort.
         try
         {
             var revokeUrl = $"{_graphApiBaseUrl}/me/permissions?access_token={connection.AccessToken}";
@@ -594,7 +767,26 @@ public class MetaOAuthService : IMetaOAuthService
             _logger.LogWarning(ex, "Failed to revoke Meta token");
         }
 
-        _context.MetaConnections.Remove(connection);
+        // Soft-disconnect the connection itself and every child asset.
+        // Rows are PRESERVED so that historical Post FKs stay valid.
+        var now = DateTime.UtcNow;
+        connection.IsConnected = false;
+        connection.DisconnectedAt = now;
+        connection.UpdatedAt = now;
+        // Invalidate the user token but leave the column populated for audit.
+        // (If you want to scrub it for security, set to string.Empty here.)
+
+        foreach (var page in connection.Pages.Where(p => p.IsConnected))
+        {
+            page.IsConnected = false;
+            page.DisconnectedAt = now;
+        }
+        foreach (var ig in connection.InstagramAccounts.Where(i => i.IsConnected))
+        {
+            ig.IsConnected = false;
+            ig.DisconnectedAt = now;
+        }
+
         await _context.SaveChangesAsync();
     }
 
@@ -603,7 +795,7 @@ public class MetaOAuthService : IMetaOAuthService
         var connection = await _context.MetaConnections
             .Include(c => c.Pages)
             .Include(c => c.InstagramAccounts)
-            .FirstOrDefaultAsync(c => c.UserId == userId);
+            .FirstOrDefaultAsync(c => c.UserId == userId && c.IsConnected);
 
         if (connection == null)
             throw new InvalidOperationException("No Meta connection found");
@@ -637,7 +829,7 @@ public class MetaOAuthService : IMetaOAuthService
     {
         var connection = await _context.MetaConnections
             .Include(c => c.Pages)
-            .FirstOrDefaultAsync(c => c.UserId == userId);
+            .FirstOrDefaultAsync(c => c.UserId == userId && c.IsConnected);
 
         if (connection == null)
             return new { error = "No Meta connection found" };
@@ -998,7 +1190,9 @@ public class MetaOAuthService : IMetaOAuthService
                 p.PageId,
                 p.Name,
                 p.Category,
-                p.PictureUrl
+                p.PictureUrl,
+                p.IsConnected,
+                p.DisconnectedAt
             )).ToList(),
             connection.InstagramAccounts.Select(ig => new ConnectedInstagramAccountDto(
                 ig.Id.ToString(),
@@ -1007,8 +1201,12 @@ public class MetaOAuthService : IMetaOAuthService
                 ig.Name,
                 ig.ProfilePictureUrl,
                 ig.PageId,
-                ig.PageName
-            )).ToList()
+                ig.PageName,
+                ig.IsConnected,
+                ig.DisconnectedAt
+            )).ToList(),
+            connection.IsConnected,
+            connection.DisconnectedAt
         );
     }
 }

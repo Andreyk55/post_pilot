@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git diff:*)"
+      "Bash(git diff:*)",
+      "Bash(git -C \"d:\\\\dev\\\\projects\\\\post_pilot\" status --short)",
+      "Bash(dotnet ef *)",
+      "Bash(dotnet tool *)",
+      "Bash(docker stop *)",
+      "PowerShell($env:ConnectionStrings__DefaultConnection = 'Host=localhost;Port=5432;Database=postpilot;Username=postgres;Password=postgres'; $env:ASPNETCORE_ENVIRONMENT = 'Development'; dotnet ef migrations add AddSoftDisconnect --project 'd:\\\\dev\\\\projects\\\\post_pilot\\\\backend\\\\PostPilot.Api.csproj' --no-build 2>&1 | Select-Object -Last 20)"
     ]
   }
 }

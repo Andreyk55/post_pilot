@@ -45,17 +45,28 @@ public class PostsController : ControllerBase
 
         var query = _context.Posts.AsQueryable();
 
-        // Apply status filter if provided
         if (status.HasValue)
         {
             query = query.Where(p => p.Status == status.Value);
         }
 
-        // Apply post type filter if provided
         if (postType.HasValue)
         {
             query = query.Where(p => p.PostType == postType.Value);
         }
+
+        // Only show posts whose target page/IG account AND its parent MetaConnection
+        // are currently connected. Disconnected rows survive in the DB for audit/history
+        // but are not surfaced through this list endpoint.
+        query = query.Where(p =>
+            (p.Platform == Platform.Facebook
+                && p.TargetPage != null
+                && p.TargetPage.IsConnected
+                && (p.TargetPage.MetaConnection == null || p.TargetPage.MetaConnection.IsConnected))
+            || (p.Platform == Platform.Instagram
+                && p.TargetInstagramAccount != null
+                && p.TargetInstagramAccount.IsConnected
+                && (p.TargetInstagramAccount.MetaConnection == null || p.TargetInstagramAccount.MetaConnection.IsConnected)));
 
         var totalCount = await query.CountAsync();
         var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
@@ -238,7 +249,13 @@ public class PostsController : ControllerBase
                 ? post.MediaItems.OrderBy(m => m.Order)
                     .Select(m => new PostDetailsMediaItemDto(m.Id, m.Order, m.MediaUrl, m.MediaType.ToString()))
                     .ToList()
-                : null
+                : null,
+            TargetConnectionActive: post.Platform switch
+            {
+                Platform.Facebook  => post.TargetPage?.IsConnected,
+                Platform.Instagram => post.TargetInstagramAccount?.IsConnected,
+                _ => (bool?)null,
+            }
         );
     }
 
@@ -266,7 +283,7 @@ public class PostsController : ControllerBase
             }
 
             var targetPage = await _context.Set<ConnectedPage>()
-                .FirstOrDefaultAsync(p => p.Id == request.TargetPageId.Value);
+                .FirstOrDefaultAsync(p => p.Id == request.TargetPageId.Value && p.IsConnected);
 
             if (targetPage == null)
             {
@@ -370,7 +387,7 @@ public class PostsController : ControllerBase
             }
 
             var targetIgAccount = await _context.Set<ConnectedInstagramAccount>()
-                .FirstOrDefaultAsync(a => a.Id == request.TargetInstagramAccountId.Value);
+                .FirstOrDefaultAsync(a => a.Id == request.TargetInstagramAccountId.Value && a.IsConnected);
 
             if (targetIgAccount == null)
             {
@@ -699,7 +716,7 @@ public class PostsController : ControllerBase
             }
 
             var targetPage = await _context.Set<ConnectedPage>()
-                .FirstOrDefaultAsync(p => p.Id == request.TargetPageId.Value);
+                .FirstOrDefaultAsync(p => p.Id == request.TargetPageId.Value && p.IsConnected);
 
             if (targetPage == null)
             {
@@ -1155,37 +1172,53 @@ public record PostDto(
     DateTime? NextRetryAt,
     string? SelectedThumbnailUrl,
     string? InstagramMediaType,
-    List<PostMediaItemDto>? MediaItems = null
+    List<PostMediaItemDto>? MediaItems = null,
+    /// <summary>
+    /// True if the post's target page/IG account is currently connected. False if it was
+    /// disconnected (frontend can render a "disconnected" badge). Null if the post has no target.
+    /// </summary>
+    bool? TargetConnectionActive = null
 )
 {
-    public static PostDto FromEntity(Post post) => new(
-        post.Id,
-        post.Content,
-        post.MediaUrl,
-        post.MediaType,
-        post.PostType,
-        post.Platform,
-        post.ScheduledAt,
-        post.Status,
-        post.CreatedAt,
-        post.UpdatedAt,
-        post.TargetPageId,
-        post.TargetPage?.Name,
-        post.TargetInstagramAccountId,
-        post.TargetInstagramAccount != null
-            ? $"@{post.TargetInstagramAccount.Username}"
-            : null,
-        post.PublishedAt,
-        post.ExternalPostId,
-        post.ExternalPostUrl,
-        post.ErrorMessage,
-        post.RetryCount,
-        post.ProcessingPollCount,
-        post.NextRetryAt,
-        post.SelectedThumbnailUrl,
-        post.InstagramMediaType?.ToString(),
-        post.MediaItems?.Count > 0
-            ? post.MediaItems.OrderBy(m => m.Order).Select(m => new PostMediaItemDto(m.Id, m.Order, m.MediaUrl, m.MediaType)).ToList()
-            : null
-    );
+    public static PostDto FromEntity(Post post)
+    {
+        bool? targetConnectionActive = post.Platform switch
+        {
+            Platform.Facebook  => post.TargetPage?.IsConnected,
+            Platform.Instagram => post.TargetInstagramAccount?.IsConnected,
+            _ => (bool?)null,
+        };
+
+        return new(
+            post.Id,
+            post.Content,
+            post.MediaUrl,
+            post.MediaType,
+            post.PostType,
+            post.Platform,
+            post.ScheduledAt,
+            post.Status,
+            post.CreatedAt,
+            post.UpdatedAt,
+            post.TargetPageId,
+            post.TargetPage?.Name,
+            post.TargetInstagramAccountId,
+            post.TargetInstagramAccount != null
+                ? $"@{post.TargetInstagramAccount.Username}"
+                : null,
+            post.PublishedAt,
+            post.ExternalPostId,
+            post.ExternalPostUrl,
+            post.ErrorMessage,
+            post.RetryCount,
+            post.ProcessingPollCount,
+            post.NextRetryAt,
+            post.SelectedThumbnailUrl,
+            post.InstagramMediaType?.ToString(),
+            post.MediaItems?.Count > 0
+                ? post.MediaItems.OrderBy(m => m.Order).Select(m => new PostMediaItemDto(m.Id, m.Order, m.MediaUrl, m.MediaType)).ToList()
+                : null,
+            targetConnectionActive
+        );
+    }
 }

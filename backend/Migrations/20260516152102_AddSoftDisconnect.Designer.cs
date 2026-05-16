@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using PostPilot.Api.Data;
@@ -11,9 +12,11 @@ using PostPilot.Api.Data;
 namespace PostPilot.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260516152102_AddSoftDisconnect")]
+    partial class AddSoftDisconnect
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -92,7 +95,9 @@ namespace PostPilot.Api.Migrations
                         .HasColumnType("text");
 
                     b.Property<bool>("IsConnected")
-                        .HasColumnType("boolean");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<Guid?>("MetaConnectionId")
                         .HasColumnType("uuid");
@@ -144,7 +149,9 @@ namespace PostPilot.Api.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<bool>("IsConnected")
-                        .HasColumnType("boolean");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<Guid?>("MetaConnectionId")
                         .HasColumnType("uuid");
@@ -240,7 +247,9 @@ namespace PostPilot.Api.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<bool>("IsConnected")
-                        .HasColumnType("boolean");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<DateTime>("TokenExpiresAt")
                         .HasColumnType("timestamp with time zone");

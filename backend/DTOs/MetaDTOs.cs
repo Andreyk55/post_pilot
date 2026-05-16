@@ -84,7 +84,9 @@ public record MetaConnectionDto(
     DateTime TokenExpiresAt,
     DateTime ConnectedAt,
     List<ConnectedPageDto> Pages,
-    List<ConnectedInstagramAccountDto> InstagramAccounts
+    List<ConnectedInstagramAccountDto> InstagramAccounts,
+    bool IsConnected = true,
+    DateTime? DisconnectedAt = null
 );
 
 public record ConnectedPageDto(
@@ -92,7 +94,9 @@ public record ConnectedPageDto(
     string PageId,
     string Name,
     string? Category,
-    string? PictureUrl
+    string? PictureUrl,
+    bool IsConnected = true,
+    DateTime? DisconnectedAt = null
 );
 
 public record ConnectedInstagramAccountDto(
@@ -102,7 +106,9 @@ public record ConnectedInstagramAccountDto(
     string? Name,
     string? ProfilePictureUrl,
     string PageId,
-    string PageName
+    string PageName,
+    bool IsConnected = true,
+    DateTime? DisconnectedAt = null
 );
 
 // Available Pages (for manage flow)

@@ -45,5 +45,10 @@ public record PostDetailsDto(
     string? ProfileUrl,
     string? PageUrl,
     string? InstagramMediaType,
-    List<PostDetailsMediaItemDto>? MediaItems = null
+    List<PostDetailsMediaItemDto>? MediaItems = null,
+    /// <summary>
+    /// True if the post's target page/IG account is currently connected. False if it was
+    /// disconnected (frontend can render a "disconnected" badge). Null if the post has no target.
+    /// </summary>
+    bool? TargetConnectionActive = null
 );

@@ -105,9 +105,21 @@ public class PostPublishingWorker : BackgroundService
                 _logger.LogWarning("Processed {Count} posts stuck in Publishing status", stuckPosts.Count);
             }
 
-            // Find posts that are due for publication (Facebook + Instagram)
+            // Find posts that are due for publication (Facebook + Instagram).
+            // Both the target asset AND its parent MetaConnection must be currently connected.
+            // MetaOAuthService cancels active posts up-front when an asset is disconnected,
+            // but this is the backstop that prevents any straggler from being published.
             duePosts = await dbContext.Posts
                 .Where(p => p.Platform == Platform.Facebook || p.Platform == Platform.Instagram)
+                .Where(p =>
+                    (p.Platform == Platform.Facebook
+                        && p.TargetPage != null
+                        && p.TargetPage.IsConnected
+                        && (p.TargetPage.MetaConnection == null || p.TargetPage.MetaConnection.IsConnected))
+                    || (p.Platform == Platform.Instagram
+                        && p.TargetInstagramAccount != null
+                        && p.TargetInstagramAccount.IsConnected
+                        && (p.TargetInstagramAccount.MetaConnection == null || p.TargetInstagramAccount.MetaConnection.IsConnected)))
                 .Where(p =>
                     (p.Status == PostStatus.Scheduled && p.ScheduledAt <= now) ||
                     ((p.Status == PostStatus.RetryPending || p.Status == PostStatus.Processing) && p.NextRetryAt != null && p.NextRetryAt <= now))

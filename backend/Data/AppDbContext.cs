@@ -31,17 +31,19 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => new { e.Status, e.ScheduledAt });
             entity.HasIndex(e => new { e.Status, e.NextRetryAt });
 
-            // Foreign key to ConnectedPage (optional - SET NULL on delete)
+            // Foreign key to ConnectedPage — RESTRICT. Asset rows are soft-deleted
+            // (DisconnectedAt + IsConnected=false), never hard-deleted, so Posts never lose
+            // their target reference. Restrict acts as a schema-level safety net should
+            // anyone ever attempt a real DELETE.
             entity.HasOne(e => e.TargetPage)
                 .WithMany()
                 .HasForeignKey(e => e.TargetPageId)
-                .OnDelete(DeleteBehavior.SetNull);
+                .OnDelete(DeleteBehavior.Restrict);
 
-            // Foreign key to ConnectedInstagramAccount (optional - SET NULL on delete)
             entity.HasOne(e => e.TargetInstagramAccount)
                 .WithMany()
                 .HasForeignKey(e => e.TargetInstagramAccountId)
-                .OnDelete(DeleteBehavior.SetNull);
+                .OnDelete(DeleteBehavior.Restrict);
 
             // Media items relationship
             entity.HasMany(e => e.MediaItems)
@@ -60,24 +62,40 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<MetaConnection>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.HasIndex(e => e.UserId).IsUnique();
+            // UserId is unique only among currently-connected rows. Disconnected rows
+            // remain as history so re-connecting the same user produces a new active row.
+            entity.HasIndex(e => e.UserId)
+                .IsUnique()
+                .HasFilter("\"IsConnected\" = true");
             entity.Property(e => e.AccessToken).IsRequired();
+            // NOTE: No HasDefaultValue / HasSentinel on IsConnected — both would make EF
+            // treat the C# default `true` as "unset" and omit IsConnected from INSERT,
+            // which in turn confuses change-tracking when adding new children via a tracked
+            // parent's navigation collection (entities land in Modified instead of Added).
+            // The DB-level default `true` is preserved by the original AddSoftDisconnect
+            // migration as a safety net for any non-EF insert path.
 
+            // Child FK relaxed: parent connection may be removed (legacy paths) without
+            // taking the child asset rows with it. Soft-delete is the normal path.
             entity.HasMany(e => e.Pages)
                 .WithOne(p => p.MetaConnection)
                 .HasForeignKey(p => p.MetaConnectionId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasMany(e => e.InstagramAccounts)
                 .WithOne(i => i.MetaConnection)
                 .HasForeignKey(i => i.MetaConnectionId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<ConnectedPage>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.HasIndex(e => new { e.MetaConnectionId, e.PageId }).IsUnique();
+            // Same (MetaConnectionId, PageId) can recur across disconnected/reconnected cycles;
+            // uniqueness only applies to currently-connected rows.
+            entity.HasIndex(e => new { e.MetaConnectionId, e.PageId })
+                .IsUnique()
+                .HasFilter("\"IsConnected\" = true");
             entity.Property(e => e.PageId).IsRequired();
             entity.Property(e => e.Name).IsRequired();
             entity.Property(e => e.AccessToken).IsRequired();
@@ -86,7 +104,9 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<ConnectedInstagramAccount>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.HasIndex(e => new { e.MetaConnectionId, e.IgBusinessId }).IsUnique();
+            entity.HasIndex(e => new { e.MetaConnectionId, e.IgBusinessId })
+                .IsUnique()
+                .HasFilter("\"IsConnected\" = true");
             entity.Property(e => e.IgBusinessId).IsRequired();
             entity.Property(e => e.Username).IsRequired();
             entity.Property(e => e.PageId).IsRequired();
