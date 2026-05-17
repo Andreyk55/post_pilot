@@ -120,6 +120,13 @@ public interface IMediaService
     /// Prefer GetLocalFilePathAsync for new code.
     /// </summary>
     string? GetLocalFilePath(string storageKey);
+
+    /// <summary>
+    /// Deletes a path previously returned by GetLocalFilePathAsync if (and only if)
+    /// it is a temp file the storage provider materialized. Safe no-op for real
+    /// LocalDisk storage paths. Call from a finally block after using the path.
+    /// </summary>
+    void TryCleanupTempLocalPath(string? localPath);
 }
 
 /// <summary>

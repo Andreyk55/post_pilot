@@ -109,10 +109,22 @@ public class S3CompatibleMediaStorageProvider : IMediaStorageProvider, IDisposab
         _logger.LogInformation("Deleted object {Key} from bucket {Bucket}", storageKey, _bucket);
     }
 
-    public Task<string?> GetLocalFilePathAsync(string storageKey, CancellationToken cancellationToken = default)
+    public async Task<string?> GetLocalFilePathAsync(string storageKey, CancellationToken cancellationToken = default)
     {
-        // No local fallback for object storage. Callers that need bytes must use OpenReadAsync.
-        return Task.FromResult<string?>(null);
+        // Object storage has no real local file. Materialize one in the system temp dir
+        // so callers that require a path (ffprobe, ImageSharp) can work. The filename
+        // prefix lets MediaService.TryCleanupTempLocalPath recognize and delete it
+        // after use without ever touching real LocalDisk storage paths.
+        await using var source = await OpenReadAsync(storageKey, cancellationToken);
+        if (source == null) return null;
+
+        var extension = Path.GetExtension(storageKey);
+        var tempPath = Path.Combine(Path.GetTempPath(), $"postpilot-media-{Guid.NewGuid()}{extension}");
+        await using (var destination = File.Create(tempPath))
+        {
+            await source.CopyToAsync(destination, cancellationToken);
+        }
+        return tempPath;
     }
 
     public Task SaveAsync(string storageKey, Stream content, CancellationToken cancellationToken = default)

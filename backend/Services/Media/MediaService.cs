@@ -145,4 +145,27 @@ public class MediaService : IMediaService
         // Sync wrapper for backward compatibility
         return _storage.GetLocalFilePathAsync(storageKey).GetAwaiter().GetResult();
     }
+
+    public void TryCleanupTempLocalPath(string? localPath)
+    {
+        if (string.IsNullOrEmpty(localPath)) return;
+
+        // Only delete files the S3-compatible provider materialized into the system
+        // temp dir. The prefix + temp-root check is what keeps us from ever deleting
+        // a real LocalDisk storage file.
+        var fileName = Path.GetFileName(localPath);
+        if (!fileName.StartsWith("postpilot-media-", StringComparison.Ordinal)) return;
+
+        var tempRoot = Path.GetTempPath();
+        if (!localPath.StartsWith(tempRoot, StringComparison.OrdinalIgnoreCase)) return;
+
+        try
+        {
+            File.Delete(localPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to delete temp media file {Path}", localPath);
+        }
+    }
 }

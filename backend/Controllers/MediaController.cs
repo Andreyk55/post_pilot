@@ -289,35 +289,42 @@ public class MediaController : ControllerBase
             return BadRequest(new { error = $"Invalid MIME type: {request.MimeType}" });
         }
 
-        // Get file path from storage key
+        // Get file path from storage key. For S3-compatible storage this downloads
+        // a temp copy; the finally below deletes it. For LocalDisk it returns the
+        // real path and the cleanup helper is a no-op.
         var filePath = await _mediaService.GetLocalFilePathAsync(request.StorageKey);
         if (string.IsNullOrEmpty(filePath) || !System.IO.File.Exists(filePath))
         {
             return NotFound(new { error = "Media file not found" });
         }
 
-        // Get file size
-        var fileInfo = new FileInfo(filePath);
-        var sizeBytes = fileInfo.Length;
+        try
+        {
+            var fileInfo = new FileInfo(filePath);
+            var sizeBytes = fileInfo.Length;
 
-        _logger.LogInformation(
-            "Starting validation for {MediaType} file: {StorageKey}, Platform: {Platform}, Placement: {Placement}",
-            mediaType, request.StorageKey, request.Platform, request.Placement);
+            _logger.LogInformation(
+                "Starting validation for {MediaType} file: {StorageKey}, Platform: {Platform}, Placement: {Placement}",
+                mediaType, request.StorageKey, request.Platform, request.Placement);
 
-        // Validate the file
-        var result = await _validationService.ValidateFileAsync(
-            filePath,
-            request.MimeType,
-            sizeBytes,
-            mediaType,
-            request.Platform,
-            request.Placement);
+            var result = await _validationService.ValidateFileAsync(
+                filePath,
+                request.MimeType,
+                sizeBytes,
+                mediaType,
+                request.Platform,
+                request.Placement);
 
-        _logger.LogInformation(
-            "Validation completed for {StorageKey}: Status={Status}, Errors={ErrorCount}, Warnings={WarningCount}",
-            request.StorageKey, result.Status, result.Errors.Length, result.Warnings.Length);
+            _logger.LogInformation(
+                "Validation completed for {StorageKey}: Status={Status}, Errors={ErrorCount}, Warnings={WarningCount}",
+                request.StorageKey, result.Status, result.Errors.Length, result.Warnings.Length);
 
-        return Ok(result);
+            return Ok(result);
+        }
+        finally
+        {
+            _mediaService.TryCleanupTempLocalPath(filePath);
+        }
     }
 
     /// <summary>
@@ -340,20 +347,29 @@ public class MediaController : ControllerBase
             return BadRequest(new { error = $"Invalid MIME type: {request.MimeType}" });
         }
 
-        // Get file path from storage key
+        // Get file path from storage key. For S3-compatible storage this downloads
+        // a temp copy; the finally below deletes it. For LocalDisk it returns the
+        // real path and the cleanup helper is a no-op.
         var filePath = await _mediaService.GetLocalFilePathAsync(request.StorageKey);
         if (string.IsNullOrEmpty(filePath) || !System.IO.File.Exists(filePath))
         {
             return NotFound(new { error = "Media file not found" });
         }
 
-        var metadata = await _validationService.ExtractMetadataFromFileAsync(filePath, mediaType);
-        if (metadata == null)
+        try
         {
-            return BadRequest(new { error = "Failed to extract metadata" });
-        }
+            var metadata = await _validationService.ExtractMetadataFromFileAsync(filePath, mediaType);
+            if (metadata == null)
+            {
+                return BadRequest(new { error = "Failed to extract metadata" });
+            }
 
-        return Ok(metadata);
+            return Ok(metadata);
+        }
+        finally
+        {
+            _mediaService.TryCleanupTempLocalPath(filePath);
+        }
     }
 
     /// <summary>
