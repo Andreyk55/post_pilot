@@ -415,14 +415,6 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
 
   // Instagram carousel per-image tagging
   const showCarouselTags = canShowCarouselTags(isInstagramSelected, isStory, isMultiMedia)
-  // Check if any carousel image tags are unplaced (video tags auto-place at center)
-  const hasUnplacedCarouselTags = showCarouselTags && Array.from(carouselMediaTags.values()).some(tags =>
-    tags.some(t => {
-      const item = carouselItems.find((_, idx) => idx === selectedCarouselItemIndex)
-      // Only require placement for image tags, not video
-      return item?.mediaType !== 'Video' && (t.x === undefined || t.y === undefined)
-    })
-  )
 
   // --- Caption summary parsing (Instagram only) ---
   const captionSummary = useMemo(() => {

@@ -28,6 +28,8 @@ function makePost(overrides: Partial<Post> = {}): Post {
     selectedThumbnailUrl: null,
     instagramMediaType: null,
     mediaItems: null,
+    processingPollCount: 0,
+    nextRetryAt: null,
     ...overrides,
   }
 }

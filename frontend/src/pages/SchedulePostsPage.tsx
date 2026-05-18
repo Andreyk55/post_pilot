@@ -96,6 +96,7 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
     selectedThumbnailUrl?: string
     mediaItems?: CreatePostMediaItem[]
     instagramUserTags?: InstagramUserTag[]
+    instagramMediaTags?: Record<number, InstagramUserTag[]>
   }) => {
     try {
       const scheduledAt = new Date(`${formData.scheduledDate}T${formData.scheduledTime}`).toISOString()
