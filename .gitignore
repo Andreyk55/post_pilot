@@ -3,9 +3,27 @@ nul
 # Temporary Claude files
 tmpclaude-*
 
-# Real env files (contain secrets – do not commit)
+# Temp / swap / OS files
+*.tmp
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Env files (contain secrets – never commit)
+*.env
+*.env.local
+.env.*
+!*.env.example
 deploy/env/local.env
 deploy/env/server.env
+
+# Secrets / credentials
+*.pem
+*.key
+secrets/
+appsettings.*.local.json
+*.local.json
 
 # .NET build outputs
 **/bin/
@@ -16,3 +34,7 @@ deploy/env/server.env
 
 # Local script runtime state (ngrok pid, ngrok log, etc.)
 .run/
+
+# Local uploaded media (production uses object storage)
+backend/uploads/*
+!backend/uploads/.gitkeep
