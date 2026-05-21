@@ -1,86 +1,60 @@
-# Frontend deployment (GitHub Actions → Vercel)
+# Frontend deployment (Vercel)
 
-The frontend is a React + Vite SPA. **GitHub Actions builds it** and deploys
-the prebuilt output to Vercel; Vercel is used only as a static host + CDN.
+The frontend is a React + Vite SPA. **Vercel builds and deploys it** directly
+from the Git repository — no GitHub Actions are involved.
 
-The workflow lives at
-[`.github/workflows/deploy-frontend.yml`](../.github/workflows/deploy-frontend.yml).
+## How it works
 
-## Trigger
+The Vercel project (`post-auto-pilot`) is connected to the GitHub repo via
+Vercel's native Git integration. On every push to a tracked branch, Vercel:
 
-- Push to `develop` that touches `frontend/**`, `vercel.json`, or the workflow
-  itself.
-- Manual run via the Actions tab (`workflow_dispatch`).
+1. Pulls the latest commit.
+2. Runs the install + build commands inside the project's **Root Directory**.
+3. Serves the resulting `dist/` folder from its global CDN.
 
-## Pipeline
+## Vercel project settings
 
-1. Checkout
-2. Setup Node.js LTS with npm cache keyed on `frontend/package-lock.json`
-3. `npm ci` inside `frontend/`
-4. `npm run lint` *(non-blocking — failures appear in the log but do not stop the deploy)*
-5. `npm run build` (runs `tsc -b && vite build` — typecheck + build, **blocking**)
-6. Install the Vercel CLI globally
-7. `vercel pull` — fetch the project's production env vars + settings
-8. `vercel build --prod` — produce the `.vercel/output` directory the CLI expects
-9. `vercel deploy --prebuilt --prod` — upload the prebuilt artifact
+Under **Settings → Build and Deployment**:
 
-## Required GitHub secrets
+| Setting             | Value          |
+| ------------------- | -------------- |
+| Framework Preset    | Other          |
+| Root Directory      | `frontend`     |
+| Install Command     | `npm install`  |
+| Build Command       | `npm run build`|
+| Output Directory    | `dist`         |
+| Node.js Version     | 22.x (LTS)     |
 
-Add these under **Settings → Secrets and variables → Actions → Secrets**:
+> **Note on Node version:** the project is currently set to `24.x`. 22.x or
+> 20.x (current Vercel-supported LTS lines) are safer choices. Adjust under
+> **Settings → Build and Deployment → Node.js Version** if needed.
 
-| Secret              | Where to find it                                                                                       |
-| ------------------- | ------------------------------------------------------------------------------------------------------ |
-| `VERCEL_TOKEN`      | https://vercel.com/account/tokens — create a token scoped to the org.                                  |
-| `VERCEL_ORG_ID`     | Run `vercel link` locally inside `frontend/`, then read `.vercel/project.json` (field: `orgId`).        |
-| `VERCEL_PROJECT_ID` | Same `.vercel/project.json` (field: `projectId`).                                                       |
+`npm run build` runs `tsc -b && vite build` (typecheck + bundle), so a real
+type error will fail the deploy.
 
-## Required GitHub variable (optional)
+## SPA routing
 
-| Variable        | Example value              | Notes                                                              |
-| --------------- | -------------------------- | ------------------------------------------------------------------ |
-| `VITE_API_URL`  | `https://api.<domain>/api` | Used by the workflow's standalone `npm run build` step (sanity check). |
+The repo includes [`frontend/vercel.json`](../frontend/vercel.json) with a
+single rewrite rule that sends every unknown path to `/index.html`. This is
+what makes react-router deep links work on refresh / direct navigation.
+Without it, e.g. `https://<domain>/posts/123` would return a 404.
 
-The **authoritative source** for `VITE_API_URL` is the Vercel project's env
-config (see below) — that's what `vercel build` reads after `vercel pull`.
-The GH Actions variable only feeds the early build step; you can omit it and
-rely solely on Vercel's env if you prefer one source of truth.
+## Environment variables
 
-## Vercel project setup (one-time)
+Set under **Settings → Environment Variables** for the **Production**
+environment (and Preview if you want preview deploys to hit a real API):
 
-1. Create the Vercel project (import from Git or `vercel link` locally inside
-   `frontend/`).
-2. Under **Settings → Environment Variables** set, for the Production
-   environment:
+| Name           | Value                       | Notes                                       |
+| -------------- | --------------------------- | ------------------------------------------- |
+| `VITE_API_URL` | `https://api.<domain>/api`  | Base URL of the backend, including `/api`.  |
 
-   | Name           | Value                       |
-   | -------------- | --------------------------- |
-   | `VITE_API_URL` | `https://api.<domain>/api`  |
+`VITE_API_URL` is consumed at build time by
+[`frontend/src/config/appConfig.ts`](../frontend/src/config/appConfig.ts).
+Changes require a redeploy because Vite inlines `import.meta.env.*` into the
+bundle.
 
-3. **Disable Vercel's Git auto-deploy** to prevent double deployments
-   (see next section).
-
-The repo includes [`frontend/vercel.json`](../frontend/vercel.json), which
-contains only the SPA rewrite rule so react-router deep links resolve to
-`index.html`. `vercel build` (run from `frontend/` by the workflow) picks
-this up automatically and bakes it into the prebuilt output.
-
-## Disabling Vercel's Git auto-deploy
-
-If both GitHub Actions **and** Vercel's Git integration are active, every
-push will trigger two builds. Disable Vercel's side:
-
-- **Option A — Disconnect Git entirely** (recommended for this setup):
-  Vercel project → **Settings → Git → Disconnect**. Deploys then happen
-  exclusively via the CLI from GitHub Actions.
-
-- **Option B — Keep Git connected but ignore all pushes**:
-  Vercel project → **Settings → Git → Ignored Build Step** → set the command
-  to `exit 0` (or `echo "skip" && exit 0`). Vercel will receive webhooks but
-  skip every build. Useful if you still want PR comments / preview URLs
-  driven by other Vercel integrations.
-
-If Vercel was never connected to the repo's Git provider, no action is
-needed — GitHub Actions is the only path.
+See [`frontend/.env.example`](../frontend/.env.example) for the
+local-development template.
 
 ## CORS / backend requirements
 
@@ -92,9 +66,16 @@ Backend deployment is out of scope for this document.
 
 ```bash
 cd frontend
-npm ci
-npm run lint
+npm install
 npm run build
 ```
 
-`npm run build` runs `tsc -b && vite build` and writes to `frontend/dist/`.
+The build writes to `frontend/dist/`. Vercel runs the equivalent commands on
+every push.
+
+## Triggering a deploy manually
+
+- **Push to the tracked branch** (e.g. `develop` or `main` — whichever is
+  configured as the Production branch in **Settings → Git**).
+- Or in the Vercel dashboard: **Deployments → Redeploy** on any prior
+  deployment.
