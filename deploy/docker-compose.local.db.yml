@@ -17,8 +17,6 @@ services:
       - ${ENV_FILE:-env/local.env}
     ports:
       - "${PGADMIN_PORT:-5050}:80"
-    depends_on:
-      - postgres
     restart: unless-stopped
 
 volumes:
