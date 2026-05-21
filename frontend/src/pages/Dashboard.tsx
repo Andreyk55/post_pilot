@@ -3,7 +3,6 @@ import './Dashboard.css'
 export function Dashboard() {
   return (
     <div className="dashboard">
-      <div className="welcome-banner">welcome to post pilot</div>
       <h1>Dashboard</h1>
       <p className="page-subtitle">Welcome to Post Pilot</p>
 

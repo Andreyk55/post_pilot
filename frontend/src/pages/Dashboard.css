@@ -3,16 +3,6 @@
   width: 100%;
 }
 
-.welcome-banner {
-  padding: 0.75rem 1rem;
-  margin-bottom: 1.5rem;
-  background: linear-gradient(90deg, #6366f1, #8b5cf6);
-  color: #fff;
-  font-weight: 600;
-  text-align: center;
-  border-radius: 8px;
-}
-
 .dashboard h1 {
   font-size: 2rem;
   font-weight: 700;
