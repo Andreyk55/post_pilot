@@ -90,3 +90,26 @@
 .action-label {
   font-weight: 500;
 }
+
+@media (max-width: 768px) {
+  .dashboard {
+    padding: 1rem;
+  }
+
+  .dashboard h1 {
+    font-size: 1.6rem;
+  }
+
+  .page-subtitle {
+    margin-bottom: 1.5rem;
+  }
+
+  .stats-grid {
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+
+  .stat-card {
+    padding: 1rem;
+  }
+}

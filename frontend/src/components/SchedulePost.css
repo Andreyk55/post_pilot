@@ -521,6 +521,26 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   }
 }
 
+@media (max-width: 768px) {
+  .schedule-post {
+    padding: 1rem;
+  }
+
+  .schedule-post h2 {
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+  }
+
+  .form-actions {
+    flex-direction: column;
+  }
+
+  .publish-now-btn,
+  .reset-btn {
+    width: 100%;
+  }
+}
+
 /* ── Instagram Mention Section ── */
 
 .ig-mention-section {

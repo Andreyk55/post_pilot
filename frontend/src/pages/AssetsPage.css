@@ -389,9 +389,9 @@
 }
 
 /* Responsive */
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .assets-page {
-    padding: 1.5rem;
+    padding: 1rem;
   }
 
   .asset-item {
