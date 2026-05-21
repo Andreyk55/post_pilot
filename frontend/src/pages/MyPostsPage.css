@@ -227,7 +227,7 @@
 }
 
 /* Responsive */
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .my-posts-page {
     padding: 1rem;
   }

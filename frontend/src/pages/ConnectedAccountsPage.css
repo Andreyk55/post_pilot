@@ -404,13 +404,18 @@
   font-size: 0.875rem;
 }
 
-@media (max-width: 480px) {
+@media (max-width: 768px) {
   .connected-accounts-page {
-    padding: 1.5rem;
+    padding: 1rem;
   }
 
   .platforms-grid {
     grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .platform-card {
+    padding: 1rem;
   }
 
   .platform-header {

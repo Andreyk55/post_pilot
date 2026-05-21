@@ -40,3 +40,21 @@
   padding: 2rem;
   text-align: center;
 }
+
+@media (max-width: 768px) {
+  .schedule-posts-page {
+    padding: 1rem;
+  }
+
+  .schedule-posts-page h1 {
+    font-size: 1.6rem;
+  }
+
+  .page-subtitle {
+    margin-bottom: 1.5rem;
+  }
+
+  .schedule-content {
+    gap: 1rem;
+  }
+}

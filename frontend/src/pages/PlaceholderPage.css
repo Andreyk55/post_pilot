@@ -23,3 +23,19 @@
 .placeholder-page p {
   color: rgba(255, 255, 255, 0.5);
 }
+
+@media (max-width: 768px) {
+  .placeholder-page {
+    min-height: calc(100vh - 8rem);
+    padding: 1rem;
+  }
+
+  .placeholder-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+  }
+
+  .placeholder-page h1 {
+    font-size: 1.5rem;
+  }
+}
