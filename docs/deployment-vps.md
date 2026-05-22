@@ -226,12 +226,12 @@ Add the workflow at `.github/workflows/deploy-prod.yml` (GitHub requires
 that exact path). The build/push job should:
 
 - Build the image with `docker build --target api -t ghcr.io/<owner>/postpilot-api:<tag>` (and the same for `--target publisher` → `postpilot-worker`).
-- Use the existing `deploy/Dockerfile` at the repo root as the build context root.
+- Use the shared `build/Dockerfile` at the repo root as the build context root.
 - Push to GHCR.
 - SSH to the VPS and run `/opt/postpilot/prod/scripts/deploy.sh`.
 
 Paths the workflow will need to know:
-- Dockerfile: [deploy/Dockerfile](../deploy/Dockerfile)
+- Dockerfile: [build/Dockerfile](../build/Dockerfile)
 - Build context: `backend/`
 - Compose file (on VPS): `/opt/postpilot/prod/docker-compose.yml`
 - Deploy script: `/opt/postpilot/prod/scripts/deploy.sh`

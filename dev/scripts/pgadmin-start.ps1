@@ -4,7 +4,7 @@
 # Useful when the database lives elsewhere (e.g. Supabase) and you only need
 # a local UI to query it. The local Postgres service is NOT started.
 #
-# Credentials and port come from deploy/env/local.env:
+# Credentials and port come from dev/local.env:
 #   PGADMIN_DEFAULT_EMAIL, PGADMIN_DEFAULT_PASSWORD, PGADMIN_PORT
 #
 # Usage (from anywhere):  pwsh -File dev/scripts/pgadmin-start.ps1
@@ -17,8 +17,8 @@ $ErrorActionPreference = 'Stop'
 # ── Resolve paths ───────────────────────────────────────────────────────────
 # This script lives at <repo>/dev/scripts/pgadmin-start.ps1 — go up two levels.
 $RepoRoot  = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$DeployDir = Join-Path $RepoRoot 'deploy'
-$EnvFile   = Join-Path $DeployDir 'env\local.env'
+$DevDir    = Join-Path $RepoRoot 'dev'
+$EnvFile   = Join-Path $DevDir 'local.env'
 
 function Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Ok($msg)   { Write-Host "    $msg" -ForegroundColor Green }
@@ -43,10 +43,10 @@ foreach ($line in Get-Content $EnvFile) {
 
 # ── Bring up pgAdmin only ───────────────────────────────────────────────────
 Step 'Starting pgAdmin container'
-Push-Location $DeployDir
+Push-Location $DevDir
 try {
     docker compose `
-        --env-file ./env/local.env `
+        --env-file ./local.env `
         -f docker-compose.local.db.yml `
         up -d pgadmin
     if ($LASTEXITCODE -ne 0) { throw "docker compose up failed (exit $LASTEXITCODE)" }
@@ -77,7 +77,7 @@ Write-Host '  pgAdmin is up' -ForegroundColor Green
 Write-Host '════════════════════════════════════════════════════════════════' -ForegroundColor Green
 Write-Host ("  URL       : http://localhost:$pgadminPort")
 Write-Host ("  Email     : $pgadminEmail")
-Write-Host ("  Password  : (see PGADMIN_DEFAULT_PASSWORD in deploy/env/local.env)")
+Write-Host ("  Password  : (see PGADMIN_DEFAULT_PASSWORD in dev/local.env)")
 Write-Host ''
 Write-Host '  Stop with:  ./dev/scripts/pgadmin-stop.ps1' -ForegroundColor DarkGray
 Write-Host ''

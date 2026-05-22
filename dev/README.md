@@ -8,36 +8,37 @@ reach the local API for OAuth + media fetch) + the Vite frontend.
 
 | File | Purpose |
 |---|---|
-| [local.env.example](local.env.example) | Template for `deploy/env/local.env`. Copy + fill in Meta/Gemini credentials. |
+| [docker-compose.yml](docker-compose.yml) | Base local stack: builds `api` + `publisher` from source via [../build/Dockerfile](../build/Dockerfile). |
+| [docker-compose.local.db.yml](docker-compose.local.db.yml) | Overlay: Postgres + pgAdmin, healthcheck-gated `depends_on`. |
+| [docker-compose.local.storage.yml](docker-compose.local.storage.yml) | Overlay: MinIO + one-shot bucket init. |
+| [local.env.example](local.env.example) | Template for `dev/local.env`. Copy + fill in Meta/Gemini credentials. |
 | [scripts/start.ps1](scripts/start.ps1) | Full local startup — Docker stack, ngrok, App__PublicUrl patch, frontend, log tabs. |
 | [scripts/stop.ps1](scripts/stop.ps1) | Stop everything `start.ps1` brought up. Pass `-PurgeData` to also wipe volumes. |
 | [scripts/restart.ps1](scripts/restart.ps1) | Rebuild + restart api/worker only; leaves DB, MinIO, ngrok, frontend running. |
-| [scripts/reset-db.ps1](scripts/reset-db.ps1) | Stop stack → delete `deploy_postgres_data` volume → restart (forces fresh EF migration). |
+| [scripts/reset-db.ps1](scripts/reset-db.ps1) | Stop stack → delete `postpilot_postgres_data` volume → restart (forces fresh EF migration). |
 | [scripts/pgadmin-start.ps1](scripts/pgadmin-start.ps1) / [scripts/pgadmin-stop.ps1](scripts/pgadmin-stop.ps1) | Standalone pgAdmin (useful when the DB lives elsewhere, e.g. Supabase). |
 
-## Where local Docker still lives
+## Where the shared Dockerfile lives
 
-The compose files and Dockerfile for the local stack remain under
-[deploy/](../deploy/):
+The Dockerfile is at [../build/Dockerfile](../build/Dockerfile) — a neutral
+top-level location because it is built by both:
 
-| File | Why it stays in deploy/ |
-|---|---|
-| [deploy/Dockerfile](../deploy/Dockerfile) | Single multi-stage Dockerfile with `--target api` and `--target publisher`. Used by both the local stack and the future GitHub Actions production build, so it sits at a neutral path. |
-| [deploy/docker-compose.yml](../deploy/docker-compose.yml) + [deploy/docker-compose.local.db.yml](../deploy/docker-compose.local.db.yml) + [deploy/docker-compose.local.storage.yml](../deploy/docker-compose.local.storage.yml) | Compose project name defaults to the parent folder. The scripts in this folder hardcode `deploy-api-1` / `deploy-publisher-1` as container names when tailing logs in Windows Terminal tabs. Renaming the folder would break that. |
-| [deploy/env/local.env](../deploy/env/local.env) | Referenced by absolute path inside the local compose stack and as `--env-file ./env/local.env` in every script in this folder. Gitignored — real credentials only. |
+- This local stack (`docker-compose.yml` build context `../backend`, dockerfile `../build/Dockerfile`).
+- The future GitHub Actions production workflow (`--target api` / `--target publisher`, pushed to GHCR).
 
-If you ever want to finish moving the compose files into `dev/`: set
-`COMPOSE_PROJECT_NAME=postpilot` in the env file, drop the `deploy-` prefix
-from the log-tab container names in [scripts/start.ps1](scripts/start.ps1)
-and [scripts/restart.ps1](scripts/restart.ps1), then `git mv` the compose
-files + env.
+## Container naming
+
+Container names start with `postpilot-` (e.g. `postpilot-api-1`,
+`postpilot-publisher-1`). The prefix comes from `COMPOSE_PROJECT_NAME=postpilot`
+set inside `local.env`, **not** from the folder name. The log-tab code in
+`start.ps1` / `restart.ps1` references these by name.
 
 ## Quick start
 
 ```powershell
 # First time only: create the local env file from the template
-cp dev/local.env.example deploy/env/local.env
-# then edit deploy/env/local.env to set META_APP_ID, META_APP_SECRET, GEMINI_API_KEY
+cp dev/local.env.example dev/local.env
+# then edit dev/local.env to set META_APP_ID, META_APP_SECRET, GEMINI_API_KEY
 
 # Start everything (Docker stack + ngrok + Vite + log tabs)
 pwsh -File dev/scripts/start.ps1

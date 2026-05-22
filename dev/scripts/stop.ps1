@@ -22,7 +22,7 @@ $ErrorActionPreference = 'Continue'   # don't bail on first failed cleanup step
 # ── Resolve paths ───────────────────────────────────────────────────────────
 # This script lives at <repo>/dev/scripts/stop.ps1 — go up two levels.
 $RepoRoot   = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$DeployDir  = Join-Path $RepoRoot 'deploy'
+$DevDir     = Join-Path $RepoRoot 'dev'
 $FrontendDir = Join-Path $RepoRoot 'frontend'
 $RunDir     = Join-Path $RepoRoot '.run'
 $NgrokPid   = Join-Path $RunDir   'ngrok.pid'
@@ -107,10 +107,10 @@ if ($PurgeData) {
     $downArgs = @('down')
 }
 
-Push-Location $DeployDir
+Push-Location $DevDir
 try {
     docker compose `
-        --env-file ./env/local.env `
+        --env-file ./local.env `
         -f docker-compose.yml `
         -f docker-compose.local.db.yml `
         -f docker-compose.local.storage.yml `

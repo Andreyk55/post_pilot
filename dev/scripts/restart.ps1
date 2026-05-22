@@ -12,7 +12,7 @@ $ErrorActionPreference = 'Stop'
 # ── Resolve paths ───────────────────────────────────────────────────────────
 # This script lives at <repo>/dev/scripts/restart.ps1 — go up two levels.
 $RepoRoot  = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$DeployDir = Join-Path $RepoRoot 'deploy'
+$DevDir    = Join-Path $RepoRoot 'dev'
 $RunDir    = Join-Path $RepoRoot '.run'
 
 if (-not (Test-Path $RunDir)) { New-Item -ItemType Directory -Path $RunDir -Force | Out-Null }
@@ -56,10 +56,10 @@ Ok 'Old log tabs signaled'
 # Only docker-compose.yml defines api + publisher — no db/storage files needed,
 # which avoids triggering minio-init or other one-shot containers.
 Step 'Rebuilding and restarting api + publisher'
-Push-Location $DeployDir
+Push-Location $DevDir
 try {
     docker compose `
-        --env-file ./env/local.env `
+        --env-file ./local.env `
         -f docker-compose.yml `
         up -d --build api publisher
     if ($LASTEXITCODE -ne 0) { throw "docker compose up failed (exit $LASTEXITCODE)" }
@@ -78,7 +78,7 @@ while ((Get-Date) -lt $deadline) {
         if ($r.StatusCode -eq 200) { $apiReady = $true; break }
     } catch { Start-Sleep -Milliseconds 800 }
 }
-if (-not $apiReady) { throw 'API did not become ready within 120s. Check `docker logs deploy-api-1`.' }
+if (-not $apiReady) { throw 'API did not become ready within 120s. Check `docker logs postpilot-api-1`.' }
 Ok 'API ready'
 
 # ── Open fresh log tabs (mirrors start.ps1's Start-PostPilotTab) ─────────────
@@ -113,7 +113,7 @@ Write-Host '== $DisplayName ==' -ForegroundColor Cyan
 }
 
 foreach ($svc in @('api', 'publisher')) {
-    $containerName = "deploy-$svc-1"
+    $containerName = "postpilot-$svc-1"
     $killFlag = Join-Path $RunDir "log-$svc.kill"
     if (Test-Path $killFlag) { Remove-Item $killFlag -Force -ErrorAction SilentlyContinue }
     $killFlagEsc = $killFlag.Replace("'", "''")

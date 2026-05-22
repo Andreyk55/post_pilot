@@ -3,7 +3,7 @@
 # Brings up the full local stack:
 #   1. Docker stack: api, publisher, postgres, pgadmin, minio, minio-init
 #   2. ngrok HTTP tunnel pointing at the API (port 5122)
-#   3. Updates App__PublicUrl in deploy/env/local.env with the live ngrok URL
+#   3. Updates App__PublicUrl in dev/local.env with the live ngrok URL
 #      and restarts api + publisher so they pick it up
 #   4. Frontend (Vite) in a new PowerShell window: npm run dev
 #
@@ -17,8 +17,8 @@ $ErrorActionPreference = 'Stop'
 # ── Resolve paths ───────────────────────────────────────────────────────────
 # This script lives at <repo>/dev/scripts/start.ps1 — go up two levels.
 $RepoRoot   = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$DeployDir  = Join-Path $RepoRoot 'deploy'
-$EnvFile    = Join-Path $DeployDir 'env\local.env'
+$DevDir     = Join-Path $RepoRoot 'dev'
+$EnvFile    = Join-Path $DevDir 'local.env'
 $FrontendDir = Join-Path $RepoRoot 'frontend'
 $RunDir     = Join-Path $RepoRoot '.run'
 $NgrokPid   = Join-Path $RunDir   'ngrok.pid'
@@ -46,10 +46,10 @@ if (-not (Test-Path $EnvFile)) { throw "Env file missing: $EnvFile" }
 
 # ── Bring up the Docker stack ───────────────────────────────────────────────
 Step 'Starting Docker stack (api, publisher, postgres, pgadmin, minio)'
-Push-Location $DeployDir
+Push-Location $DevDir
 try {
     docker compose `
-        --env-file ./env/local.env `
+        --env-file ./local.env `
         -f docker-compose.yml `
         -f docker-compose.local.db.yml `
         -f docker-compose.local.storage.yml `
@@ -69,7 +69,7 @@ while ((Get-Date) -lt $deadline) {
         if ($r.StatusCode -eq 200) { $apiReady = $true; break }
     } catch { Start-Sleep -Milliseconds 800 }
 }
-if (-not $apiReady) { throw 'API did not become ready within 120s. Check `docker logs deploy-api-1`.' }
+if (-not $apiReady) { throw 'API did not become ready within 120s. Check `docker logs postpilot-api-1`.' }
 Ok 'API ready'
 
 # ── ngrok ───────────────────────────────────────────────────────────────────
@@ -150,7 +150,7 @@ if (-not $publicUrl) {
 Ok "Public URL: $publicUrl"
 
 # ── Patch App__PublicUrl in local.env and restart api + publisher ───────────
-Step 'Updating App__PublicUrl in deploy/env/local.env'
+Step 'Updating App__PublicUrl in dev/local.env'
 $envLines = Get-Content $EnvFile
 $found    = $false
 $newLines = foreach ($line in $envLines) {
@@ -167,10 +167,10 @@ if (-not $found) { $newLines = $newLines + "App__PublicUrl=$publicUrl" }
 Ok 'local.env updated'
 
 Step 'Restarting api + publisher so they pick up the new App__PublicUrl'
-Push-Location $DeployDir
+Push-Location $DevDir
 try {
     docker compose `
-        --env-file ./env/local.env `
+        --env-file ./local.env `
         -f docker-compose.yml `
         -f docker-compose.local.db.yml `
         -f docker-compose.local.storage.yml `
@@ -246,7 +246,7 @@ Ok 'Frontend tab opened'
 Step 'Starting container log tabs (api + publisher)'
 $RunDirEsc = $RunDir.Replace("'", "''")
 foreach ($svc in @('api', 'publisher')) {
-    $containerName = "deploy-$svc-1"
+    $containerName = "postpilot-$svc-1"
     $killFlag = Join-Path $RunDir "log-$svc.kill"
     if (Test-Path $killFlag) { Remove-Item $killFlag -Force -ErrorAction SilentlyContinue }
     $killFlagEsc = $killFlag.Replace("'", "''")

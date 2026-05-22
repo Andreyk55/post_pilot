@@ -3,7 +3,7 @@ services:
     image: postgres:16
     container_name: postpilot-db
     env_file:
-      - ${ENV_FILE:-env/local.env}
+      - ${ENV_FILE:-./local.env}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -20,7 +20,7 @@ services:
     image: dpage/pgadmin4
     container_name: postpilot-pgadmin
     env_file:
-      - ${ENV_FILE:-env/local.env}
+      - ${ENV_FILE:-./local.env}
     ports:
       - "${PGADMIN_PORT:-5050}:80"
     restart: unless-stopped

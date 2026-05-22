@@ -4,10 +4,10 @@ services:
     pull_policy: build
     build:
       context: ../backend
-      dockerfile: ../deploy/Dockerfile
+      dockerfile: ../build/Dockerfile
       target: api
     env_file:
-      - ${ENV_FILE}
+      - ${ENV_FILE:-./local.env}
     environment:
       ASPNETCORE_URLS: ${ASPNETCORE_URLS:-http://0.0.0.0:5122}
     ports:
@@ -19,10 +19,10 @@ services:
     pull_policy: build
     build:
       context: ../backend
-      dockerfile: ../deploy/Dockerfile
+      dockerfile: ../build/Dockerfile
       target: publisher
     env_file:
-      - ${ENV_FILE}
+      - ${ENV_FILE:-./local.env}
     depends_on:
       - api
     restart: unless-stopped

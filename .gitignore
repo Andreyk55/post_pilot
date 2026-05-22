@@ -16,7 +16,6 @@ Thumbs.db
 *.env.local
 .env.*
 !*.env.example
-deploy/env/local.env
 dev/local.env
 prod/server.env
 local.env

@@ -298,7 +298,7 @@ All other config must use `__` notation (`App__PublicUrl`, `Gemini__Model`, `Gem
 
 ### Critical
 
-1. **Credentials in `deploy/env/local.env`**
+1. **Credentials in `dev/local.env`**
    Real-looking `META_APP_ID`, `META_APP_SECRET`, `GEMINI_API_KEY`, and ngrok URL are committed in plaintext. Rotate these credentials and replace the file with a placeholder template.
 
 2. **No authentication on any endpoint**
@@ -338,7 +338,7 @@ All other config must use `__` notation (`App__PublicUrl`, `Gemini__Model`, `Gem
 
 ### Immediate (security / correctness)
 
-- Rotate credentials from `deploy/env/local.env`; replace with a redacted template (like `server.env`); ensure the file is gitignored
+- Rotate credentials from `dev/local.env`; replace with a redacted template (like `prod/server.env.example`); ensure the file is gitignored
 - Fix `server.env`: rename `PUBLIC_URL` → `App__PublicUrl` so ASP.NET Core picks it up
 - Fix `GEMINI_MODEL` / `GEMINI_VISION_MODEL` in both env files: rename to `Gemini__Model` / `Gemini__VisionModel`
 - Add a named volume for `/app/uploads` to `docker-compose.yml`

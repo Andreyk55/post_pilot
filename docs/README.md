@@ -12,10 +12,10 @@ A social media post management and scheduling tool.
 
 ### 1. Bring up the full local stack (API + Worker + Postgres + pgAdmin + MinIO)
 
-From `deploy/`:
+From `dev/`:
 
 ```powershell
-docker compose --env-file ./env/local.env `
+docker compose --env-file ./local.env `
   -f docker-compose.yml `
   -f docker-compose.local.db.yml `
   -f docker-compose.local.storage.yml `
@@ -25,12 +25,14 @@ docker compose --env-file ./env/local.env `
 cmd.exe equivalent:
 
 ```cmd
-docker compose --env-file ./env/local.env ^
+docker compose --env-file ./local.env ^
   -f docker-compose.yml ^
   -f docker-compose.local.db.yml ^
   -f docker-compose.local.storage.yml ^
   up -d --build
 ```
+
+Or just use the wrapper script: `pwsh -File dev/scripts/start.ps1`
 
 Long-running containers: **api** (5122), **publisher** (Worker, no port), **postgres** (5432), **pgadmin** (5050), **minio** (9000 API / 9001 console).
 Setup container that creates the `postpilot-media` bucket and exits: **minio-init**.
@@ -112,12 +114,19 @@ post_pilot/
 │   └── publisher/           # PostPilot.Publisher worker project
 ├── frontend/                # React + TypeScript + Vite
 │   └── src/api/media.ts     # init/complete upload flow
-├── deploy/
-│   ├── Dockerfile                          # multi-stage: api + publisher targets
-│   ├── docker-compose.yml                  # api + publisher
+├── build/
+│   └── Dockerfile                          # multi-stage: api + publisher targets (shared by dev + CI prod)
+├── dev/                                    # local development stack
+│   ├── docker-compose.yml                  # api + publisher (builds from source)
 │   ├── docker-compose.local.db.yml         # postgres + pgadmin
 │   ├── docker-compose.local.storage.yml    # minio + minio-init (+ depends_on overrides)
-│   └── env/local.env                       # local env file (MediaStorage__*, etc.)
+│   ├── local.env                           # local env file (MediaStorage__*, etc.) — gitignored
+│   └── scripts/                            # start.ps1, stop.ps1, restart.ps1, reset-db.ps1, pgadmin-*.ps1
+├── prod/                                   # VPS production stack
+│   ├── docker-compose.yml                  # pulls images from GHCR
+│   ├── server.env.example                  # template for /opt/postpilot/server.env
+│   ├── nginx/postpilot-api.conf            # host nginx config template
+│   └── scripts/                            # deploy.sh, check-prod.sh
 └── docs/
     └── README.md
 ```
@@ -126,14 +135,14 @@ post_pilot/
 
 ```powershell
 # Stop everything
-docker compose --env-file ./env/local.env `
+docker compose --env-file ./local.env `
   -f docker-compose.yml `
   -f docker-compose.local.db.yml `
   -f docker-compose.local.storage.yml `
   down
 
 # Stop with data cleanup (removes Postgres + MinIO data)
-docker compose --env-file ./env/local.env `
+docker compose --env-file ./local.env `
   -f docker-compose.yml `
   -f docker-compose.local.db.yml `
   -f docker-compose.local.storage.yml `

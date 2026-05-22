@@ -11,8 +11,8 @@ $ErrorActionPreference = 'Continue'   # don't bail on first failed cleanup step
 # ── Resolve paths ───────────────────────────────────────────────────────────
 # This script lives at <repo>/dev/scripts/pgadmin-stop.ps1 — go up two levels.
 $RepoRoot  = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$DeployDir = Join-Path $RepoRoot 'deploy'
-$EnvFile   = Join-Path $DeployDir 'env\local.env'
+$DevDir    = Join-Path $RepoRoot 'dev'
+$EnvFile   = Join-Path $DevDir 'local.env'
 
 function Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Ok($msg)   { Write-Host "    $msg" -ForegroundColor Green }
@@ -21,16 +21,16 @@ function Warn($msg) { Write-Host "    $msg" -ForegroundColor Yellow }
 if (-not (Test-Path $EnvFile)) { throw "Env file missing: $EnvFile" }
 
 Step 'Stopping pgAdmin container'
-Push-Location $DeployDir
+Push-Location $DevDir
 try {
     docker compose `
-        --env-file ./env/local.env `
+        --env-file ./local.env `
         -f docker-compose.local.db.yml `
         stop pgadmin
     if ($LASTEXITCODE -ne 0) { Warn "docker compose stop returned exit $LASTEXITCODE" }
 
     docker compose `
-        --env-file ./env/local.env `
+        --env-file ./local.env `
         -f docker-compose.local.db.yml `
         rm -f pgadmin
     if ($LASTEXITCODE -ne 0) { Warn "docker compose rm returned exit $LASTEXITCODE" }
