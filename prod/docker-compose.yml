@@ -4,6 +4,7 @@
 # Layout:
 #   - Host nginx (NOT in this file) terminates HTTPS for
 #     https://post-pilot.cloud-ip.cc and reverse-proxies to 127.0.0.1:5122.
+#     Template config: prod/nginx/postpilot-api.conf
 #   - The API container binds 5122 on 127.0.0.1 only — NEVER on 0.0.0.0.
 #   - Postgres has NO host port published, so it is unreachable from the
 #     public internet. API/Worker reach it over the compose network via the
@@ -13,10 +14,11 @@
 #
 # Usage on the VPS:
 #   sudo mkdir -p /opt/postpilot
-#   sudo cp server.env.example /opt/postpilot/server.env   # then fill it in
-#   cd /opt/postpilot   (or wherever you keep this file)
-#   docker compose -f docker-compose.prod.yml pull
-#   docker compose -f docker-compose.prod.yml up -d
+#   # copy this compose file to /opt/postpilot/prod/docker-compose.yml
+#   # copy server.env.example to /opt/postpilot/server.env, then fill it in
+#   cd /opt/postpilot
+#   docker compose -f prod/docker-compose.yml pull
+#   docker compose -f prod/docker-compose.yml up -d
 #
 # Images are pulled from GHCR, built and pushed by GitHub Actions.
 # Replace <github-owner> with your GitHub user/org before first deploy

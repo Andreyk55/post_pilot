@@ -10,14 +10,16 @@ tmpclaude-*
 .DS_Store
 Thumbs.db
 
-# Env files (contain secrets – never commit)
+# Env files (contain secrets – never commit). Example files (*.env.example)
+# are explicitly tracked and live under prod/ and dev/.
 *.env
 *.env.local
 .env.*
 !*.env.example
 deploy/env/local.env
-deploy/env/server.env
-deploy/server.env
+dev/local.env
+prod/server.env
+local.env
 server.env
 
 # Secrets / credentials
