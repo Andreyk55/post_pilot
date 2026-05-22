@@ -20,9 +20,9 @@
 #   docker compose -f prod/docker-compose.yml pull
 #   docker compose -f prod/docker-compose.yml up -d
 #
-# Images are pulled from GHCR, built and pushed by GitHub Actions.
-# Replace <github-owner> with your GitHub user/org before first deploy
-# (or override via env: API_IMAGE / WORKER_IMAGE).
+# Images are pulled from GHCR, built and pushed by GitHub Actions
+# (.github/workflows/deploy-prod.yml). Override via env if needed:
+#   API_IMAGE / WORKER_IMAGE
 # ────────────────────────────────────────────────────────────────────────────
 
 services:
@@ -45,7 +45,7 @@ services:
       start_period: 10s
 
   postpilot-api:
-    image: ${API_IMAGE:-ghcr.io/<github-owner>/postpilot-api:latest}
+    image: ${API_IMAGE:-ghcr.io/andreyk55/postpilot-api:latest}
     container_name: postpilot-api
     env_file:
       - /opt/postpilot/server.env
@@ -59,7 +59,7 @@ services:
     restart: unless-stopped
 
   postpilot-worker:
-    image: ${WORKER_IMAGE:-ghcr.io/<github-owner>/postpilot-worker:latest}
+    image: ${WORKER_IMAGE:-ghcr.io/andreyk55/postpilot-worker:latest}
     container_name: postpilot-worker
     env_file:
       - /opt/postpilot/server.env
