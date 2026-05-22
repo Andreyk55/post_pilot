@@ -1,0 +1,75 @@
+# ────────────────────────────────────────────────────────────────────────────
+# PostPilot — production stack for the Hetzner VPS.
+#
+# Layout:
+#   - Host nginx (NOT in this file) terminates HTTPS for
+#     https://post-pilot.cloud-ip.cc and reverse-proxies to 127.0.0.1:5122.
+#   - The API container binds 5122 on 127.0.0.1 only — NEVER on 0.0.0.0.
+#   - Postgres has NO host port published, so it is unreachable from the
+#     public internet. API/Worker reach it over the compose network via the
+#     service name `postpilot-postgres`.
+#   - Frontend is hosted separately on Vercel
+#     (https://post-auto-pilot.vercel.app) and is NOT in this file.
+#
+# Usage on the VPS:
+#   sudo mkdir -p /opt/postpilot
+#   sudo cp server.env.example /opt/postpilot/server.env   # then fill it in
+#   cd /opt/postpilot   (or wherever you keep this file)
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Images are pulled from GHCR, built and pushed by GitHub Actions.
+# Replace <github-owner> with your GitHub user/org before first deploy
+# (or override via env: API_IMAGE / WORKER_IMAGE).
+# ────────────────────────────────────────────────────────────────────────────
+
+services:
+  postpilot-postgres:
+    image: postgres:16
+    container_name: postpilot-postgres
+    # No `ports:` block on purpose — Postgres is reachable only over the
+    # compose network. If you need psql/pg_dump from the VPS shell, exec
+    # into the container or bind to 127.0.0.1 here (never 0.0.0.0).
+    env_file:
+      - /opt/postpilot/server.env
+    volumes:
+      - postpilot-postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  postpilot-api:
+    image: ${API_IMAGE:-ghcr.io/<github-owner>/postpilot-api:latest}
+    container_name: postpilot-api
+    env_file:
+      - /opt/postpilot/server.env
+    # Bind ONLY to the loopback interface. The host nginx talks to this
+    # over 127.0.0.1; the public internet cannot reach 5122 directly.
+    ports:
+      - "127.0.0.1:5122:5122"
+    depends_on:
+      postpilot-postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postpilot-worker:
+    image: ${WORKER_IMAGE:-ghcr.io/<github-owner>/postpilot-worker:latest}
+    container_name: postpilot-worker
+    env_file:
+      - /opt/postpilot/server.env
+    # No `ports:` — the worker is a background process. It also does NOT
+    # run EF Core migrations; the API container is the single migrator
+    # (see backend/Program.cs vs backend/publisher/Program.cs).
+    depends_on:
+      postpilot-postgres:
+        condition: service_healthy
+      postpilot-api:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  postpilot-postgres-data:

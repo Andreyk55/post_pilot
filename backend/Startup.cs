@@ -41,11 +41,20 @@ public class Startup
         ConfigureAiServices(services, Configuration);
 
         // ── CORS ─────────────────────────────────────────────────────────────
+        // Localhost dev origins are always allowed; production origins come
+        // from Cors:AllowedOrigins (set via Cors__AllowedOrigins__0, __1, ...
+        // in server.env). Never AllowAnyOrigin in production.
+        var allowedOrigins = Configuration
+            .GetSection("Cors:AllowedOrigins")
+            .Get<string[]>() ?? Array.Empty<string>();
+
         services.AddCors(options =>
         {
             options.AddPolicy("AllowFrontend", policy =>
             {
-                policy.SetIsOriginAllowed(origin => origin.StartsWith("http://localhost:") || origin.StartsWith("https://"))
+                policy.SetIsOriginAllowed(origin =>
+                          origin.StartsWith("http://localhost:") ||
+                          Array.IndexOf(allowedOrigins, origin) >= 0)
                       .AllowAnyHeader()
                       .AllowAnyMethod();
             });
@@ -91,6 +100,14 @@ public class Startup
         app.UseRouting();
         app.UseEndpoints(endpoints =>
         {
+            // Liveness probe used by host nginx and uptime checks. Cheap —
+            // does NOT touch the DB. For a DB-aware check, use /api/internal/health.
+            endpoints.MapGet("/health", () => Results.Ok(new
+            {
+                status = "healthy",
+                timestamp = DateTime.UtcNow
+            }));
+
             endpoints.MapControllers();
         });
     }

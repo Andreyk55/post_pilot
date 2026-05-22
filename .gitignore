@@ -17,6 +17,8 @@ Thumbs.db
 !*.env.example
 deploy/env/local.env
 deploy/env/server.env
+deploy/server.env
+server.env
 
 # Secrets / credentials
 *.pem
