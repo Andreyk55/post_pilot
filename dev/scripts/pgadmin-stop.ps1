@@ -4,12 +4,13 @@
 # The local Postgres service (if running) is left alone.
 #
 # Usage:
-#   ./scripts/pgadmin-stop.ps1
+#   ./dev/scripts/pgadmin-stop.ps1
 
 $ErrorActionPreference = 'Continue'   # don't bail on first failed cleanup step
 
 # ── Resolve paths ───────────────────────────────────────────────────────────
-$RepoRoot  = Split-Path -Parent $PSScriptRoot
+# This script lives at <repo>/dev/scripts/pgadmin-stop.ps1 — go up two levels.
+$RepoRoot  = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $DeployDir = Join-Path $RepoRoot 'deploy'
 $EnvFile   = Join-Path $DeployDir 'env\local.env'
 

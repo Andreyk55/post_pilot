@@ -4,13 +4,14 @@
 # Closes the stale log tabs opened by start.ps1 (via kill-flag files) and
 # opens fresh ones pointing at the rebuilt containers.
 #
-# Usage (from anywhere):  pwsh -File scripts/restart.ps1
-#                or       ./scripts/restart.ps1   (when run from repo root)
+# Usage (from anywhere):  pwsh -File dev/scripts/restart.ps1
+#                or       ./dev/scripts/restart.ps1   (when run from repo root)
 
 $ErrorActionPreference = 'Stop'
 
 # ── Resolve paths ───────────────────────────────────────────────────────────
-$RepoRoot  = Split-Path -Parent $PSScriptRoot
+# This script lives at <repo>/dev/scripts/restart.ps1 — go up two levels.
+$RepoRoot  = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $DeployDir = Join-Path $RepoRoot 'deploy'
 $RunDir    = Join-Path $RepoRoot '.run'
 

@@ -7,15 +7,16 @@
 #      and restarts api + publisher so they pick it up
 #   4. Frontend (Vite) in a new PowerShell window: npm run dev
 #
-# Usage (from anywhere):  pwsh -File scripts/start.ps1
-#                or       ./scripts/start.ps1   (when run from repo root)
+# Usage (from anywhere):  pwsh -File dev/scripts/start.ps1
+#                or       ./dev/scripts/start.ps1   (when run from repo root)
 #
-# Stop everything with:   ./scripts/stop.ps1
+# Stop everything with:   ./dev/scripts/stop.ps1
 
 $ErrorActionPreference = 'Stop'
 
 # ── Resolve paths ───────────────────────────────────────────────────────────
-$RepoRoot   = Split-Path -Parent $PSScriptRoot
+# This script lives at <repo>/dev/scripts/start.ps1 — go up two levels.
+$RepoRoot   = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $DeployDir  = Join-Path $RepoRoot 'deploy'
 $EnvFile    = Join-Path $DeployDir 'env\local.env'
 $FrontendDir = Join-Path $RepoRoot 'frontend'
@@ -284,5 +285,5 @@ Write-Host '    • post_pilot frontend    (Vite dev server)'   -ForegroundColor
 Write-Host '    • post_pilot api logs    (docker logs -f api)' -ForegroundColor DarkGray
 Write-Host '    • post_pilot publisher logs (docker logs -f publisher)' -ForegroundColor DarkGray
 Write-Host ''
-Write-Host '  Stop everything with:  ./scripts/stop.ps1' -ForegroundColor DarkGray
+Write-Host '  Stop everything with:  ./dev/scripts/stop.ps1' -ForegroundColor DarkGray
 Write-Host ''

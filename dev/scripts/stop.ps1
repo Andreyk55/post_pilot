@@ -10,8 +10,8 @@
 # Pass -PurgeData to also remove the named volumes (destructive — full reset).
 #
 # Usage:
-#   ./scripts/stop.ps1
-#   ./scripts/stop.ps1 -PurgeData
+#   ./dev/scripts/stop.ps1
+#   ./dev/scripts/stop.ps1 -PurgeData
 
 param(
     [switch]$PurgeData
@@ -20,7 +20,8 @@ param(
 $ErrorActionPreference = 'Continue'   # don't bail on first failed cleanup step
 
 # ── Resolve paths ───────────────────────────────────────────────────────────
-$RepoRoot   = Split-Path -Parent $PSScriptRoot
+# This script lives at <repo>/dev/scripts/stop.ps1 — go up two levels.
+$RepoRoot   = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $DeployDir  = Join-Path $RepoRoot 'deploy'
 $FrontendDir = Join-Path $RepoRoot 'frontend'
 $RunDir     = Join-Path $RepoRoot '.run'

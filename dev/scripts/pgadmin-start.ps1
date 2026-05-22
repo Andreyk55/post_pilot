@@ -7,15 +7,16 @@
 # Credentials and port come from deploy/env/local.env:
 #   PGADMIN_DEFAULT_EMAIL, PGADMIN_DEFAULT_PASSWORD, PGADMIN_PORT
 #
-# Usage (from anywhere):  pwsh -File scripts/pgadmin-start.ps1
-#                 or      ./scripts/pgadmin-start.ps1   (when run from repo root)
+# Usage (from anywhere):  pwsh -File dev/scripts/pgadmin-start.ps1
+#                 or      ./dev/scripts/pgadmin-start.ps1   (when run from repo root)
 #
-# Stop with:              ./scripts/pgadmin-stop.ps1
+# Stop with:              ./dev/scripts/pgadmin-stop.ps1
 
 $ErrorActionPreference = 'Stop'
 
 # ── Resolve paths ───────────────────────────────────────────────────────────
-$RepoRoot  = Split-Path -Parent $PSScriptRoot
+# This script lives at <repo>/dev/scripts/pgadmin-start.ps1 — go up two levels.
+$RepoRoot  = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $DeployDir = Join-Path $RepoRoot 'deploy'
 $EnvFile   = Join-Path $DeployDir 'env\local.env'
 
@@ -78,5 +79,5 @@ Write-Host ("  URL       : http://localhost:$pgadminPort")
 Write-Host ("  Email     : $pgadminEmail")
 Write-Host ("  Password  : (see PGADMIN_DEFAULT_PASSWORD in deploy/env/local.env)")
 Write-Host ''
-Write-Host '  Stop with:  ./scripts/pgadmin-stop.ps1' -ForegroundColor DarkGray
+Write-Host '  Stop with:  ./dev/scripts/pgadmin-stop.ps1' -ForegroundColor DarkGray
 Write-Host ''

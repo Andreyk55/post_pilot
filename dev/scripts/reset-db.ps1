@@ -34,4 +34,4 @@ docker volume rm deploy_postgres_data 2>$null
 Ok 'Volume removed (will be recreated empty on next start)'
 
 Step 'Restarting local stack — API will re-run all migrations on startup'
-& (Join-Path $RepoRoot 'scripts/start.ps1')
+& (Join-Path $PSScriptRoot 'start.ps1')
