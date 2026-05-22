@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
 using PostPilot.Api.Extensions;
 using PostPilot.Api.Middleware;
@@ -53,6 +54,21 @@ public class Startup
 
     public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
     {
+        // Honor X-Forwarded-* from the reverse proxy so Request.Scheme/Host
+        // reflect the public origin, not the internal http://api:5122. Must
+        // run before anything that inspects scheme/host.
+        var forwardedHeaderOptions = new ForwardedHeadersOptions
+        {
+            ForwardedHeaders = ForwardedHeaders.XForwardedFor
+                             | ForwardedHeaders.XForwardedProto
+                             | ForwardedHeaders.XForwardedHost,
+        };
+        // Trust any proxy on the compose network — we don't know nginx's
+        // container IP up front and the API is not directly reachable.
+        forwardedHeaderOptions.KnownNetworks.Clear();
+        forwardedHeaderOptions.KnownProxies.Clear();
+        app.UseForwardedHeaders(forwardedHeaderOptions);
+
         // Configure the HTTP request pipeline.
         if (env.IsDevelopment())
         {
@@ -60,7 +76,14 @@ public class Startup
             app.UseSwaggerUI();
         }
 
-        app.UseHttpsRedirection();
+        // HTTPS redirect is controlled by config so plain-HTTP deployments
+        // (e.g. behind an nginx that hasn't been given a cert yet) don't bounce
+        // every request to a non-existent https://. Defaults to ON.
+        var enableHttpsRedirect = Configuration.GetValue<bool?>("App:EnableHttpsRedirect") ?? true;
+        if (enableHttpsRedirect)
+        {
+            app.UseHttpsRedirection();
+        }
 
         // Correlation ID middleware: must run before routing so all logs include the id
         app.UseMiddleware<CorrelationIdMiddleware>();

@@ -1,122 +1,146 @@
-# Deployment Plan
+# VPS Deployment Plan
 
-End-to-end plan for deploying Post Pilot to live servers.
+Deploy the Post Pilot **backend** (api + publisher + database + media storage)
+to a single VPS as Docker containers. The frontend lives separately on Vercel
+and is not covered here.
 
-## 1. Architecture overview
+## 1. Architecture
 
-Post Pilot ships two long-running containers built from a single multi-stage
-[Dockerfile](../deploy/Dockerfile):
+Five containers on one host, on a single docker-compose network:
 
-| Container | Stage | Purpose | Exposed port |
+| Container | Image | Port (host) | Role |
 |---|---|---|---|
-| `api` | `api` | ASP.NET Core (Kestrel) — controllers, runs EF Core migrations on startup | `5122` |
-| `publisher` | `publisher` | Background `BackgroundService` that polls every 30s and publishes due posts to Meta | none |
+| `nginx` | `nginx:1.27-alpine` | 80 (and 443 later) | Reverse proxy in front of everything |
+| `api` | built from `deploy/Dockerfile` | — | ASP.NET Core, runs EF migrations on startup |
+| `publisher` | built from `deploy/Dockerfile` | — | Background worker, polls and publishes due posts |
+| `postgres` | `postgres:16` | — | Database. Volume: `postgres_data` |
+| `minio` | `minio/minio` | — | S3-compatible media storage. Volume: `minio_data` |
+| `minio-init` | `minio/mc` | — | One-shot job that creates the bucket |
 
-External dependencies in production:
+Only nginx is published to the public internet. Everything else is reachable
+only across the compose network.
 
-- **Managed PostgreSQL** (e.g. AWS RDS, GCP Cloud SQL, DO Managed DB, Neon, Supabase)
-- **S3-compatible object storage** for media (AWS S3, Cloudflare R2, DO Spaces, Backblaze B2, Wasabi, MinIO)
-- **Public HTTPS endpoint** that Meta can reach to fetch media during publishing
+Public routes (HTTP for now):
 
-The frontend is a static Vite build served separately (CDN / nginx / object storage + CDN).
-
-## 2. Run modes
-
-The backend supports two run modes selected via `App__RunMode` (legacy: `APP_RUN_MODE`):
-
-| Mode | Storage | Database | URLs |
-|---|---|---|---|
-| `local` | Local disk or local MinIO | Local Docker Postgres | `localhost` / ngrok tunnel |
-| `server` | Managed S3-compatible bucket | Managed PostgreSQL | Production HTTPS domain |
-
-Validation at startup ([backend/Settings/Validators/AppOptionsValidator.cs](../backend/Settings/Validators/AppOptionsValidator.cs)) rejects anything other than `local` or `server`.
-
-## 3. Required environment variables
-
-Production env file: [deploy/env/server.env](../deploy/env/server.env).
-
-| Variable | Purpose |
+| Path | Routes to |
 |---|---|
-| `ASPNETCORE_ENVIRONMENT` | `Production` |
-| `APP_RUN_MODE` | `server` |
-| `API_PORT` | Host port to expose (default `5122`) |
-| `ASPNETCORE_URLS` | `http://0.0.0.0:5122` |
-| `PUBLIC_URL` | Public HTTPS URL of the API (used by Meta to fetch media) |
-| `META_APP_ID` / `META_APP_SECRET` | Facebook/Instagram OAuth app credentials |
-| `GEMINI_API_KEY` | Google Gemini AI key |
-| `GEMINI_MODEL` / `GEMINI_VISION_MODEL` | Gemini model selection |
-| `ConnectionStrings__DefaultConnection` | Managed Postgres connection string (SSL required) |
-| `MediaStorage__Provider` | `s3-compatible` |
-| `MediaStorage__Bucket` | Bucket name |
-| `MediaStorage__InternalEndpoint` | API/Worker → storage endpoint |
-| `MediaStorage__PublicUploadEndpoint` | Endpoint signed into presigned URLs delivered to the browser |
-| `MediaStorage__AccessKey` / `MediaStorage__SecretKey` | Storage credentials |
-| `MediaStorage__UseSSL` | `true` in production |
-| `MediaStorage__PresignedUploadExpirationMinutes` | Default `15` |
+| `/` | `api:5122` (controllers, Swagger) |
+| `/storage/` | `minio:9000` (S3 API — used by browser presigned uploads) |
+| `/storage-console/` | `minio:9001` (MinIO web UI) |
 
-See [ENV.md](../ENV.md) for the full reference.
+## 2. Files in this repo
 
-## 4. Pre-deployment checklist
+| File | Purpose |
+|---|---|
+| [deploy/docker-compose.yml](../deploy/docker-compose.yml) | Base `api` + `publisher` services |
+| [deploy/docker-compose.server.db.yml](../deploy/docker-compose.server.db.yml) | Adds postgres + healthcheck-gated `depends_on` |
+| [deploy/docker-compose.server.storage.yml](../deploy/docker-compose.server.storage.yml) | Adds minio + `minio-init` |
+| [deploy/docker-compose.server.proxy.yml](../deploy/docker-compose.server.proxy.yml) | Adds nginx |
+| [deploy/nginx/postpilot.conf](../deploy/nginx/postpilot.conf) | nginx routing config |
+| [deploy/env/server.env](../deploy/env/server.env) | All env vars (fill in before deploy) |
+| [scripts/server-start.sh](../scripts/server-start.sh) | Bring up the whole stack |
+| [scripts/server-stop.sh](../scripts/server-stop.sh) | Take it down (keeps volumes) |
 
-- [ ] All secrets (`*.env`, credentials, `*.local.json`) excluded from the repository (see `.gitignore`)
-- [ ] `deploy/env/server.env` filled in (not committed) — every `REPLACE_ME` replaced
-- [ ] DNS A/AAAA record for the API domain points at the host
-- [ ] TLS certificate provisioned (Let's Encrypt, ACM, Cloudflare, etc.)
-- [ ] Managed Postgres provisioned, network reachable from the API container, SSL enforced
-- [ ] S3-compatible bucket created, IAM/access-key scoped to that bucket
-- [ ] Meta App configured with production redirect URI and `PUBLIC_URL` allowed
-- [ ] Frontend built with the correct `VITE_API_URL` for the deployed API
+## 3. Pre-flight on the VPS
 
-## 5. Build & deploy
+1. Install Docker Engine + the `docker compose` plugin.
+2. Clone the repo (or `scp` it).
+3. Open port 80 (and later 443) in the firewall:
+   ```bash
+   sudo ufw allow 80/tcp
+   ```
+4. Decide on the public hostname:
+   - If you have a domain → point an A record at the VPS IP.
+   - If not → just use the raw IP. Meta OAuth/publishing won't work until
+     you have HTTPS, but the API itself will respond.
 
-### 5.1 Build images
+## 4. Fill in `deploy/env/server.env`
 
-From `deploy/`:
+Every `REPLACE_ME`, `CHANGE_ME_*`, `VPS_PUBLIC_HOST`, and
+`YOUR_VERCEL_DOMAIN` must be replaced. Key fields:
 
-```bash
-docker compose --env-file ./env/server.env -f docker-compose.yml build
-```
+| Variable | What to set |
+|---|---|
+| `App__PublicUrl` | `http://<vps-ip-or-domain>` — Meta uses this to fetch media |
+| `Meta__RedirectUri` | Your Vercel frontend's OAuth callback URL |
+| `META_APP_ID` / `META_APP_SECRET` | From the Meta developer console |
+| `GEMINI_API_KEY` | Google AI Studio key |
+| `POSTGRES_PASSWORD` | Strong password (also update it inside `ConnectionStrings__DefaultConnection`) |
+| `MINIO_ROOT_PASSWORD` | Strong password (also update it inside `MediaStorage__SecretKey`) |
+| `MINIO_API_CORS_ALLOW_ORIGIN` | The exact Vercel origin(s) the frontend uses |
+| `MediaStorage__PublicUploadEndpoint` | `http://<vps-ip-or-domain>/storage` |
 
-### 5.2 Bring up the stack
+`server.env` should NEVER be committed. It's already ignored via the
+`*.env` rule in [.gitignore](../.gitignore).
 
-```bash
-docker compose --env-file ./env/server.env -f docker-compose.yml up -d
-```
+## 5. Start the stack
 
-Containers: `api` (port `5122`), `publisher` (no port). No local Postgres / MinIO — both are managed externally.
-
-### 5.3 Verify
-
-- `GET /swagger` (or any health-check route) returns 200 on the public URL
-- `docker compose logs api` shows `PostPilot started — RunMode=server, PublicUrl=(set), …`
-- `docker compose logs api` shows `Migrations applied successfully.`
-- A test post with media schedules and publishes end-to-end
-
-## 6. Migrations
-
-EF Core migrations run automatically on API startup (see [backend/Program.cs:72-80](../backend/Program.cs#L72-L80)). The publisher does **not** run migrations.
-
-For a major release, dry-run by generating an idempotent SQL script first:
+From the repo root on the VPS:
 
 ```bash
-dotnet ef migrations script --idempotent -p backend/PostPilot.Api.csproj
+chmod +x scripts/server-start.sh scripts/server-stop.sh
+./scripts/server-start.sh
 ```
 
-## 7. Backups & rollback
+The script:
+1. Verifies the env file has no placeholders left
+2. Builds the api + publisher images
+3. Brings everything up
+4. Waits up to 120s for the API to answer `/api/media/constraints`
 
-- **Database:** rely on managed Postgres automated backups + point-in-time recovery
-- **Object storage:** enable versioning on the bucket so accidental deletes/overwrites are recoverable
-- **App rollback:** keep prior image tags and redeploy by pinning `image:` in the compose file
+## 6. Verify
 
-## 8. Observability
+- `curl http://<vps-host>/api/media/constraints` → 200 with a JSON body
+- `docker compose ... logs api` shows `Migrations applied successfully.`
+- `docker compose ... logs publisher` shows the worker polling every 30s
+- `http://<vps-host>/storage-console/` opens the MinIO UI (login with `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD`)
+- Create a post from the Vercel frontend and watch publisher logs
 
-- Container logs go to stdout (single-line, timestamped — see [backend/Program.cs:34-40](../backend/Program.cs#L34-L40))
-- Ship them to the host's log aggregator (CloudWatch, Loki, Datadog, etc.)
-- Toggle EF Core SQL logging at runtime via `Logging__EnableEfSql=true`
+## 7. Updating the deploy
 
-## 9. Security
+```bash
+git pull
+./scripts/server-start.sh   # rebuilds api/publisher and re-applies compose
+```
 
-- All inbound traffic must be HTTPS — terminate TLS at the reverse proxy / load balancer
-- `Gemini__ApiKey` is sent via `x-goog-api-key` header (never in query strings) and not logged
-- `META_APP_SECRET`, DB password, storage secret key — keep only in `server.env` (or a secret manager); never in source
-- Backend secrets must never be exposed to the frontend
+EF Core migrations run on every API startup, so schema changes ship
+automatically with a `docker compose up -d --build`.
+
+## 8. Backups
+
+- **Postgres:** the `postgres_data` named volume holds all DB state. Back it
+  up with `docker exec postpilot-db pg_dump -U postpilot postpilot | gzip > backup.sql.gz`
+  on a cron.
+- **MinIO:** the `minio_data` volume holds uploaded media. Either snapshot the
+  volume directly or `docker run --rm -v minio_data:/data ...` to copy it out.
+
+## 9. Going to HTTPS (when you're ready)
+
+This deploy ships plain HTTP because there's no domain and no certificate yet.
+Mixed-content rules in browsers will prevent the HTTPS Vercel frontend from
+calling this plain-HTTP API, so right now only `curl`/Postman work end-to-end.
+
+To switch to HTTPS:
+
+1. Get a domain and point it at the VPS IP.
+2. On the VPS, install certbot and issue a cert for that domain:
+   ```bash
+   sudo certbot certonly --standalone -d api.yourdomain.com
+   ```
+   Then copy `fullchain.pem` and `privkey.pem` into `deploy/nginx/certs/`.
+3. Uncomment the `server { listen 443 ssl ... }` block in
+   [deploy/nginx/postpilot.conf](../deploy/nginx/postpilot.conf).
+4. In `server.env`:
+   - Flip `App__EnableHttpsRedirect=true`
+   - Change `App__PublicUrl` to `https://api.yourdomain.com`
+   - Change `MediaStorage__PublicUploadEndpoint` to `https://api.yourdomain.com/storage`
+   - Change `MediaStorage__UseSSL=true`
+5. `./scripts/server-start.sh` to restart.
+
+## 10. Frontend (Vercel) configuration
+
+In your Vercel project's environment variables, set the API base URL to
+`http://<vps-host>` (or the HTTPS variant once you have it). The frontend
+makes one CORS request per API call, and presigned upload PUTs go directly
+to `/storage/...` on the same host — both work as long as the Vercel origin
+is in `MINIO_API_CORS_ALLOW_ORIGIN` on the server.

@@ -3,9 +3,13 @@ services:
     image: postgres:16
     container_name: postpilot-db
     env_file:
-      - ${ENV_FILE:-env/local.env}
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - ${ENV_FILE:-env/server.env}
+    # No host port published by default — only the api/publisher containers
+    # talk to Postgres, over the compose network. Uncomment if you need to
+    # reach the DB from the VPS host (e.g. psql, pg_dump) and bind to 127.0.0.1
+    # so it is NOT exposed publicly.
+    # ports:
+    #   - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
@@ -16,17 +20,6 @@ services:
       retries: 10
       start_period: 10s
 
-  pgadmin:
-    image: dpage/pgadmin4
-    container_name: postpilot-pgadmin
-    env_file:
-      - ${ENV_FILE:-env/local.env}
-    ports:
-      - "${PGADMIN_PORT:-5050}:80"
-    restart: unless-stopped
-
-  # Extend api/publisher (defined in docker-compose.yml) so they wait for postgres
-  # to be healthy before starting. Without this they race the DB on cold boot.
   api:
     depends_on:
       postgres:

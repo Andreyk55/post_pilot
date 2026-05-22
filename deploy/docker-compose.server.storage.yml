@@ -1,0 +1,55 @@
+services:
+  minio:
+    image: minio/minio
+    container_name: postpilot-minio
+    command: server /data --console-address ":9001"
+    env_file:
+      - ${ENV_FILE:-env/server.env}
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      # CORS for browser PUT uploads. Must include the Vercel frontend origin
+      # (and any preview deploy origin you actually use). Comma-separated.
+      MINIO_API_CORS_ALLOW_ORIGIN: ${MINIO_API_CORS_ALLOW_ORIGIN}
+    # MinIO is reverse-proxied by nginx on /storage and /storage-console, so we
+    # do NOT publish 9000/9001 to the public internet. Uncomment + bind to
+    # 127.0.0.1 if you want to reach the console directly via SSH tunnel.
+    # ports:
+    #   - "127.0.0.1:9000:9000"
+    #   - "127.0.0.1:9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc
+    depends_on:
+      minio:
+        condition: service_healthy
+    env_file:
+      - ${ENV_FILE:-env/server.env}
+    entrypoint: >
+      sh -c "
+      mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD &&
+      mc mb --ignore-existing local/$$MEDIA_STORAGE_BUCKET &&
+      echo 'bucket ready: '$$MEDIA_STORAGE_BUCKET
+      "
+    restart: "no"
+
+  api:
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+
+  publisher:
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+
+volumes:
+  minio_data:
