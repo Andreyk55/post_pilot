@@ -56,6 +56,8 @@ services:
     depends_on:
       postpilot-postgres:
         condition: service_healthy
+      postpilot-minio-init:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   postpilot-worker:
@@ -71,7 +73,70 @@ services:
         condition: service_healthy
       postpilot-api:
         condition: service_started
+      postpilot-minio-init:
+        condition: service_completed_successfully
     restart: unless-stopped
+
+  # ── Object storage (MinIO, S3-compatible) ────────────────────────────────
+  # Server mode hands presigned PUT URLs to the browser; bytes land here.
+  # S3 signature v4 binds the signature to the host the URL is signed for,
+  # so MINIO_SERVER_URL must match what the browser actually hits — i.e.
+  # the public HTTPS hostname terminated by the host nginx
+  # (prod/nginx/postpilot-media.conf reverse-proxies to 127.0.0.1:9000).
+  postpilot-minio:
+    # Pinned: `latest` could land an incompatible MinIO during a prod pull.
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: postpilot-minio
+    env_file:
+      - /opt/postpilot/server.env
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      # What MinIO advertises in console redirects and signs presigned URLs
+      # against. Must equal the public host the browser reaches it on.
+      MINIO_SERVER_URL: https://media.cloud-ip.cc
+      MINIO_BROWSER_REDIRECT_URL: https://media.cloud-ip.cc
+      # CORS for browser PUTs from the Vercel frontend. Without this the
+      # preflight on the presigned URL fails before the upload starts.
+      MINIO_API_CORS_ALLOW_ORIGIN: "https://post-auto-pilot.vercel.app"
+    command: server /data --console-address ":9001"
+    ports:
+      # S3 API and console BOTH bound to loopback only. The public internet
+      # reaches MinIO only through nginx on media.cloud-ip.cc → 127.0.0.1:9000.
+      # Console (9001) is intentionally NOT proxied; use `ssh -L 9001:127.0.0.1:9001`
+      # to reach it.
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - postpilot-minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  # One-shot bucket bootstrap. Idempotent — `mc mb --ignore-existing` is a
+  # no-op on subsequent runs. API/Worker `depends_on` this with
+  # `service_completed_successfully` so they only start once the bucket
+  # exists.
+  postpilot-minio-init:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    container_name: postpilot-minio-init
+    env_file:
+      - /opt/postpilot/server.env
+    depends_on:
+      postpilot-minio:
+        condition: service_healthy
+    entrypoint: >
+      sh -c "
+      mc alias set local http://postpilot-minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD &&
+      mc mb --ignore-existing local/$$MEDIA_STORAGE_BUCKET &&
+      echo 'bucket ready: '$$MEDIA_STORAGE_BUCKET
+      "
+    restart: "no"
 
 volumes:
   postpilot-postgres-data:
+  postpilot-minio-data:
