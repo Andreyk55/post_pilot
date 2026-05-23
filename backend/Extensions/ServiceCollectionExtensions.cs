@@ -87,6 +87,8 @@ public static class ServiceCollectionExtensions
             .Bind(configuration.GetSection(MediaStorageOptions.SectionName))
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<MediaStorageOptions>, MediaStorageOptionsValidator>();
+        // Cross-validator: reject local-disk in Server mode (silently 404s uploads).
+        services.AddSingleton<IValidateOptions<MediaStorageOptions>, MediaStorageRunModeValidator>();
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<MediaStorageOptions>>().Value);
 
         // ── Feature settings ─────────────────────────────────────────────────
