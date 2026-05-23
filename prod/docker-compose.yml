@@ -94,15 +94,15 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       # What MinIO advertises in console redirects and signs presigned URLs
       # against. Must equal the public host the browser reaches it on.
-      MINIO_SERVER_URL: https://media.cloud-ip.cc
-      MINIO_BROWSER_REDIRECT_URL: https://media.cloud-ip.cc
+      MINIO_SERVER_URL: https://media.post-pilot.cloud-ip.cc
+      MINIO_BROWSER_REDIRECT_URL: https://media.post-pilot.cloud-ip.cc
       # CORS for browser PUTs from the Vercel frontend. Without this the
       # preflight on the presigned URL fails before the upload starts.
       MINIO_API_CORS_ALLOW_ORIGIN: "https://post-auto-pilot.vercel.app"
     command: server /data --console-address ":9001"
     ports:
       # S3 API and console BOTH bound to loopback only. The public internet
-      # reaches MinIO only through nginx on media.cloud-ip.cc → 127.0.0.1:9000.
+      # reaches MinIO only through nginx on media.post-pilot.cloud-ip.cc → 127.0.0.1:9000.
       # Console (9001) is intentionally NOT proxied; use `ssh -L 9001:127.0.0.1:9001`
       # to reach it.
       - "127.0.0.1:9000:9000"
