@@ -114,6 +114,7 @@ try {
         -f docker-compose.yml `
         -f docker-compose.local.db.yml `
         -f docker-compose.local.storage.yml `
+        -f docker-compose.local.depends.yml `
         @downArgs
     if ($LASTEXITCODE -ne 0) { Warn "docker compose down returned exit $LASTEXITCODE" }
     else                     { Ok 'Docker stack stopped' }

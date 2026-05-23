@@ -266,7 +266,10 @@ All other config must use `__` notation (`App__PublicUrl`, `Gemini__Model`, `Gem
 
 - `minio`: `minio/minio` image, ports `9000` (API) and `9001` (console), persistent named volume `minio_data`, healthcheck on `/minio/health/live`. CORS allow-origin is set to `http://localhost:5173,http://localhost:5122` so the browser can `PUT` directly.
 - `minio-init`: one-shot `minio/mc` container that runs `mc mb --ignore-existing local/postpilot-media` and exits. `depends_on: minio (service_healthy)`.
-- The overlay also adds `depends_on: minio-init (service_completed_successfully)` to `api` and `publisher`, so they only start after the bucket exists.
+
+### docker-compose.local.depends.yml — service start ordering
+
+- Adds `depends_on` overrides to `api` and `publisher`: wait for `postgres` healthy and `minio-init` completed; `publisher` additionally waits for `api` to start. Kept in its own overlay so `local.db.yml` and `local.storage.yml` can be loaded standalone (e.g. `pgadmin-start.ps1`) without referencing api/publisher.
 
 ---
 

@@ -25,19 +25,8 @@ services:
       - "${PGADMIN_PORT:-5050}:80"
     restart: unless-stopped
 
-  # Extend api/publisher (defined in docker-compose.yml) so they wait for postgres
-  # to be healthy before starting. Without this they race the DB on cold boot.
-  api:
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  publisher:
-    depends_on:
-      postgres:
-        condition: service_healthy
-      api:
-        condition: service_started
+# api/publisher depends_on overrides live in docker-compose.local.depends.yml
+# so this file can be loaded on its own (e.g. for pgadmin-only startup).
 
 volumes:
   postgres_data:

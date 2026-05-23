@@ -23,6 +23,7 @@ try {
         -f docker-compose.yml `
         -f docker-compose.local.db.yml `
         -f docker-compose.local.storage.yml `
+        -f docker-compose.local.depends.yml `
         down
 } finally { Pop-Location }
 Ok 'Stack stopped'

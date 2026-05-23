@@ -38,18 +38,8 @@ services:
       "
     restart: "no"
 
-  # Overrides into the base compose: ensure the API and the Worker only start
-  # after the bucket exists. Kept in the storage overlay so the base file is
-  # not coupled to the storage stack.
-  api:
-    depends_on:
-      minio-init:
-        condition: service_completed_successfully
-
-  publisher:
-    depends_on:
-      minio-init:
-        condition: service_completed_successfully
+# api/publisher depends_on overrides (waiting for minio-init) live in
+# docker-compose.local.depends.yml so this file can be loaded on its own.
 
 volumes:
   minio_data:

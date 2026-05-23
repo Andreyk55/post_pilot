@@ -9,8 +9,9 @@ reach the local API for OAuth + media fetch) + the Vite frontend.
 | File | Purpose |
 |---|---|
 | [docker-compose.yml](docker-compose.yml) | Base local stack: builds `api` + `publisher` from source via [../build/Dockerfile](../build/Dockerfile). |
-| [docker-compose.local.db.yml](docker-compose.local.db.yml) | Overlay: Postgres + pgAdmin, healthcheck-gated `depends_on`. |
+| [docker-compose.local.db.yml](docker-compose.local.db.yml) | Overlay: Postgres + pgAdmin. |
 | [docker-compose.local.storage.yml](docker-compose.local.storage.yml) | Overlay: MinIO + one-shot bucket init. |
+| [docker-compose.local.depends.yml](docker-compose.local.depends.yml) | Overlay: `api`/`publisher` `depends_on` overrides (wait for postgres healthy + minio-init complete). Load alongside the base + db + storage files when starting api/publisher. |
 | [local.env.example](local.env.example) | Template for `dev/local.env`. Copy + fill in Meta/Gemini credentials. |
 | [scripts/start.ps1](scripts/start.ps1) | Full local startup — Docker stack, ngrok, App__PublicUrl patch, frontend, log tabs. |
 | [scripts/stop.ps1](scripts/stop.ps1) | Stop everything `start.ps1` brought up. Pass `-PurgeData` to also wipe volumes. |

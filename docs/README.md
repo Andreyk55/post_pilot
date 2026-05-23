@@ -19,6 +19,7 @@ docker compose --env-file ./local.env `
   -f docker-compose.yml `
   -f docker-compose.local.db.yml `
   -f docker-compose.local.storage.yml `
+  -f docker-compose.local.depends.yml `
   up -d --build
 ```
 
@@ -29,6 +30,7 @@ docker compose --env-file ./local.env ^
   -f docker-compose.yml ^
   -f docker-compose.local.db.yml ^
   -f docker-compose.local.storage.yml ^
+  -f docker-compose.local.depends.yml ^
   up -d --build
 ```
 
@@ -119,7 +121,8 @@ post_pilot/
 ├── dev/                                    # local development stack
 │   ├── docker-compose.yml                  # api + publisher (builds from source)
 │   ├── docker-compose.local.db.yml         # postgres + pgadmin
-│   ├── docker-compose.local.storage.yml    # minio + minio-init (+ depends_on overrides)
+│   ├── docker-compose.local.storage.yml    # minio + minio-init
+│   ├── docker-compose.local.depends.yml    # api/publisher depends_on overrides
 │   ├── local.env                           # local env file (MediaStorage__*, etc.) — gitignored
 │   └── scripts/                            # start.ps1, stop.ps1, restart.ps1, reset-db.ps1, pgadmin-*.ps1
 ├── prod/                                   # VPS production stack
@@ -139,6 +142,7 @@ docker compose --env-file ./local.env `
   -f docker-compose.yml `
   -f docker-compose.local.db.yml `
   -f docker-compose.local.storage.yml `
+  -f docker-compose.local.depends.yml `
   down
 
 # Stop with data cleanup (removes Postgres + MinIO data)
@@ -146,6 +150,7 @@ docker compose --env-file ./local.env `
   -f docker-compose.yml `
   -f docker-compose.local.db.yml `
   -f docker-compose.local.storage.yml `
+  -f docker-compose.local.depends.yml `
   down -v
 ```
 

@@ -1,0 +1,23 @@
+services:
+  # depends_on overrides for the api + publisher services defined in
+  # docker-compose.yml. Kept in a dedicated overlay so each backing-service
+  # overlay (db, storage) can be brought up on its own without dragging in
+  # references to api/publisher that have no image/build in isolation.
+  #
+  # Always load this file alongside docker-compose.yml + the relevant overlays
+  # when starting api/publisher.
+  api:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  publisher:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully

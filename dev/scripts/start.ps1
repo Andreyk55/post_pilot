@@ -53,6 +53,7 @@ try {
         -f docker-compose.yml `
         -f docker-compose.local.db.yml `
         -f docker-compose.local.storage.yml `
+        -f docker-compose.local.depends.yml `
         up -d --build
     if ($LASTEXITCODE -ne 0) { throw "docker compose up failed (exit $LASTEXITCODE)" }
 } finally {
@@ -174,6 +175,7 @@ try {
         -f docker-compose.yml `
         -f docker-compose.local.db.yml `
         -f docker-compose.local.storage.yml `
+        -f docker-compose.local.depends.yml `
         up -d api publisher
     if ($LASTEXITCODE -ne 0) { throw "docker compose restart failed (exit $LASTEXITCODE)" }
 } finally {
