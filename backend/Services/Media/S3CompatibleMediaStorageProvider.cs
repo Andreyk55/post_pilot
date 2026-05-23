@@ -25,7 +25,8 @@ public class S3CompatibleMediaStorageProvider : IMediaStorageProvider, IDisposab
     private readonly AmazonS3Client _internalClient;
     private readonly AmazonS3Client _publicClient;
     private readonly string _bucket;
-    private readonly Protocol _signedUrlProtocol;
+    private readonly Uri _publicEndpoint;
+    private readonly Protocol _publicSignedUrlProtocol;
     private readonly ILogger<S3CompatibleMediaStorageProvider> _logger;
     private bool _disposed;
 
@@ -36,10 +37,22 @@ public class S3CompatibleMediaStorageProvider : IMediaStorageProvider, IDisposab
         _logger = logger;
         _bucket = options.Bucket;
 
-        // GetPreSignedURL ignores ServiceURL's scheme and defaults to HTTPS unless the
-        // request explicitly sets Protocol. For plain-HTTP MinIO local dev we need
-        // Protocol.HTTP — and we derive it from UseSSL so prod stays on HTTPS.
-        _signedUrlProtocol = options.UseSSL ? Protocol.HTTPS : Protocol.HTTP;
+        // The two endpoints have INDEPENDENT schemes: InternalEndpoint is typically
+        // http://postpilot-minio:9000 (container-to-container), while PublicUploadEndpoint
+        // is https://media.<host> (browser-facing, behind TLS-terminating nginx).
+        // A single UseSSL flag cannot drive both clients — derive each scheme from
+        // its own endpoint URI.
+        var internalUri = new Uri(options.InternalEndpoint);
+        _publicEndpoint = new Uri(options.PublicUploadEndpoint);
+
+        var internalUseHttp = internalUri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase);
+        var publicUseHttp = _publicEndpoint.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase);
+
+        // GetPreSignedURL ignores ServiceURL's scheme and defaults to HTTPS unless
+        // Protocol is set explicitly. Match the public endpoint's scheme so the URL
+        // we hand the browser starts with the right scheme on the first try; we also
+        // post-process below to guarantee scheme/host/port regardless of SDK quirks.
+        _publicSignedUrlProtocol = publicUseHttp ? Protocol.HTTP : Protocol.HTTPS;
 
         var credentials = new Amazon.Runtime.BasicAWSCredentials(options.AccessKey, options.SecretKey);
 
@@ -47,47 +60,71 @@ public class S3CompatibleMediaStorageProvider : IMediaStorageProvider, IDisposab
         {
             ServiceURL = options.InternalEndpoint,
             ForcePathStyle = true,
-            UseHttp = !options.UseSSL,
+            UseHttp = internalUseHttp,
         });
 
         _publicClient = new AmazonS3Client(credentials, new AmazonS3Config
         {
             ServiceURL = options.PublicUploadEndpoint,
             ForcePathStyle = true,
-            UseHttp = !options.UseSSL,
+            UseHttp = publicUseHttp,
         });
 
         _logger.LogInformation(
-            "S3CompatibleMediaStorageProvider initialized. Bucket={Bucket} Internal={Internal} Public={Public}",
-            _bucket, options.InternalEndpoint, options.PublicUploadEndpoint);
+            "S3CompatibleMediaStorageProvider initialized. Provider={Provider} Bucket={Bucket} Internal={Internal} Public={Public} UseSSL={UseSSL}",
+            options.Provider, _bucket, options.InternalEndpoint, options.PublicUploadEndpoint, options.UseSSL);
+    }
+
+    /// <summary>
+    /// Forces the scheme, host, and port of <paramref name="signedUrl"/> to match
+    /// <see cref="_publicEndpoint"/>. S3 SigV4 signs the Host header (and the path/query),
+    /// but NOT the URL scheme — so swapping http↔https here does not invalidate the
+    /// signature. We do this because:
+    ///   1. The AWS SDK has historically defaulted the scheme inconsistently across
+    ///      versions when ServiceURL+Protocol+UseHttp interact.
+    ///   2. The browser-facing URL must always start with PublicUploadEndpoint exactly
+    ///      (scheme/host/port), regardless of how the SDK chose to render it.
+    /// </summary>
+    private string RewriteToPublicEndpoint(string signedUrl)
+    {
+        var signed = new UriBuilder(signedUrl)
+        {
+            Scheme = _publicEndpoint.Scheme,
+            Host = _publicEndpoint.Host,
+            Port = _publicEndpoint.IsDefaultPort ? -1 : _publicEndpoint.Port,
+        };
+        return signed.Uri.ToString();
     }
 
     public Task<string> CreateUploadUrlAsync(string storageKey, string contentType, TimeSpan expires, CancellationToken cancellationToken = default)
     {
-        var url = _publicClient.GetPreSignedURL(new GetPreSignedUrlRequest
+        var signed = _publicClient.GetPreSignedURL(new GetPreSignedUrlRequest
         {
             BucketName = _bucket,
             Key = storageKey,
             Verb = HttpVerb.PUT,
             Expires = DateTime.UtcNow.Add(expires),
             ContentType = contentType,
-            Protocol = _signedUrlProtocol,
+            Protocol = _publicSignedUrlProtocol,
         });
-        _logger.LogInformation("Generated presigned PUT URL for key {Key} (expires in {Expires})", storageKey, expires);
+        var url = RewriteToPublicEndpoint(signed);
+        _logger.LogInformation(
+            "Generated presigned PUT URL for key {Key} (expires in {Expires}, scheme={Scheme})",
+            storageKey, expires, _publicEndpoint.Scheme);
         return Task.FromResult(url);
     }
 
     public Task<string> CreateDownloadUrlAsync(string storageKey, TimeSpan expires, CancellationToken cancellationToken = default)
     {
-        var url = _publicClient.GetPreSignedURL(new GetPreSignedUrlRequest
+        var signed = _publicClient.GetPreSignedURL(new GetPreSignedUrlRequest
         {
             BucketName = _bucket,
             Key = storageKey,
             Verb = HttpVerb.GET,
             Expires = DateTime.UtcNow.Add(expires),
-            Protocol = _signedUrlProtocol,
+            Protocol = _publicSignedUrlProtocol,
         });
-        return Task.FromResult(url);
+        return Task.FromResult(RewriteToPublicEndpoint(signed));
     }
 
     public async Task<Stream?> OpenReadAsync(string storageKey, CancellationToken cancellationToken = default)

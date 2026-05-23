@@ -58,12 +58,23 @@ var app = builder.Build();
     var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("PostPilot.Startup");
     var appOpts = app.Services.GetRequiredService<IOptions<AppOptions>>().Value;
     var geminiOpts = app.Services.GetRequiredService<IOptions<GeminiSettings>>().Value;
+    var storageOpts = app.Services.GetRequiredService<IOptions<MediaStorageOptions>>().Value;
     logger.LogInformation(
         "PostPilot started — RunMode={RunMode}, PublicUrl={PublicUrl}, GeminiModel={Model}, GeminiVisionModel={VisionModel}",
         appOpts.RunMode,
         string.IsNullOrEmpty(appOpts.PublicUrl) ? "(none)" : "(set)",
         geminiOpts.Model,
         geminiOpts.VisionModel);
+    // Log media storage wiring (no secrets — AccessKey/SecretKey are intentionally omitted).
+    logger.LogInformation(
+        "MediaStorage — Provider={Provider}, Bucket={Bucket}, InternalEndpoint={Internal}, PublicUploadEndpoint={Public}, UseSSL={UseSSL}, AccessKeySet={AccessKeySet}, SecretKeySet={SecretKeySet}",
+        storageOpts.Provider,
+        string.IsNullOrEmpty(storageOpts.Bucket) ? "(none)" : storageOpts.Bucket,
+        string.IsNullOrEmpty(storageOpts.InternalEndpoint) ? "(none)" : storageOpts.InternalEndpoint,
+        string.IsNullOrEmpty(storageOpts.PublicUploadEndpoint) ? "(none)" : storageOpts.PublicUploadEndpoint,
+        storageOpts.UseSSL,
+        !string.IsNullOrEmpty(storageOpts.AccessKey),
+        !string.IsNullOrEmpty(storageOpts.SecretKey));
 }
 
 // Configure the middleware pipeline
