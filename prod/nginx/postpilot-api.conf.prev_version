@@ -45,15 +45,6 @@ server {
     # The Vercel frontend may upload media; bump from nginx's 1m default.
     client_max_body_size 100m;
 
-    # Block common internet scanner/bot probes before they reach ASP.NET
-    location ~* (^|/)(\.env|\.env\..*|\.git|\.svn|\.hg|composer\.json|composer\.lock|package-lock\.json|yarn\.lock|Dockerfile|docker-compose\.ya?ml|appsettings.*\.json)$ {
-        return 404;
-    }
-
-    location ~* (^|/)(vendor|phpunit|wp-admin|wp-login\.php|wordpress|phpmyadmin|drupal|laravel|yii|zend|backup|panel|cms|crm)(/|$) {
-          return 404;
-    }
-
     # Keep upstream connections alive — the API runs migrations on cold
     # start, so the first request after a deploy can take a few seconds.
     proxy_read_timeout    120s;
@@ -73,8 +64,5 @@ server {
         proxy_set_header X-Forwarded-Host  $host;
 
         proxy_http_version 1.1;
-
-        limit_req zone=postpilot_api_per_ip burst=30 nodelay;
-        limit_req_status 429;
     }
 }
