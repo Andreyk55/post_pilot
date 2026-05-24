@@ -69,7 +69,6 @@ export function PasswordGate({ children }: PasswordGateProps) {
     return (
       <div className="private-gate">
         <div className="private-gate__card">
-          <h1 className="private-gate__title">PostPilot</h1>
           <p className="private-gate__message">
             Cannot reach the server. Check your connection and refresh.
           </p>
@@ -81,7 +80,6 @@ export function PasswordGate({ children }: PasswordGateProps) {
   return (
     <div className="private-gate">
       <form className="private-gate__card" onSubmit={onSubmit}>
-        <h1 className="private-gate__title">PostPilot</h1>
         <p className="private-gate__message">This app is private. Enter the access password.</p>
         <input
           type="password"
