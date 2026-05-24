@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using PostPilot.Api.Extensions;
 using PostPilot.Api.Middleware;
 using PostPilot.Api.Services.Ai;
+using PostPilot.Api.Services.PrivateAccess;
 using PostPilot.Api.Settings;
 using PostPilot.Api.Settings.Validators;
 
@@ -40,10 +41,17 @@ public class Startup
         // ── AI services (API-only) ────────────────────────────────────────────
         ConfigureAiServices(services, Configuration);
 
+        // ── Private-access gate (temporary single-password protection) ───────
+        services.AddOptions<PrivateAccessOptions>()
+            .Bind(Configuration.GetSection(PrivateAccessOptions.SectionName));
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<PrivateAccessOptions>>().Value);
+        services.AddSingleton<IPrivateAccessTokenService, PrivateAccessTokenService>();
+
         // ── CORS ─────────────────────────────────────────────────────────────
         // Localhost dev origins are always allowed; production origins come
         // from Cors:AllowedOrigins (set via Cors__AllowedOrigins__0, __1, ...
-        // in server.env). Never AllowAnyOrigin in production.
+        // in server.env). Never AllowAnyOrigin in production. AllowCredentials
+        // is required because the private-access cookie is sent cross-site.
         var allowedOrigins = Configuration
             .GetSection("Cors:AllowedOrigins")
             .Get<string[]>() ?? Array.Empty<string>();
@@ -56,7 +64,8 @@ public class Startup
                           origin.StartsWith("http://localhost:") ||
                           Array.IndexOf(allowedOrigins, origin) >= 0)
                       .AllowAnyHeader()
-                      .AllowAnyMethod();
+                      .AllowAnyMethod()
+                      .AllowCredentials();
             });
         });
     }
@@ -97,6 +106,10 @@ public class Startup
         // Correlation ID middleware: must run before routing so all logs include the id
         app.UseMiddleware<CorrelationIdMiddleware>();
         app.UseCors("AllowFrontend");
+        // Private-access gate. Runs after CORS so preflight responses still
+        // carry the right headers; runs before routing/auth so blocked
+        // requests never reach controllers or hit the DB.
+        app.UseMiddleware<PrivateAccessMiddleware>();
         app.UseRouting();
         app.UseEndpoints(endpoints =>
         {

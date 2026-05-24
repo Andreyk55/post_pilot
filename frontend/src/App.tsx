@@ -8,6 +8,7 @@ import { ConnectedAccountsPage } from './pages/ConnectedAccountsPage'
 import { AssetsPage } from './pages/AssetsPage'
 import { PlaceholderPage } from './pages/PlaceholderPage'
 import { MetaOAuthCallback } from './pages/MetaOAuthCallback'
+import { PasswordGate } from './components/PasswordGate'
 import './App.css'
 
 function MainApp() {
@@ -46,12 +47,14 @@ function MainApp() {
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/oauth/meta/callback" element={<MetaOAuthCallback />} />
-        <Route path="/*" element={<MainApp />} />
-      </Routes>
-    </BrowserRouter>
+    <PasswordGate>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/oauth/meta/callback" element={<MetaOAuthCallback />} />
+          <Route path="/*" element={<MainApp />} />
+        </Routes>
+      </BrowserRouter>
+    </PasswordGate>
   )
 }
 
