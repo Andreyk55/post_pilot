@@ -15,7 +15,8 @@
 # Usage on the VPS:
 #   sudo mkdir -p /opt/postpilot
 #   # copy this compose file to /opt/postpilot/prod/docker-compose.yml
-#   # copy server.env.example to /opt/postpilot/server.env, then fill it in
+#   # copy either server.local.env.example or server.supabase.env.example
+#   # to /opt/postpilot/server.env, then fill it in
 #   cd /opt/postpilot
 #   docker compose -f prod/docker-compose.yml pull
 #   docker compose -f prod/docker-compose.yml up -d
@@ -26,9 +27,16 @@
 # ────────────────────────────────────────────────────────────────────────────
 
 services:
+  # Local Docker Postgres — only runs under the `localdb` compose profile.
+  # Default deployment uses Supabase (see prod/server.supabase.env.example), in
+  # which case this container is not started. To run with local Postgres
+  # instead, start the stack with `--profile localdb` AND set
+  # ConnectionStrings__DefaultConnection in server.env to point at
+  # Host=postpilot-postgres.
   postpilot-postgres:
     image: postgres:16
     container_name: postpilot-postgres
+    profiles: ["localdb"]
     # No `ports:` block on purpose — Postgres is reachable only over the
     # compose network. If you need psql/pg_dump from the VPS shell, exec
     # into the container or bind to 127.0.0.1 here (never 0.0.0.0).
@@ -53,9 +61,10 @@ services:
     # over 127.0.0.1; the public internet cannot reach 5122 directly.
     ports:
       - "127.0.0.1:5122:5122"
+    # No `depends_on: postpilot-postgres` — the DB might be Supabase (out
+    # of compose) instead of the local container. If you use --profile localdb,
+    # the API will still wait on its own connect+migrate retries on startup.
     depends_on:
-      postpilot-postgres:
-        condition: service_healthy
       postpilot-minio-init:
         condition: service_completed_successfully
     restart: unless-stopped
@@ -69,8 +78,6 @@ services:
     # run EF Core migrations; the API container is the single migrator
     # (see backend/Program.cs vs backend/publisher/Program.cs).
     depends_on:
-      postpilot-postgres:
-        condition: service_healthy
       postpilot-api:
         condition: service_started
       postpilot-minio-init:

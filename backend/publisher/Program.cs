@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Console;
+using PostPilot.Api.Data;
 using PostPilot.Api.Extensions;
 using PostPilot.Api.Services.Scheduling;
 using PostPilot.Api.Settings;
@@ -62,5 +63,9 @@ var startupLogger = host.Services.GetRequiredService<ILoggerFactory>()
 
 startupLogger.LogInformation(
     "PostPilot.Publisher started — publishing loop is active in this container only");
+
+DatabaseStartup.LogDatabaseInfo(
+    host.Services.GetRequiredService<IConfiguration>(),
+    startupLogger);
 
 await host.RunAsync();

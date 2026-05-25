@@ -1,9 +1,7 @@
 using Microsoft.Extensions.Logging.Console;
 using Microsoft.Extensions.Options;
-using Microsoft.EntityFrameworkCore;
 using PostPilot.Api;
 using PostPilot.Api.Data;
-using PostPilot.Api.Middleware;
 using PostPilot.Api.Services.Ai;
 using PostPilot.Api.Settings;
 
@@ -65,6 +63,7 @@ var app = builder.Build();
         string.IsNullOrEmpty(appOpts.PublicUrl) ? "(none)" : "(set)",
         geminiOpts.Model,
         geminiOpts.VisionModel);
+    DatabaseStartup.LogDatabaseInfo(builder.Configuration, logger);
     // Log media storage wiring (no secrets — AccessKey/SecretKey are intentionally omitted).
     logger.LogInformation(
         "MediaStorage — Provider={Provider}, Bucket={Bucket}, InternalEndpoint={Internal}, PublicUploadEndpoint={Public}, UseSSL={UseSSL}, AccessKeySet={AccessKeySet}, SecretKeySet={SecretKeySet}",
@@ -81,13 +80,6 @@ var app = builder.Build();
 startup.Configure(app, app.Environment);
 
 // ── Run EF Core migrations (API only — Worker does NOT run migrations) ────
-{
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    var migrLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("PostPilot.Migrations");
-    migrLogger.LogInformation("Applying pending EF Core migrations...");
-    await db.Database.MigrateAsync();
-    migrLogger.LogInformation("Migrations applied successfully.");
-}
+await DatabaseStartup.RunMigrationsAsync(app.Services);
 
 app.Run();

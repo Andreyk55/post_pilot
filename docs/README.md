@@ -127,7 +127,8 @@ post_pilot/
 │   └── scripts/                            # start.ps1, stop.ps1, restart.ps1, reset-db.ps1, pgadmin-*.ps1
 ├── prod/                                   # VPS production stack
 │   ├── docker-compose.yml                  # pulls images from GHCR
-│   ├── server.env.example                  # template for /opt/postpilot/server.env
+│   ├── server.local.env.example            # template for local-Postgres mode
+│   ├── server.supabase.env.example         # template for Supabase mode
 │   ├── nginx/postpilot-api.conf            # host nginx config template
 │   └── scripts/                            # deploy.sh, check-prod.sh
 └── docs/

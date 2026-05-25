@@ -341,7 +341,7 @@ All other config must use `__` notation (`App__PublicUrl`, `Gemini__Model`, `Gem
 
 ### Immediate (security / correctness)
 
-- Rotate credentials from `dev/local.env`; replace with a redacted template (like `prod/server.env.example`); ensure the file is gitignored
+- Rotate credentials from `dev/local.env`; replace with a redacted template (like `prod/server.local.env.example` / `prod/server.supabase.env.example`); ensure the file is gitignored
 - Fix `server.env`: rename `PUBLIC_URL` → `App__PublicUrl` so ASP.NET Core picks it up
 - Fix `GEMINI_MODEL` / `GEMINI_VISION_MODEL` in both env files: rename to `Gemini__Model` / `Gemini__VisionModel`
 - Add a named volume for `/app/uploads` to `docker-compose.yml`

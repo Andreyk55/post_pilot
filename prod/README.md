@@ -10,8 +10,9 @@ For the full step-by-step runbook see [docs/deployment-vps.md](../docs/deploymen
 
 | File | Purpose |
 |---|---|
-| [docker-compose.yml](docker-compose.yml) | 3-service stack: `postpilot-api`, `postpilot-worker`, `postpilot-postgres`. Pulls images from GHCR. |
-| [server.env.example](server.env.example) | Safe template for `/opt/postpilot/server.env`. Real secrets live ONLY on the VPS, never in this repo. |
+| [docker-compose.yml](docker-compose.yml) | Stack: `postpilot-api`, `postpilot-worker`, `postpilot-minio`, plus `postpilot-postgres` under the `localdb` compose profile. Pulls images from GHCR. |
+| [server.local.env.example](server.local.env.example) | Template for local-Postgres mode. Copy to `/opt/postpilot/server.env` and start with `--profile localdb`. |
+| [server.supabase.env.example](server.supabase.env.example) | Template for Supabase mode. Copy to `/opt/postpilot/server.env` and start without the profile flag. |
 | [nginx/postpilot-api.conf](nginx/postpilot-api.conf) | Host nginx config: TLS termination + reverse proxy to `127.0.0.1:5122`. |
 | [scripts/deploy.sh](scripts/deploy.sh) | `pull` + `up -d` + `ps`. Run on the VPS by GitHub Actions. |
 | [scripts/check-prod.sh](scripts/check-prod.sh) | Smoke test: container status, `/health` (local + public), port bindings. |
@@ -47,8 +48,12 @@ sudo chown $USER:$USER /opt/postpilot
 # 3. Copy this folder from your laptop (or clone the repo and symlink)
 scp -r prod vps:/opt/postpilot/
 
-# 4. Create the real secrets file from the template
-cp /opt/postpilot/prod/server.env.example /opt/postpilot/server.env
+# 4. Create the real secrets file from one of the two templates
+# Pick ONE depending on which DB you want (see docs/deployment-vps.md §3):
+cp /opt/postpilot/prod/server.local.env.example    /opt/postpilot/server.env   # local Docker Postgres
+# OR
+cp /opt/postpilot/prod/server.supabase.env.example /opt/postpilot/server.env   # Supabase
+
 chmod 600 /opt/postpilot/server.env
 nano /opt/postpilot/server.env    # replace every CHANGE_ME
 

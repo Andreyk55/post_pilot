@@ -39,8 +39,9 @@ Postgres has no host port at all. Run `psql` via
 
 ```
 prod/                                ← committed
-├── docker-compose.yml               ← 3-service stack, pulls GHCR images
-├── server.env.example               ← safe template
+├── docker-compose.yml               ← service stack, pulls GHCR images
+├── server.local.env.example         ← template for local Postgres mode
+├── server.supabase.env.example      ← template for Supabase mode
 ├── nginx/postpilot-api.conf         ← host nginx config template
 ├── scripts/deploy.sh                ← pull + up -d + ps
 ├── scripts/check-prod.sh            ← smoke check
@@ -93,24 +94,59 @@ scp -r prod vps:/opt/postpilot/
 
 ## 3. Create the real secrets file
 
+Pick one of two templates depending on which database you want:
+
+| If you want… | Copy this template | Start the stack with |
+|---|---|---|
+| **Local Docker Postgres** (in-compose `postpilot-postgres`) | `prod/server.local.env.example` | `docker compose -f prod/docker-compose.yml --profile localdb up -d` |
+| **Supabase Postgres** (managed) | `prod/server.supabase.env.example` | `docker compose -f prod/docker-compose.yml up -d` |
+
+Both files have the same shape — only the database block differs.
+
 ```bash
-# On the VPS
-cp /opt/postpilot/prod/server.env.example /opt/postpilot/server.env
+# On the VPS, pick ONE:
+cp /opt/postpilot/prod/server.local.env.example    /opt/postpilot/server.env
+# or
+cp /opt/postpilot/prod/server.supabase.env.example /opt/postpilot/server.env
+
 chmod 600 /opt/postpilot/server.env
 nano /opt/postpilot/server.env   # replace every CHANGE_ME
 ```
 
-Fields you **must** set:
+Fields you **must** set in either template:
 
 | Variable | Value |
 |---|---|
-| `POSTGRES_PASSWORD` | Strong random password |
-| `ConnectionStrings__DefaultConnection` | Same password as `POSTGRES_PASSWORD` |
+| `ConnectionStrings__DefaultConnection` | See [§3a Supabase](#3a-supabase-postgres-details) below if you picked Supabase |
+| `POSTGRES_PASSWORD` (local template only) | Strong random password — keep equal to the password in the connection string |
 | `Meta__AppId` / `Meta__AppSecret` (+ `META_APP_ID` / `META_APP_SECRET`) | From Meta developer console |
 | `Gemini__ApiKey` (+ `GEMINI_API_KEY`) | Google AI Studio key |
+| `PrivateAccess__PasswordHash` / `CookieSigningKey` | BCrypt hash from `scripts/gen-private-access-hash.ps1`; random 32+ chars |
 
 `server.env` is **never** committed. The repo's `.gitignore` covers `*.env`,
 `prod/server.env`, `dev/local.env`, and `server.env` everywhere.
+
+### 3a. Supabase Postgres details
+
+Supabase is just managed PostgreSQL. The frontend never talks to it directly —
+the React/Vercel app calls the ASP.NET API, which is the only thing with the
+DB credentials.
+
+In the Supabase dashboard: **Project Settings → Database → Connection string → URI**.
+You'll see something like:
+
+```
+postgresql://postgres:[YOUR-PASSWORD]@db.abc.supabase.co:5432/postgres
+```
+
+The .NET app needs the Npgsql key=value form, not the URI. Paste this into
+`ConnectionStrings__DefaultConnection`, with `[YOUR-PASSWORD]` replaced:
+
+```
+Host=db.abc.supabase.co;Port=5432;Database=postgres;Username=postgres;Password=YOUR-PASSWORD;SSL Mode=Require;Trust Server Certificate=true;Pooling=true;Maximum Pool Size=10
+```
+
+`SSL Mode=Require` is mandatory — Supabase rejects plain TCP.
 
 ## 4. Replace the GHCR owner placeholder
 
@@ -143,13 +179,14 @@ chmod +x /opt/postpilot/prod/scripts/*.sh
 /opt/postpilot/prod/scripts/deploy.sh
 ```
 
-`deploy.sh` runs:
+`deploy.sh` runs the Supabase-mode command. If you're using the local
+template instead, run with the profile flag (skip `deploy.sh` for now):
 
 ```bash
 cd /opt/postpilot
 docker compose -f prod/docker-compose.yml pull
-docker compose -f prod/docker-compose.yml up -d
-docker compose -f prod/docker-compose.yml ps
+docker compose -f prod/docker-compose.yml --profile localdb up -d
+docker compose -f prod/docker-compose.yml --profile localdb ps
 ```
 
 The API container runs EF Core migrations on startup. The worker waits for
@@ -194,6 +231,24 @@ Or just run the bundled smoke check:
 /opt/postpilot/prod/scripts/check-prod.sh
 ```
 
+## 7a. Switching DB modes later
+
+The mode is decided by which template you copied into `server.env` and
+whether you start the stack with `--profile localdb`. To switch:
+
+1. Replace `/opt/postpilot/server.env` with the other template (refill `CHANGE_ME` values).
+2. Bring the stack up with the matching command from the table in §3.
+3. Tail logs and look for `Database — Host=… SslMode=…` on startup (password is never logged).
+
+If the API fails to start, the migration log line names the failure category so you can tell what to fix:
+
+| Category in log | Likely cause |
+|---|---|
+| `auth` | Wrong password. |
+| `ssl` | `SSL Mode=Require` missing on the Supabase string. |
+| `network` | DNS/firewall to `db.<ref>.supabase.co:5432`. Supabase free-tier project may be paused. |
+| `database-missing` | `Database=` doesn't match — Supabase's default is `postgres`. |
+
 ## 8. Updating (manual)
 
 ```bash
@@ -204,14 +259,18 @@ GitHub Actions will eventually run this for you over SSH — see §10.
 
 ## 9. Backups
 
+Local-Postgres mode (in-compose container):
+
 ```bash
-# Postgres dump (run on the VPS, e.g. via cron)
-docker compose -f /opt/postpilot/prod/docker-compose.yml exec -T postpilot-postgres \
+docker compose -f /opt/postpilot/prod/docker-compose.yml --profile localdb exec -T postpilot-postgres \
     pg_dump -U postpilot postpilot | gzip > /var/backups/postpilot-$(date +%F).sql.gz
 ```
 
 Data lives in the `postpilot-postgres-data` named volume. `docker compose
 down` keeps it; `docker compose down -v` deletes it.
+
+Supabase mode: backups are managed by Supabase. Use the dashboard or
+`pg_dump` against the Supabase host (Project Settings → Database).
 
 ## 10. Endpoints
 
