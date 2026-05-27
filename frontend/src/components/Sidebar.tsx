@@ -63,17 +63,33 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
           ) : (
             <div className="user-avatar">{initial}</div>
           )}
-          <span className="user-name">{name}</span>
-          <button
-            type="button"
-            className="user-logout"
-            onClick={() => { void logout() }}
-            title="Sign out"
-            aria-label="Sign out"
-          >
-            ⎋
-          </button>
+          <div className="user-meta">
+            <span className="user-name">{name}</span>
+            {user?.email && <span className="user-email">{user.email}</span>}
+          </div>
         </div>
+        <button
+          type="button"
+          className="logout-btn"
+          onClick={() => { void logout() }}
+          aria-label="Log out"
+        >
+          <svg
+            className="logout-btn__icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          <span>Log out</span>
+        </button>
       </div>
     </aside>
   )
