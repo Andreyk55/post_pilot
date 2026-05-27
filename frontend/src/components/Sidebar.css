@@ -42,6 +42,35 @@
   background-clip: text;
 }
 
+.sidebar-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.5rem 0.875rem;
+  margin: 0 0.125rem 1rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  min-width: 0;
+}
+
+.sidebar-workspace__label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.sidebar-workspace__name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.85);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .sidebar-nav {
   flex: 1;
   display: flex;
@@ -214,6 +243,10 @@
   }
 
   .sidebar-footer {
+    display: none;
+  }
+
+  .sidebar-workspace {
     display: none;
   }
 }
