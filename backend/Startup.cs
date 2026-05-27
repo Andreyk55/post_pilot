@@ -1,9 +1,13 @@
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
 using PostPilot.Api.Extensions;
 using PostPilot.Api.Middleware;
 using PostPilot.Api.Services.Ai;
+using PostPilot.Api.Services.Auth;
 using PostPilot.Api.Services.PrivateAccess;
 using PostPilot.Api.Settings;
 using PostPilot.Api.Settings.Validators;
@@ -12,6 +16,13 @@ namespace PostPilot.Api;
 
 public class Startup
 {
+    /// <summary>
+    /// Scheme name for the temporary cookie that holds the Google identity
+    /// during the OAuth round-trip. Distinct from the main app session cookie
+    /// scheme so the two never collide.
+    /// </summary>
+    public const string ExternalAuthScheme = "PostPilotExternal";
+
     public IConfiguration Configuration { get; }
 
     public Startup(IConfiguration configuration)
@@ -47,14 +58,32 @@ public class Startup
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<PrivateAccessOptions>>().Value);
         services.AddSingleton<IPrivateAccessTokenService, PrivateAccessTokenService>();
 
+        // ── Real-user auth (Google OAuth + cookie session) ───────────────────
+        services.AddOptions<AuthOptions>()
+            .Bind(Configuration.GetSection(AuthOptions.SectionName));
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<AuthOptions>>().Value);
+
+        services.AddOptions<GoogleAuthOptions>()
+            .Bind(Configuration.GetSection(GoogleAuthOptions.SectionName));
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<GoogleAuthOptions>>().Value);
+
+        services.AddScoped<IUserProvisioningService, UserProvisioningService>();
+
+        ConfigureAuthentication(services);
+
         // ── CORS ─────────────────────────────────────────────────────────────
         // Localhost dev origins are always allowed; production origins come
-        // from Cors:AllowedOrigins (set via Cors__AllowedOrigins__0, __1, ...
-        // in server.env). Never AllowAnyOrigin in production. AllowCredentials
-        // is required because the private-access cookie is sent cross-site.
-        var allowedOrigins = Configuration
+        // from Auth:AllowedOrigins (preferred) or legacy Cors:AllowedOrigins.
+        // Never AllowAnyOrigin in production. AllowCredentials is required
+        // because both the private-access cookie and the session cookie are
+        // sent cross-site.
+        var authAllowed = Configuration
+            .GetSection($"{AuthOptions.SectionName}:AllowedOrigins")
+            .Get<string[]>() ?? Array.Empty<string>();
+        var legacyAllowed = Configuration
             .GetSection("Cors:AllowedOrigins")
             .Get<string[]>() ?? Array.Empty<string>();
+        var allowedOrigins = authAllowed.Concat(legacyAllowed).Distinct().ToArray();
 
         services.AddCors(options =>
         {
@@ -68,6 +97,81 @@ public class Startup
                       .AllowCredentials();
             });
         });
+    }
+
+    private void ConfigureAuthentication(IServiceCollection services)
+    {
+        var authOpts = Configuration.GetSection(AuthOptions.SectionName).Get<AuthOptions>() ?? new AuthOptions();
+        var googleOpts = Configuration.GetSection(GoogleAuthOptions.SectionName).Get<GoogleAuthOptions>() ?? new GoogleAuthOptions();
+
+        services
+            .AddAuthentication(options =>
+            {
+                options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = GoogleDefaults.AuthenticationScheme;
+            })
+            .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
+            {
+                options.Cookie.Name = authOpts.CookieName;
+                options.Cookie.HttpOnly = true;
+                options.Cookie.IsEssential = true;
+                // Cross-site Vercel → VPS deployments need SameSite=None+Secure.
+                // Locally on plain HTTP we fall back to Lax so the cookie sticks.
+                options.Cookie.SameSite = authOpts.RequireHttpsCookies
+                    ? SameSiteMode.None
+                    : SameSiteMode.Lax;
+                options.Cookie.SecurePolicy = authOpts.RequireHttpsCookies
+                    ? CookieSecurePolicy.Always
+                    : CookieSecurePolicy.SameAsRequest;
+                if (!string.IsNullOrEmpty(authOpts.CookieDomain))
+                {
+                    options.Cookie.Domain = authOpts.CookieDomain;
+                }
+                options.ExpireTimeSpan = TimeSpan.FromDays(30);
+                options.SlidingExpiration = true;
+
+                // API endpoints should never 302-redirect to a login page —
+                // return clean status codes so the SPA can react.
+                options.Events.OnRedirectToLogin = ctx =>
+                {
+                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    return Task.CompletedTask;
+                };
+                options.Events.OnRedirectToAccessDenied = ctx =>
+                {
+                    ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    return Task.CompletedTask;
+                };
+            })
+            .AddCookie(ExternalAuthScheme, options =>
+            {
+                // Short-lived cookie that stores the external (Google) identity
+                // between the redirect-out and the redirect-back. The real app
+                // session cookie is issued by AuthController after provisioning.
+                options.Cookie.Name = "postpilot_ext_google";
+                options.Cookie.HttpOnly = true;
+                options.Cookie.SameSite = SameSiteMode.Lax;
+                options.Cookie.SecurePolicy = authOpts.RequireHttpsCookies
+                    ? CookieSecurePolicy.Always
+                    : CookieSecurePolicy.SameAsRequest;
+                options.ExpireTimeSpan = TimeSpan.FromMinutes(15);
+            })
+            .AddGoogle(GoogleDefaults.AuthenticationScheme, options =>
+            {
+                options.ClientId = googleOpts.ClientId;
+                options.ClientSecret = googleOpts.ClientSecret;
+                // Google handler signs the user into this temporary cookie
+                // scheme; AuthController re-signs them under the real app
+                // cookie after find-or-create.
+                options.SignInScheme = ExternalAuthScheme;
+                options.CallbackPath = "/signin-google";
+                options.SaveTokens = false; // we do not need Google's access token
+                // Google's userinfo returns "picture" as a top-level string URL —
+                // map it into a stable claim type the controller looks up.
+                options.ClaimActions.MapJsonKey("urn:google:picture", "picture");
+            });
+
+        services.AddAuthorization();
     }
 
     public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
@@ -111,6 +215,11 @@ public class Startup
         // requests never reach controllers or hit the DB.
         app.UseMiddleware<PrivateAccessMiddleware>();
         app.UseRouting();
+        // Authentication / authorization for real-user endpoints. Order:
+        // routing → auth → endpoints, so [Authorize] controllers see the
+        // resolved ClaimsPrincipal.
+        app.UseAuthentication();
+        app.UseAuthorization();
         app.UseEndpoints(endpoints =>
         {
             // Liveness probe used by host nginx and uptime checks. Cheap —

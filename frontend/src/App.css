@@ -29,3 +29,27 @@
     overflow-y: visible;
   }
 }
+
+.auth-loading {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0f1115;
+}
+
+.auth-loading__spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #2a2f3a;
+  border-top-color: #4c8bf5;
+  border-radius: 50%;
+  animation: auth-loading-spin 800ms linear infinite;
+}
+
+@keyframes auth-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -17,6 +17,9 @@ public class AppDbContext : DbContext
     public DbSet<MetaOAuthState> MetaOAuthStates => Set<MetaOAuthState>();
     public DbSet<AiVoiceProfile> AiVoiceProfiles => Set<AiVoiceProfile>();
     public DbSet<Media> Media => Set<Media>();
+    public DbSet<AppUser> AppUsers => Set<AppUser>();
+    public DbSet<Workspace> Workspaces => Set<Workspace>();
+    public DbSet<WorkspaceMember> WorkspaceMembers => Set<WorkspaceMember>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -145,5 +148,32 @@ public class AppDbContext : DbContext
             entity.Property(e => e.ContentType).HasMaxLength(100);
         });
 
+        modelBuilder.Entity<AppUser>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Email).IsRequired().HasMaxLength(320);
+            entity.Property(e => e.DisplayName).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.AuthProvider).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.ExternalAuthUserId).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.AvatarUrl).HasMaxLength(1024);
+            // Unique provider identity — find-or-create on login keys off this pair.
+            entity.HasIndex(e => new { e.AuthProvider, e.ExternalAuthUserId }).IsUnique();
+            entity.HasIndex(e => e.Email);
+        });
+
+        modelBuilder.Entity<Workspace>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.HasIndex(e => e.OwnerUserId);
+        });
+
+        modelBuilder.Entity<WorkspaceMember>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Role).HasConversion<string>().HasMaxLength(32);
+            entity.HasIndex(e => new { e.WorkspaceId, e.UserId }).IsUnique();
+            entity.HasIndex(e => e.UserId);
+        });
     }
 }

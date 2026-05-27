@@ -126,6 +126,33 @@
   color: rgba(255, 255, 255, 0.8);
   font-weight: 500;
   font-size: 0.9375rem;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-avatar--img {
+  object-fit: cover;
+  background: transparent;
+}
+
+.user-logout {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  font-size: 1.125rem;
+  padding: 0.25rem 0.4rem;
+  border-radius: 6px;
+  line-height: 1;
+  transition: background 0.2s, color 0.2s;
+}
+
+.user-logout:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.95);
 }
 
 @media (max-width: 768px) {

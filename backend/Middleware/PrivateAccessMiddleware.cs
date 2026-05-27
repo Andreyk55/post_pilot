@@ -9,9 +9,18 @@ namespace PostPilot.Api.Middleware;
 ///   /api/private-access/login
 ///   /api/private-access/me
 ///   /api/private-access/logout
+///   /api/auth/google/start
+///   /api/auth/google/callback
+///   /api/auth/me
+///   /api/auth/logout
 ///   /health
 /// CORS preflight (OPTIONS) is always allowed through so the browser can
 /// negotiate cross-origin requests before sending the cookie.
+///
+/// Note: the real-user auth endpoints are intentionally on the allow-list so
+/// the SPA can call /api/auth/me to discover login state. The gate is still
+/// in front of the rest of the app — users must first pass the password gate
+/// before any of the Google login flow becomes reachable in the UI.
 /// </summary>
 public class PrivateAccessMiddleware
 {
@@ -20,6 +29,13 @@ public class PrivateAccessMiddleware
         "/api/private-access/login",
         "/api/private-access/me",
         "/api/private-access/logout",
+        "/api/auth/google/start",
+        "/api/auth/google/callback",
+        "/api/auth/me",
+        "/api/auth/logout",
+        // Google handler's default CallbackPath. The redirect comes from
+        // Google itself (no cookie attached) so it must not be password-gated.
+        "/signin-google",
         "/health",
     };
 

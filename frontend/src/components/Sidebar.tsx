@@ -1,3 +1,4 @@
+import { useAuth } from '../hooks/useAuth'
 import './Sidebar.css'
 
 interface SidebarProps {
@@ -16,6 +17,11 @@ const navItems = [
 ]
 
 export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
+  const { user, logout } = useAuth()
+
+  const initial = user?.displayName?.trim().charAt(0).toUpperCase() || 'U'
+  const name = user?.displayName || 'User'
+
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">
@@ -44,8 +50,21 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
 
       <div className="sidebar-footer">
         <div className="user-info">
-          <div className="user-avatar">U</div>
-          <span className="user-name">User</span>
+          {user?.avatarUrl ? (
+            <img className="user-avatar user-avatar--img" src={user.avatarUrl} alt="" />
+          ) : (
+            <div className="user-avatar">{initial}</div>
+          )}
+          <span className="user-name">{name}</span>
+          <button
+            type="button"
+            className="user-logout"
+            onClick={() => { void logout() }}
+            title="Sign out"
+            aria-label="Sign out"
+          >
+            ⎋
+          </button>
         </div>
       </div>
     </aside>

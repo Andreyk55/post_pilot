@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { useState, type ReactNode } from 'react'
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { Sidebar } from './components/Sidebar'
 import { Dashboard } from './pages/Dashboard'
 import { SchedulePostsPage } from './pages/SchedulePostsPage'
@@ -8,7 +8,10 @@ import { ConnectedAccountsPage } from './pages/ConnectedAccountsPage'
 import { AssetsPage } from './pages/AssetsPage'
 import { PlaceholderPage } from './pages/PlaceholderPage'
 import { MetaOAuthCallback } from './pages/MetaOAuthCallback'
+import { AuthCallback } from './pages/AuthCallback'
 import { PasswordGate } from './components/PasswordGate'
+import { LoginScreen } from './components/LoginScreen'
+import { AuthProvider, useAuth } from './hooks/useAuth'
 import './App.css'
 
 function MainApp() {
@@ -45,14 +48,43 @@ function MainApp() {
   )
 }
 
+/**
+ * Gates the inner app behind a successful Google sign-in. Sits inside
+ * <PasswordGate> so the user has already cleared the global password gate
+ * by the time this renders.
+ */
+function RequireAuth({ children }: { children: ReactNode }) {
+  const { user, isLoading } = useAuth()
+  const location = useLocation()
+
+  if (isLoading) {
+    return (
+      <div className="auth-loading">
+        <div className="auth-loading__spinner" />
+      </div>
+    )
+  }
+
+  if (!user) {
+    // Surface error code if the user just bounced back from a failed callback.
+    const params = new URLSearchParams(location.search)
+    return <LoginScreen error={params.get('error')} />
+  }
+
+  return <>{children}</>
+}
+
 function App() {
   return (
     <PasswordGate>
       <BrowserRouter>
-        <Routes>
-          <Route path="/oauth/meta/callback" element={<MetaOAuthCallback />} />
-          <Route path="/*" element={<MainApp />} />
-        </Routes>
+        <AuthProvider>
+          <Routes>
+            <Route path="/oauth/meta/callback" element={<MetaOAuthCallback />} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
+            <Route path="/*" element={<RequireAuth><MainApp /></RequireAuth>} />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </PasswordGate>
   )
