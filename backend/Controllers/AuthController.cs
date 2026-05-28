@@ -29,27 +29,23 @@ public class AuthController : ControllerBase
 {
     public const string ProviderGoogle = "google";
 
-    /// <summary>
-    /// Custom claim type that carries the user's current workspace id in the
-    /// session cookie. Reading this is cheaper than re-querying on every
-    /// request. Workspace membership is still authoritative in the DB.
-    /// </summary>
-    public const string WorkspaceIdClaim = "postpilot:workspace_id";
-
     private readonly AppDbContext _db;
     private readonly AuthOptions _authOptions;
     private readonly IUserProvisioningService _provisioning;
+    private readonly ICurrentWorkspaceProvider _currentWorkspace;
     private readonly ILogger<AuthController> _logger;
 
     public AuthController(
         AppDbContext db,
         AuthOptions authOptions,
         IUserProvisioningService provisioning,
+        ICurrentWorkspaceProvider currentWorkspace,
         ILogger<AuthController> logger)
     {
         _db = db;
         _authOptions = authOptions;
         _provisioning = provisioning;
+        _currentWorkspace = currentWorkspace;
         _logger = logger;
     }
 
@@ -60,12 +56,8 @@ public class AuthController : ControllerBase
 
         var props = new AuthenticationProperties
         {
-            // Google handler redirects here once auth completes; the action
-            // re-issues the SignIn under our cookie scheme after provisioning.
             RedirectUri = Url.Action(nameof(GoogleCallback), "Auth"),
         };
-        // Stash the validated returnUrl so the callback can use it without
-        // trusting query state across the round-trip.
         props.Items["postpilot:return_url"] = safeReturn;
 
         return Challenge(props, GoogleDefaults.AuthenticationScheme);
@@ -74,8 +66,6 @@ public class AuthController : ControllerBase
     [HttpGet("google/callback")]
     public async Task<IActionResult> GoogleCallback()
     {
-        // The Google handler has already validated the code exchange and
-        // signed the user in under the temporary external cookie scheme.
         var result = await HttpContext.AuthenticateAsync(Startup.ExternalAuthScheme);
         if (!result.Succeeded || result.Principal is null)
         {
@@ -105,12 +95,14 @@ public class AuthController : ControllerBase
             DisplayName: name,
             AvatarUrl: avatar));
 
+        // Cookie claims identify only the user. Current workspace is loaded from
+        // AppUser.CurrentWorkspaceId in the DB so the frontend can switch workspaces
+        // without re-issuing the cookie.
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, provisioned.User.Id.ToString()),
             new(ClaimTypes.Email, provisioned.User.Email),
             new(ClaimTypes.Name, provisioned.User.DisplayName),
-            new(WorkspaceIdClaim, provisioned.DefaultWorkspaceId.ToString()),
         };
         if (!string.IsNullOrEmpty(provisioned.User.AvatarUrl))
         {
@@ -124,7 +116,6 @@ public class AuthController : ControllerBase
             principal,
             new AuthenticationProperties { IsPersistent = true });
 
-        // Drop the temporary external-correlation cookie now that we have our own session.
         await HttpContext.SignOutAsync(Startup.ExternalAuthScheme);
 
         var returnUrl = result.Properties?.Items.TryGetValue("postpilot:return_url", out var ru) == true
@@ -151,30 +142,15 @@ public class AuthController : ControllerBase
             return Unauthorized();
         }
 
-        Guid workspaceId;
-        var workspaceClaim = User.FindFirstValue(WorkspaceIdClaim);
-        if (!Guid.TryParse(workspaceClaim, out workspaceId))
+        CurrentWorkspaceInfo info;
+        try
         {
-            // Older cookie that predates the workspace claim — recover from DB.
-            var fallback = await _db.Workspaces
-                .Where(w => w.OwnerUserId == user.Id)
-                .OrderBy(w => w.CreatedAt)
-                .Select(w => (Guid?)w.Id)
-                .FirstOrDefaultAsync();
-            if (fallback is null)
-            {
-                return Unauthorized();
-            }
-            workspaceId = fallback.Value;
+            info = await _currentWorkspace.GetCurrentWorkspaceAsync();
         }
-
-        var workspaceName = await _db.Workspaces
-            .Where(w => w.Id == workspaceId)
-            .Select(w => w.Name)
-            .FirstOrDefaultAsync();
-
-        if (workspaceName is null)
+        catch (UnauthorizedAccessException)
         {
+            // User has no workspace memberships — this shouldn't happen post-provisioning
+            // but keep the failure mode explicit rather than crashing.
             return Unauthorized();
         }
 
@@ -184,8 +160,8 @@ public class AuthController : ControllerBase
             email = user.Email,
             displayName = user.DisplayName,
             avatarUrl = user.AvatarUrl,
-            currentWorkspaceId = workspaceId,
-            workspaceName,
+            currentWorkspaceId = info.WorkspaceId,
+            workspaceName = info.WorkspaceName,
         });
     }
 
@@ -193,9 +169,7 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Logout()
     {
         // Minimal CSRF protection on this cookie-authenticated POST: require
-        // the Origin header to match a configured frontend origin. The browser
-        // sets Origin on cross-origin POSTs and on same-origin POSTs from
-        // fetch/XHR, but a CSRF-form-submit attacker can't forge it.
+        // the Origin header to match a configured frontend origin.
         if (!IsTrustedOrigin(Request.Headers.Origin.ToString()))
         {
             return StatusCode(StatusCodes.Status403Forbidden, new { error = "untrusted_origin" });
@@ -210,7 +184,6 @@ public class AuthController : ControllerBase
         var baseUrl = _authOptions.FrontendUrl?.TrimEnd('/');
         if (string.IsNullOrEmpty(baseUrl))
         {
-            // Fall back to current request origin so dev works without Auth:FrontendUrl set.
             baseUrl = $"{Request.Scheme}://{Request.Host}";
         }
 
@@ -231,11 +204,6 @@ public class AuthController : ControllerBase
         return Redirect(target);
     }
 
-    /// <summary>
-    /// Accepts only relative paths (e.g. "/posts") to block open redirect.
-    /// Anything else collapses to "/" so a hostile <c>returnUrl</c> on the
-    /// challenge URL cannot bounce the user to a third-party site.
-    /// </summary>
     private static string SanitizeReturnUrl(string? returnUrl)
     {
         if (string.IsNullOrWhiteSpace(returnUrl)) return "/";

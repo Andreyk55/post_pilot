@@ -1,4 +1,5 @@
 import { useAuth } from '../hooks/useAuth'
+import { WorkspaceSwitcher } from './WorkspaceSwitcher'
 import './Sidebar.css'
 
 interface SidebarProps {
@@ -17,11 +18,10 @@ const navItems = [
 ]
 
 export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
-  const { user, isLoading, logout } = useAuth()
+  const { user, logout } = useAuth()
 
   const initial = user?.displayName?.trim().charAt(0).toUpperCase() || 'U'
   const name = user?.displayName || 'User'
-  const workspaceLabel = user ? (user.workspaceName?.trim() || 'Default workspace') : null
 
   return (
     <aside className="sidebar">
@@ -36,12 +36,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
         <span className="logo-text">Post Pilot</span>
       </div>
 
-      {!isLoading && workspaceLabel && (
-        <div className="sidebar-workspace" title={workspaceLabel}>
-          <span className="sidebar-workspace__label">Workspace</span>
-          <span className="sidebar-workspace__name">{workspaceLabel}</span>
-        </div>
-      )}
+      {user && <WorkspaceSwitcher />}
 
       <nav className="sidebar-nav">
         {navItems.map(item => (

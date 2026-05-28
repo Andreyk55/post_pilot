@@ -54,6 +54,7 @@ public class MetaOAuthService : IMetaOAuthService
     /// deleted, while TargetPageId / TargetInstagramAccountId still point at them.
     /// </summary>
     private async Task CancelPostsForRemovedAssetsAsync(
+        Guid workspaceId,
         IEnumerable<Guid> removedPageIds,
         IEnumerable<Guid> removedInstagramAccountIds,
         string reasonCode,
@@ -64,6 +65,7 @@ public class MetaOAuthService : IMetaOAuthService
         if (pageIds.Count == 0 && igIds.Count == 0) return;
 
         var affected = await _context.Posts
+            .Where(p => p.WorkspaceId == workspaceId)
             .Where(p => p.Status == PostStatus.Scheduled
                      || p.Status == PostStatus.RetryPending
                      || p.Status == PostStatus.Processing)
@@ -102,15 +104,16 @@ public class MetaOAuthService : IMetaOAuthService
             "Canceled {Count} active post(s) due to {ReasonCode}", affected.Count, reasonCode);
     }
 
-    public async Task<MetaOAuthStartResponse> StartOAuthAsync()
+    public async Task<MetaOAuthStartResponse> StartOAuthAsync(Guid workspaceId)
     {
         // Generate secure state parameter
         var state = GenerateSecureState();
 
-        // Store state in database for validation
+        // Store state in database for validation, bound to the workspace.
         var oauthState = new MetaOAuthState
         {
             Id = Guid.NewGuid(),
+            WorkspaceId = workspaceId,
             State = state,
             CreatedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddMinutes(_oAuthStateExpirationMinutes)
@@ -210,7 +213,7 @@ public class MetaOAuthService : IMetaOAuthService
         );
     }
 
-    public async Task<MetaOAuthCompleteResponse> CompleteOAuthAsync(string code, string state)
+    public async Task<MetaOAuthCompleteResponse> CompleteOAuthAsync(string code, string state, Guid userId)
     {
         _logger.LogInformation("CompleteOAuth called with state: {State}", state);
 
@@ -279,18 +282,18 @@ public class MetaOAuthService : IMetaOAuthService
         var accessToken = longLivedData?.AccessToken ?? tokenData.AccessToken;
         var expiresIn = longLivedData?.ExpiresIn ?? tokenData.ExpiresIn ?? 3600;
 
-        var userId = GetCurrentUserId();
-        _logger.LogInformation("Saving connection for user {UserId}", userId);
+        var workspaceId = oauthState.WorkspaceId;
+        _logger.LogInformation("Saving connection for workspace {WorkspaceId} (user {UserId})", workspaceId, userId);
 
-        // Look up any existing connection for this user — connected OR disconnected.
-        // If a disconnected one is found we reattach it (resurrect the historical breadcrumb)
-        // along with any child pages/IGs that were previously soft-disconnected.
+        // Look up any existing connection in this workspace by this user.
+        // If a disconnected one is found we reattach it along with any child
+        // pages/IGs that were previously soft-disconnected.
         var existingConnection = await _context.MetaConnections
             .Include(c => c.Pages)
             .Include(c => c.InstagramAccounts)
-            .OrderByDescending(c => c.IsConnected)         // prefer currently-connected if both somehow exist
+            .OrderByDescending(c => c.IsConnected)
             .ThenByDescending(c => c.ConnectedAt)
-            .FirstOrDefaultAsync(c => c.UserId == userId);
+            .FirstOrDefaultAsync(c => c.WorkspaceId == workspaceId && c.UserId == userId);
 
         var now = DateTime.UtcNow;
         MetaConnection connection;
@@ -323,6 +326,7 @@ public class MetaOAuthService : IMetaOAuthService
             connection = new MetaConnection
             {
                 Id = Guid.NewGuid(),
+                WorkspaceId = workspaceId,
                 UserId = userId,
                 AccessToken = accessToken,
                 TokenExpiresAt = now.AddSeconds(expiresIn),
@@ -363,7 +367,7 @@ public class MetaOAuthService : IMetaOAuthService
         _logger.LogInformation("Meta /me/permissions response: {Body}", body);
     }
 
-    public async Task<MetaDiscoverInstagramResponse> DiscoverInstagramAccountsAsync(string tempToken, List<string> pageIds)
+    public async Task<MetaDiscoverInstagramResponse> DiscoverInstagramAccountsAsync(string tempToken, List<string> pageIds, Guid workspaceId)
     {
         string accessToken;
 
@@ -379,10 +383,9 @@ public class MetaOAuthService : IMetaOAuthService
         }
         else
         {
-            // Manage mode - use stored connection token
-            // For now, assume single user with fixed ID
+            // Manage mode - use the workspace's stored connection token.
             var connection = await _context.MetaConnections
-                .FirstOrDefaultAsync(c => c.UserId == GetCurrentUserId());
+                .FirstOrDefaultAsync(c => c.WorkspaceId == workspaceId && c.IsConnected);
 
             if (connection == null)
             {
@@ -457,7 +460,7 @@ public class MetaOAuthService : IMetaOAuthService
         return new MetaDiscoverInstagramResponse(instagramAccounts);
     }
 
-    public async Task<MetaSaveConnectionResponse> SaveConnectionAsync(string tempToken, List<string> selectedPageIds, List<string> selectedInstagramIds)
+    public async Task<MetaSaveConnectionResponse> SaveConnectionAsync(string tempToken, List<string> selectedPageIds, List<string> selectedInstagramIds, Guid userId)
     {
         if (!Guid.TryParse(tempToken, out var stateId))
         {
@@ -470,24 +473,25 @@ public class MetaOAuthService : IMetaOAuthService
             throw new InvalidOperationException("Invalid or expired temp token");
         }
 
-        var userId = GetCurrentUserId();
+        var workspaceId = oauthState.WorkspaceId;
         var now = DateTime.UtcNow;
 
-        // Reuse the existing connection (connected OR disconnected) for this user,
-        // or create a fresh one. We NEVER hard-delete — historical child rows are
-        // FK targets for Posts and must survive across disconnect/reconnect cycles.
+        // Reuse the existing connection in this workspace (connected OR disconnected)
+        // for this user, or create a fresh one. We NEVER hard-delete — historical
+        // child rows are FK targets for Posts and must survive disconnect cycles.
         var connection = await _context.MetaConnections
             .Include(c => c.Pages)
             .Include(c => c.InstagramAccounts)
             .OrderByDescending(c => c.IsConnected)
             .ThenByDescending(c => c.ConnectedAt)
-            .FirstOrDefaultAsync(c => c.UserId == userId);
+            .FirstOrDefaultAsync(c => c.WorkspaceId == workspaceId && c.UserId == userId);
 
         if (connection == null)
         {
             connection = new MetaConnection
             {
                 Id = Guid.NewGuid(),
+                WorkspaceId = workspaceId,
                 UserId = userId,
                 AccessToken = oauthState.TempAccessToken,
                 TokenExpiresAt = oauthState.TokenExpiresAt.Value,
@@ -521,7 +525,7 @@ public class MetaOAuthService : IMetaOAuthService
         }
 
         // Discover Instagram accounts for selected pages
-        var igResponse = await DiscoverInstagramAccountsAsync(tempToken, selectedPageIds);
+        var igResponse = await DiscoverInstagramAccountsAsync(tempToken, selectedPageIds, workspaceId);
         var selectedIgAccounts = igResponse.InstagramAccounts
             .Where(ig => selectedInstagramIds.Contains(ig.Id))
             .ToList();
@@ -587,6 +591,7 @@ public class MetaOAuthService : IMetaOAuthService
             var newPage = new ConnectedPage
             {
                 Id = Guid.NewGuid(),
+                WorkspaceId = connection.WorkspaceId,
                 MetaConnectionId = connection.Id,
                 PageId = page.Id,
                 Name = page.Name,
@@ -631,6 +636,7 @@ public class MetaOAuthService : IMetaOAuthService
             var newIg = new ConnectedInstagramAccount
             {
                 Id = Guid.NewGuid(),
+                WorkspaceId = connection.WorkspaceId,
                 MetaConnectionId = connection.Id,
                 IgBusinessId = ig.Id,
                 Username = ig.Username,
@@ -662,6 +668,7 @@ public class MetaOAuthService : IMetaOAuthService
         if (pagesToDisconnect.Count > 0 || igsToDisconnect.Count > 0)
         {
             await CancelPostsForRemovedAssetsAsync(
+                connection.WorkspaceId,
                 pagesToDisconnect.Select(p => p.Id),
                 igsToDisconnect.Select(i => i.Id),
                 ReasonAssetUnlinked,
@@ -669,14 +676,15 @@ public class MetaOAuthService : IMetaOAuthService
         }
     }
 
-    public async Task<MetaConnectionResponse> GetConnectionAsync(Guid userId)
+    public async Task<MetaConnectionResponse> GetConnectionAsync(Guid workspaceId)
     {
-        // Only return the currently-connected MetaConnection. Disconnected rows are kept
-        // as historical breadcrumbs for posts but are never surfaced to the UI as "connected".
+        // Only return the currently-connected MetaConnection in this workspace.
+        // Disconnected rows are kept as historical breadcrumbs for posts but are
+        // never surfaced to the UI as "connected".
         var connection = await _context.MetaConnections
             .Include(c => c.Pages.Where(p => p.IsConnected))
             .Include(c => c.InstagramAccounts.Where(i => i.IsConnected))
-            .FirstOrDefaultAsync(c => c.UserId == userId && c.IsConnected);
+            .FirstOrDefaultAsync(c => c.WorkspaceId == workspaceId && c.IsConnected);
 
         if (connection == null)
         {
@@ -686,10 +694,10 @@ public class MetaOAuthService : IMetaOAuthService
         return new MetaConnectionResponse(MapToDto(connection), true);
     }
 
-    public async Task<MetaAvailablePagesResponse> GetAvailablePagesAsync(Guid userId)
+    public async Task<MetaAvailablePagesResponse> GetAvailablePagesAsync(Guid workspaceId)
     {
         var connection = await _context.MetaConnections
-            .FirstOrDefaultAsync(c => c.UserId == userId && c.IsConnected);
+            .FirstOrDefaultAsync(c => c.WorkspaceId == workspaceId && c.IsConnected);
         if (connection == null)
         {
             throw new InvalidOperationException("No Meta connection found");
@@ -701,12 +709,12 @@ public class MetaOAuthService : IMetaOAuthService
         )).ToList());
     }
 
-    public async Task<MetaSaveConnectionResponse> UpdateConnectionAsync(Guid userId, List<string> selectedPageIds, List<string> selectedInstagramIds)
+    public async Task<MetaSaveConnectionResponse> UpdateConnectionAsync(Guid workspaceId, List<string> selectedPageIds, List<string> selectedInstagramIds)
     {
         var connection = await _context.MetaConnections
             .Include(c => c.Pages)
             .Include(c => c.InstagramAccounts)
-            .FirstOrDefaultAsync(c => c.UserId == userId && c.IsConnected);
+            .FirstOrDefaultAsync(c => c.WorkspaceId == workspaceId && c.IsConnected);
 
         if (connection == null)
         {
@@ -720,7 +728,7 @@ public class MetaOAuthService : IMetaOAuthService
         // Discover Instagram accounts (only for selected pages). Zero is allowed —
         // the user can soft-disconnect every page while keeping the Meta identity.
         var igResponse = selectedPageIds.Any()
-            ? await DiscoverInstagramAccountsAsync("", selectedPageIds)
+            ? await DiscoverInstagramAccountsAsync("", selectedPageIds, workspaceId)
             : new MetaDiscoverInstagramResponse(new List<InstagramAccountDto>());
         var selectedIgAccounts = igResponse.InstagramAccounts
             .Where(ig => selectedInstagramIds.Contains(ig.Id))
@@ -736,12 +744,12 @@ public class MetaOAuthService : IMetaOAuthService
         return new MetaSaveConnectionResponse(MapToDto(connection));
     }
 
-    public async Task DisconnectAsync(Guid userId)
+    public async Task DisconnectAsync(Guid workspaceId)
     {
         var connection = await _context.MetaConnections
             .Include(c => c.Pages)
             .Include(c => c.InstagramAccounts)
-            .FirstOrDefaultAsync(c => c.UserId == userId && c.IsConnected);
+            .FirstOrDefaultAsync(c => c.WorkspaceId == workspaceId && c.IsConnected);
 
         if (connection == null)
         {
@@ -751,6 +759,7 @@ public class MetaOAuthService : IMetaOAuthService
         // Cancel any active posts targeting this connection's assets first so the worker
         // never picks up something whose connection is gone.
         await CancelPostsForRemovedAssetsAsync(
+            workspaceId,
             connection.Pages.Where(p => p.IsConnected).Select(p => p.Id),
             connection.InstagramAccounts.Where(i => i.IsConnected).Select(i => i.Id),
             ReasonAccountDisconnected,
@@ -790,12 +799,12 @@ public class MetaOAuthService : IMetaOAuthService
         await _context.SaveChangesAsync();
     }
 
-    public async Task<InstagramDiscoveryResponse> DiscoverInstagramEligibilityAsync(Guid userId)
+    public async Task<InstagramDiscoveryResponse> DiscoverInstagramEligibilityAsync(Guid workspaceId)
     {
         var connection = await _context.MetaConnections
             .Include(c => c.Pages)
             .Include(c => c.InstagramAccounts)
-            .FirstOrDefaultAsync(c => c.UserId == userId && c.IsConnected);
+            .FirstOrDefaultAsync(c => c.WorkspaceId == workspaceId && c.IsConnected);
 
         if (connection == null)
             throw new InvalidOperationException("No Meta connection found");
@@ -804,7 +813,7 @@ public class MetaOAuthService : IMetaOAuthService
         await LogTokenScopesAsync(connection.AccessToken);
 
         var allPages = await FetchUserPagesAsync(connection.AccessToken);
-        _logger.LogInformation("Instagram discovery: found {PageCount} pages for user {UserId}", allPages.Count, userId);
+        _logger.LogInformation("Instagram discovery: found {PageCount} pages in workspace {WorkspaceId}", allPages.Count, workspaceId);
 
         var eligibilityResults = new List<InstagramEligibilityDto>();
         var linkedCount = 0;
@@ -825,11 +834,11 @@ public class MetaOAuthService : IMetaOAuthService
         return new InstagramDiscoveryResponse(eligibilityResults, allPages.Count, linkedCount);
     }
 
-    public async Task<object> DebugInstagramDiscoveryAsync(Guid userId)
+    public async Task<object> DebugInstagramDiscoveryAsync(Guid workspaceId)
     {
         var connection = await _context.MetaConnections
             .Include(c => c.Pages)
-            .FirstOrDefaultAsync(c => c.UserId == userId && c.IsConnected);
+            .FirstOrDefaultAsync(c => c.WorkspaceId == workspaceId && c.IsConnected);
 
         if (connection == null)
             return new { error = "No Meta connection found" };
@@ -1169,13 +1178,6 @@ public class MetaOAuthService : IMetaOAuthService
         using var rng = RandomNumberGenerator.Create();
         rng.GetBytes(bytes);
         return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").TrimEnd('=');
-    }
-
-    private static Guid GetCurrentUserId()
-    {
-        // TODO: Implement proper user authentication
-        // For now, using a fixed user ID
-        return Guid.Parse("00000000-0000-0000-0000-000000000001");
     }
 
     private static MetaConnectionDto MapToDto(MetaConnection connection)

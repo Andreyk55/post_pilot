@@ -67,7 +67,10 @@ public class Startup
             .Bind(Configuration.GetSection(GoogleAuthOptions.SectionName));
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<GoogleAuthOptions>>().Value);
 
+        services.AddHttpContextAccessor();
         services.AddScoped<IUserProvisioningService, UserProvisioningService>();
+        services.AddScoped<ICurrentUserProvider, CurrentUserProvider>();
+        services.AddScoped<ICurrentWorkspaceProvider, CurrentWorkspaceProvider>();
 
         ConfigureAuthentication(services);
 

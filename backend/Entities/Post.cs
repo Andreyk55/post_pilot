@@ -5,6 +5,13 @@ namespace PostPilot.Api.Entities;
 public class Post
 {
     public Guid Id { get; set; }
+
+    /// <summary>
+    /// Workspace this post belongs to. Set from the current user's
+    /// CurrentWorkspaceId at creation; never accepted from the client.
+    /// </summary>
+    public Guid WorkspaceId { get; set; }
+
     public string Content { get; set; } = string.Empty;
     public string? MediaUrl { get; set; }
 

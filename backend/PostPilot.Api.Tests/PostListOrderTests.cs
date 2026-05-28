@@ -6,6 +6,7 @@ using PostPilot.Api.Controllers;
 using PostPilot.Api.Data;
 using PostPilot.Api.Entities;
 using PostPilot.Api.Enums;
+using PostPilot.Api.Services.Auth;
 using PostPilot.Api.Services.Publishing;
 using PostPilot.Api.Services.Scheduling;
 using Xunit;
@@ -14,6 +15,8 @@ namespace PostPilot.Api.Tests;
 
 public class PostListOrderTests : IDisposable
 {
+    private static readonly Guid TestWorkspaceId = Guid.Parse("00000000-0000-0000-0000-0000000000aa");
+
     private readonly AppDbContext _dbContext;
     private readonly PostsController _controller;
 
@@ -28,8 +31,10 @@ public class PostListOrderTests : IDisposable
         var schedulerMock = new Mock<IPostScheduler>();
         var loggerMock = new Mock<ILogger<PostsController>>();
         var insightsMock = new Mock<IFacebookInsightsService>();
+        var workspaceMock = new Mock<ICurrentWorkspaceProvider>();
+        workspaceMock.Setup(x => x.GetCurrentWorkspaceIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync(TestWorkspaceId);
 
-        _controller = new PostsController(_dbContext, schedulerMock.Object, insightsMock.Object, loggerMock.Object);
+        _controller = new PostsController(_dbContext, schedulerMock.Object, insightsMock.Object, workspaceMock.Object, loggerMock.Object);
     }
 
     public void Dispose()
@@ -46,6 +51,7 @@ public class PostListOrderTests : IDisposable
         var page = new ConnectedPage
         {
             Id = Guid.NewGuid(),
+            WorkspaceId = TestWorkspaceId,
             PageId = "fb-page-test",
             Name = "Test Page",
             AccessToken = "tok",
@@ -59,6 +65,7 @@ public class PostListOrderTests : IDisposable
         var oldest = new Post
         {
             Id = Guid.NewGuid(),
+            WorkspaceId = TestWorkspaceId,
             Content = "Oldest created",
             Platform = Platform.Facebook,
             PostType = PostType.Feed,
@@ -72,6 +79,7 @@ public class PostListOrderTests : IDisposable
         var middle = new Post
         {
             Id = Guid.NewGuid(),
+            WorkspaceId = TestWorkspaceId,
             Content = "Middle created",
             Platform = Platform.Facebook,
             PostType = PostType.Feed,
@@ -85,6 +93,7 @@ public class PostListOrderTests : IDisposable
         var newest = new Post
         {
             Id = Guid.NewGuid(),
+            WorkspaceId = TestWorkspaceId,
             Content = "Newest created",
             Platform = Platform.Facebook,
             PostType = PostType.Feed,

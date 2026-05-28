@@ -56,16 +56,19 @@ public class UserProvisioningService : IUserProvisioningService
             if (changed) user.UpdatedAt = now;
         }
 
-        // Ensure the user has at least one workspace where they are Owner.
-        // The "default" workspace is the oldest one they own — stable across
-        // logins so the user doesn't keep hopping between workspaces.
-        var workspace = await _db.Workspaces
-            .Where(w => w.OwnerUserId == user.Id)
-            .OrderBy(w => w.CreatedAt)
-            .FirstOrDefaultAsync(ct);
+        // Find user's existing workspaces via membership (authoritative table).
+        var membership = await (
+            from m in _db.WorkspaceMembers
+            join w in _db.Workspaces on m.WorkspaceId equals w.Id
+            where m.UserId == user.Id
+            orderby m.CreatedAt
+            select new { Workspace = w, Member = m }
+        ).FirstOrDefaultAsync(ct);
 
-        if (workspace is null)
+        Workspace workspace;
+        if (membership is null)
         {
+            // No workspace yet — create a default one and make the user Owner.
             workspace = new Workspace
             {
                 Id = Guid.NewGuid(),
@@ -90,28 +93,37 @@ public class UserProvisioningService : IUserProvisioningService
         }
         else
         {
-            // Owner row should already exist from initial provisioning, but
-            // self-heal in case a previous failure left a workspace without
-            // the membership row.
-            var ownerMembership = await _db.WorkspaceMembers
-                .FirstOrDefaultAsync(
-                    m => m.WorkspaceId == workspace.Id && m.UserId == user.Id, ct);
-            if (ownerMembership is null)
+            workspace = membership.Workspace;
+        }
+
+        // Ensure CurrentWorkspaceId is set and points at a workspace where the user is a member.
+        // If it's null or stale, repair it to the first valid membership.
+        if (!user.CurrentWorkspaceId.HasValue)
+        {
+            user.CurrentWorkspaceId = workspace.Id;
+            user.UpdatedAt = now;
+        }
+        else
+        {
+            var stillMember = await _db.WorkspaceMembers
+                .AnyAsync(m => m.UserId == user.Id && m.WorkspaceId == user.CurrentWorkspaceId.Value, ct);
+            if (!stillMember)
             {
-                _db.WorkspaceMembers.Add(new WorkspaceMember
-                {
-                    Id = Guid.NewGuid(),
-                    WorkspaceId = workspace.Id,
-                    UserId = user.Id,
-                    Role = WorkspaceRole.Owner,
-                    CreatedAt = now,
-                });
+                user.CurrentWorkspaceId = workspace.Id;
+                user.UpdatedAt = now;
             }
         }
 
         await _db.SaveChangesAsync(ct);
 
-        return new ProvisionedUser(user, workspace.Id, workspace.Name, isNew);
+        // Re-read the active workspace name for the return value
+        // (CurrentWorkspaceId may differ from the just-created workspace).
+        var currentWorkspaceId = user.CurrentWorkspaceId!.Value;
+        var currentWorkspaceName = currentWorkspaceId == workspace.Id
+            ? workspace.Name
+            : await _db.Workspaces.Where(w => w.Id == currentWorkspaceId).Select(w => w.Name).FirstAsync(ct);
+
+        return new ProvisionedUser(user, currentWorkspaceId, currentWorkspaceName, isNew);
     }
 
     private static string DefaultWorkspaceName(string displayName)

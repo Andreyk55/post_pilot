@@ -1,13 +1,16 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PostPilot.Api.Data;
 using PostPilot.Api.DTOs;
 using PostPilot.Api.Entities;
 using PostPilot.Api.Services.Ai;
+using PostPilot.Api.Services.Auth;
 
 namespace PostPilot.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/ai")]
 public class AiTextController : ControllerBase
 {
@@ -17,10 +20,9 @@ public class AiTextController : ControllerBase
     private readonly LanguageService _languageService;
     private readonly CaptionAssistService _captionAssistService;
     private readonly PostTimeSuggestionService _postTimeSuggestionService;
+    private readonly ICurrentUserProvider _currentUser;
+    private readonly ICurrentWorkspaceProvider _currentWorkspace;
     private readonly ILogger<AiTextController> _logger;
-
-    // TODO: Replace with real user authentication
-    private static readonly Guid CurrentUserId = Guid.Parse("00000000-0000-0000-0000-000000000001");
 
     private const int MinTextLength = 1;
     private const int MaxTextLength = 5000;
@@ -32,6 +34,8 @@ public class AiTextController : ControllerBase
         LanguageService languageService,
         CaptionAssistService captionAssistService,
         PostTimeSuggestionService postTimeSuggestionService,
+        ICurrentUserProvider currentUser,
+        ICurrentWorkspaceProvider currentWorkspace,
         ILogger<AiTextController> logger)
     {
         _geminiClient = geminiClient;
@@ -40,6 +44,8 @@ public class AiTextController : ControllerBase
         _languageService = languageService;
         _captionAssistService = captionAssistService;
         _postTimeSuggestionService = postTimeSuggestionService;
+        _currentUser = currentUser;
+        _currentWorkspace = currentWorkspace;
         _logger = logger;
     }
 
@@ -57,6 +63,9 @@ public class AiTextController : ControllerBase
         [FromBody] AiTextRequest request,
         CancellationToken cancellationToken)
     {
+        var userId = _currentUser.GetCurrentUserId();
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(cancellationToken);
+
         // Validate request
         var validationErrors = ValidateRequest(request);
         if (validationErrors.Count > 0)
@@ -65,11 +74,11 @@ public class AiTextController : ControllerBase
         }
 
         // Check rate limit
-        var canProceed = await _rateLimiter.TryAcquireAsync(CurrentUserId, cancellationToken);
+        var canProceed = await _rateLimiter.TryAcquireAsync(userId, cancellationToken);
         if (!canProceed)
         {
-            var remaining = await _rateLimiter.GetRemainingCallsAsync(CurrentUserId, cancellationToken);
-            _logger.LogWarning("Rate limit exceeded for user {UserId}", CurrentUserId);
+            var remaining = await _rateLimiter.GetRemainingCallsAsync(userId, cancellationToken);
+            _logger.LogWarning("Rate limit exceeded for user {UserId}", userId);
 
             return Problem(
                 title: "Rate limit exceeded",
@@ -84,11 +93,11 @@ public class AiTextController : ControllerBase
             if (request.VoiceProfileId.HasValue)
             {
                 voiceProfile = await _db.AiVoiceProfiles
-                    .FirstOrDefaultAsync(p => p.Id == request.VoiceProfileId.Value && p.UserId == CurrentUserId, cancellationToken);
+                    .FirstOrDefaultAsync(p => p.Id == request.VoiceProfileId.Value && p.WorkspaceId == workspaceId && !p.IsDeleted, cancellationToken);
 
                 if (voiceProfile == null)
                 {
-                    _logger.LogWarning("Voice profile {ProfileId} not found for user {UserId}", request.VoiceProfileId, CurrentUserId);
+                    _logger.LogWarning("Voice profile {ProfileId} not found for user {UserId}", request.VoiceProfileId, userId);
                     // Continue without voice profile rather than failing
                 }
             }
@@ -170,6 +179,9 @@ public class AiTextController : ControllerBase
         [FromBody] AiGenerateVariantsRequest request,
         CancellationToken cancellationToken)
     {
+        var userId = _currentUser.GetCurrentUserId();
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(cancellationToken);
+
         // Validate request
         var validationErrors = ValidateGenerateRequest(request);
         if (validationErrors.Count > 0)
@@ -178,10 +190,10 @@ public class AiTextController : ControllerBase
         }
 
         // Check rate limit
-        var canProceed = await _rateLimiter.TryAcquireAsync(CurrentUserId, cancellationToken);
+        var canProceed = await _rateLimiter.TryAcquireAsync(userId, cancellationToken);
         if (!canProceed)
         {
-            _logger.LogWarning("Rate limit exceeded for user {UserId}", CurrentUserId);
+            _logger.LogWarning("Rate limit exceeded for user {UserId}", userId);
 
             return Problem(
                 title: "Rate limit exceeded",
@@ -196,11 +208,11 @@ public class AiTextController : ControllerBase
             if (request.VoiceProfileId.HasValue)
             {
                 voiceProfile = await _db.AiVoiceProfiles
-                    .FirstOrDefaultAsync(p => p.Id == request.VoiceProfileId.Value && p.UserId == CurrentUserId, cancellationToken);
+                    .FirstOrDefaultAsync(p => p.Id == request.VoiceProfileId.Value && p.WorkspaceId == workspaceId && !p.IsDeleted, cancellationToken);
 
                 if (voiceProfile == null)
                 {
-                    _logger.LogWarning("Voice profile {ProfileId} not found for user {UserId}", request.VoiceProfileId, CurrentUserId);
+                    _logger.LogWarning("Voice profile {ProfileId} not found for user {UserId}", request.VoiceProfileId, userId);
                 }
             }
 
@@ -382,6 +394,9 @@ public class AiTextController : ControllerBase
         [FromBody] DTOs.CaptionGenerateRequest request,
         CancellationToken cancellationToken)
     {
+        var userId = _currentUser.GetCurrentUserId();
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(cancellationToken);
+
         // Validate request
         var errors = ValidateCaptionRequest(request);
         if (errors.Count > 0)
@@ -390,10 +405,10 @@ public class AiTextController : ControllerBase
         }
 
         // Check rate limit
-        var canProceed = await _rateLimiter.TryAcquireAsync(CurrentUserId, cancellationToken);
+        var canProceed = await _rateLimiter.TryAcquireAsync(userId, cancellationToken);
         if (!canProceed)
         {
-            _logger.LogWarning("Rate limit exceeded for user {UserId}", CurrentUserId);
+            _logger.LogWarning("Rate limit exceeded for user {UserId}", userId);
             return Problem(
                 title: "Rate limit exceeded",
                 detail: "You've reached the maximum number of AI requests for today. Please try again tomorrow.",
@@ -407,11 +422,11 @@ public class AiTextController : ControllerBase
             if (request.VoiceProfileId.HasValue)
             {
                 voiceProfile = await _db.AiVoiceProfiles
-                    .FirstOrDefaultAsync(p => p.Id == request.VoiceProfileId.Value && p.UserId == CurrentUserId, cancellationToken);
+                    .FirstOrDefaultAsync(p => p.Id == request.VoiceProfileId.Value && p.WorkspaceId == workspaceId && !p.IsDeleted, cancellationToken);
 
                 if (voiceProfile == null)
                 {
-                    _logger.LogWarning("Voice profile {ProfileId} not found for user {UserId}", request.VoiceProfileId, CurrentUserId);
+                    _logger.LogWarning("Voice profile {ProfileId} not found for user {UserId}", request.VoiceProfileId, userId);
                     // Continue without voice profile
                 }
             }
@@ -511,6 +526,8 @@ public class AiTextController : ControllerBase
         [FromBody] PostTimeSuggestionRequest request,
         CancellationToken cancellationToken)
     {
+        var userId = _currentUser.GetCurrentUserId();
+
         // Validate request
         var errors = ValidatePostTimeRequest(request);
         if (errors.Count > 0)
@@ -519,10 +536,10 @@ public class AiTextController : ControllerBase
         }
 
         // Check rate limit
-        var canProceed = await _rateLimiter.TryAcquireAsync(CurrentUserId, cancellationToken);
+        var canProceed = await _rateLimiter.TryAcquireAsync(userId, cancellationToken);
         if (!canProceed)
         {
-            _logger.LogWarning("Rate limit exceeded for user {UserId}", CurrentUserId);
+            _logger.LogWarning("Rate limit exceeded for user {UserId}", userId);
             return Problem(
                 title: "Rate limit exceeded",
                 detail: "You've reached the maximum number of AI requests for today. Please try again tomorrow.",

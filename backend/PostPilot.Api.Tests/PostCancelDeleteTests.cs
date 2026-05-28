@@ -7,6 +7,7 @@ using PostPilot.Api.Controllers;
 using PostPilot.Api.Data;
 using PostPilot.Api.Entities;
 using PostPilot.Api.Enums;
+using PostPilot.Api.Services.Auth;
 using PostPilot.Api.Services.Publishing;
 using PostPilot.Api.Services.Scheduling;
 using Xunit;
@@ -19,6 +20,8 @@ namespace PostPilot.Api.Tests;
 /// </summary>
 public class PostCancelDeleteTests : IDisposable
 {
+    internal static readonly Guid TestWorkspaceId = Guid.Parse("00000000-0000-0000-0000-0000000000aa");
+
     private readonly AppDbContext _dbContext;
     private readonly PostsController _controller;
     private readonly Mock<IPostScheduler> _schedulerMock;
@@ -38,8 +41,10 @@ public class PostCancelDeleteTests : IDisposable
 
         var loggerMock = new Mock<ILogger<PostsController>>();
         var insightsMock = new Mock<IFacebookInsightsService>();
+        var workspaceMock = new Mock<ICurrentWorkspaceProvider>();
+        workspaceMock.Setup(x => x.GetCurrentWorkspaceIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync(TestWorkspaceId);
 
-        _controller = new PostsController(_dbContext, _schedulerMock.Object, insightsMock.Object, loggerMock.Object);
+        _controller = new PostsController(_dbContext, _schedulerMock.Object, insightsMock.Object, workspaceMock.Object, loggerMock.Object);
     }
 
     public void Dispose()
@@ -52,6 +57,7 @@ public class PostCancelDeleteTests : IDisposable
         var post = new Post
         {
             Id = Guid.NewGuid(),
+            WorkspaceId = TestWorkspaceId,
             Content = "Test post",
             Platform = Platform.Facebook,
             Status = status,

@@ -1,34 +1,40 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PostPilot.Api.DTOs;
 using PostPilot.Api.Services;
+using PostPilot.Api.Services.Auth;
 
 namespace PostPilot.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/meta")]
 public class MetaController : ControllerBase
 {
     private readonly IMetaOAuthService _metaOAuthService;
+    private readonly ICurrentUserProvider _currentUser;
+    private readonly ICurrentWorkspaceProvider _currentWorkspace;
     private readonly ILogger<MetaController> _logger;
 
-    // TODO: Replace with actual user authentication
-    private static readonly Guid CurrentUserId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-
-    public MetaController(IMetaOAuthService metaOAuthService, ILogger<MetaController> logger)
+    public MetaController(
+        IMetaOAuthService metaOAuthService,
+        ICurrentUserProvider currentUser,
+        ICurrentWorkspaceProvider currentWorkspace,
+        ILogger<MetaController> logger)
     {
         _metaOAuthService = metaOAuthService;
+        _currentUser = currentUser;
+        _currentWorkspace = currentWorkspace;
         _logger = logger;
     }
 
-    /// <summary>
-    /// Start Meta OAuth flow - returns authorization URL
-    /// </summary>
     [HttpPost("oauth/start")]
     public async Task<ActionResult<MetaOAuthStartResponse>> StartOAuth()
     {
         try
         {
-            var result = await _metaOAuthService.StartOAuthAsync();
+            var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
+            var result = await _metaOAuthService.StartOAuthAsync(workspaceId);
             return Ok(result);
         }
         catch (Exception ex)
@@ -38,9 +44,6 @@ public class MetaController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Handle OAuth callback - exchange code for token and return available pages
-    /// </summary>
     [HttpPost("oauth/callback")]
     public async Task<ActionResult<MetaOAuthCallbackResponse>> HandleCallback([FromBody] MetaOAuthCallbackRequest request)
     {
@@ -61,15 +64,13 @@ public class MetaController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Complete OAuth and save connection immediately (identity-level only, no page selection)
-    /// </summary>
     [HttpPost("oauth/complete")]
     public async Task<ActionResult<MetaOAuthCompleteResponse>> CompleteOAuth([FromBody] MetaOAuthCompleteRequest request)
     {
         try
         {
-            var result = await _metaOAuthService.CompleteOAuthAsync(request.Code, request.State);
+            var userId = _currentUser.GetCurrentUserId();
+            var result = await _metaOAuthService.CompleteOAuthAsync(request.Code, request.State, userId);
             return Ok(result);
         }
         catch (InvalidOperationException ex)
@@ -84,15 +85,13 @@ public class MetaController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Discover Instagram Business accounts linked to selected pages
-    /// </summary>
     [HttpPost("instagram/discover")]
     public async Task<ActionResult<MetaDiscoverInstagramResponse>> DiscoverInstagram([FromBody] MetaDiscoverInstagramRequest request)
     {
         try
         {
-            var result = await _metaOAuthService.DiscoverInstagramAccountsAsync(request.TempToken, request.PageIds);
+            var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
+            var result = await _metaOAuthService.DiscoverInstagramAccountsAsync(request.TempToken, request.PageIds, workspaceId);
             return Ok(result);
         }
         catch (InvalidOperationException ex)
@@ -107,18 +106,17 @@ public class MetaController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Save Meta connection with selected pages and Instagram accounts
-    /// </summary>
     [HttpPost("connection")]
     public async Task<ActionResult<MetaSaveConnectionResponse>> SaveConnection([FromBody] MetaSaveConnectionRequest request)
     {
         try
         {
+            var userId = _currentUser.GetCurrentUserId();
             var result = await _metaOAuthService.SaveConnectionAsync(
                 request.TempToken,
                 request.SelectedPageIds,
-                request.SelectedInstagramIds
+                request.SelectedInstagramIds,
+                userId
             );
             return Ok(result);
         }
@@ -134,15 +132,13 @@ public class MetaController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Get current Meta connection status
-    /// </summary>
     [HttpGet("connection")]
     public async Task<ActionResult<MetaConnectionResponse>> GetConnection()
     {
         try
         {
-            var result = await _metaOAuthService.GetConnectionAsync(CurrentUserId);
+            var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
+            var result = await _metaOAuthService.GetConnectionAsync(workspaceId);
             return Ok(result);
         }
         catch (Exception ex)
@@ -152,15 +148,13 @@ public class MetaController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Get available pages (for manage flow)
-    /// </summary>
     [HttpGet("pages")]
     public async Task<ActionResult<MetaAvailablePagesResponse>> GetAvailablePages()
     {
         try
         {
-            var result = await _metaOAuthService.GetAvailablePagesAsync(CurrentUserId);
+            var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
+            var result = await _metaOAuthService.GetAvailablePagesAsync(workspaceId);
             return Ok(result);
         }
         catch (InvalidOperationException ex)
@@ -175,16 +169,14 @@ public class MetaController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Update selected pages and Instagram accounts (manage flow)
-    /// </summary>
     [HttpPut("connection")]
     public async Task<ActionResult<MetaSaveConnectionResponse>> UpdateConnection([FromBody] MetaUpdatePagesRequest request)
     {
         try
         {
+            var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
             var result = await _metaOAuthService.UpdateConnectionAsync(
-                CurrentUserId,
+                workspaceId,
                 request.SelectedPageIds,
                 request.SelectedInstagramIds
             );
@@ -202,15 +194,13 @@ public class MetaController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Disconnect Meta - revoke tokens and remove connection
-    /// </summary>
     [HttpDelete("connection")]
     public async Task<IActionResult> Disconnect()
     {
         try
         {
-            await _metaOAuthService.DisconnectAsync(CurrentUserId);
+            var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
+            await _metaOAuthService.DisconnectAsync(workspaceId);
             return NoContent();
         }
         catch (Exception ex)
@@ -220,15 +210,13 @@ public class MetaController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Discover Instagram eligibility for all connected Facebook Pages
-    /// </summary>
     [HttpGet("instagram/eligibility")]
     public async Task<ActionResult<InstagramDiscoveryResponse>> GetInstagramEligibility()
     {
         try
         {
-            var result = await _metaOAuthService.DiscoverInstagramEligibilityAsync(CurrentUserId);
+            var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
+            var result = await _metaOAuthService.DiscoverInstagramEligibilityAsync(workspaceId);
             return Ok(result);
         }
         catch (InvalidOperationException ex)
@@ -243,15 +231,13 @@ public class MetaController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Debug: raw Graph API responses for Instagram discovery diagnostics
-    /// </summary>
     [HttpGet("instagram/debug")]
     public async Task<ActionResult<object>> DebugInstagramDiscovery()
     {
         try
         {
-            var result = await _metaOAuthService.DebugInstagramDiscoveryAsync(CurrentUserId);
+            var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
+            var result = await _metaOAuthService.DebugInstagramDiscoveryAsync(workspaceId);
             return Ok(result);
         }
         catch (Exception ex)
@@ -261,10 +247,8 @@ public class MetaController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Get validation limits for the application
-    /// </summary>
     [HttpGet("limits")]
+    [AllowAnonymous]
     public ActionResult<ValidationLimitsResponse> GetLimits()
     {
         return Ok(new ValidationLimitsResponse(

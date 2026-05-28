@@ -1,42 +1,48 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PostPilot.Api.Data;
 using PostPilot.Api.DTOs;
 using PostPilot.Api.Entities;
+using PostPilot.Api.Services.Auth;
 
 namespace PostPilot.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/ai/voice-profiles")]
 public class AiVoiceProfileController : ControllerBase
 {
     private readonly AppDbContext _db;
+    private readonly ICurrentUserProvider _currentUser;
+    private readonly ICurrentWorkspaceProvider _currentWorkspace;
     private readonly ILogger<AiVoiceProfileController> _logger;
-
-    // TODO: Replace with real user authentication
-    private static readonly Guid CurrentUserId = Guid.Parse("00000000-0000-0000-0000-000000000001");
 
     private const int MaxNameLength = ValidationLimits.VoiceProfileNameMaxLength;
     private const int MaxDescriptionLength = ValidationLimits.VoiceProfileDescriptionMaxLength;
-    private const int MaxRulesLength = ValidationLimits.VoiceProfileDoRulesMaxLength; // Same for Do and Don't
+    private const int MaxRulesLength = ValidationLimits.VoiceProfileDoRulesMaxLength;
     private const int MaxBannedWordsLength = ValidationLimits.VoiceProfileBannedWordsMaxLength;
     private const int MaxExamplePostsLength = ValidationLimits.VoiceProfileExamplePostsMaxLength;
 
-    public AiVoiceProfileController(AppDbContext db, ILogger<AiVoiceProfileController> logger)
+    public AiVoiceProfileController(
+        AppDbContext db,
+        ICurrentUserProvider currentUser,
+        ICurrentWorkspaceProvider currentWorkspace,
+        ILogger<AiVoiceProfileController> logger)
     {
         _db = db;
+        _currentUser = currentUser;
+        _currentWorkspace = currentWorkspace;
         _logger = logger;
     }
 
-    /// <summary>
-    /// Get all voice profiles for the current user.
-    /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(List<VoiceProfileSummary>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<VoiceProfileSummary>>> GetProfiles(CancellationToken cancellationToken)
     {
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(cancellationToken);
         var profiles = await _db.AiVoiceProfiles
-            .Where(p => p.UserId == CurrentUserId && !p.IsDeleted)
+            .Where(p => p.WorkspaceId == workspaceId && !p.IsDeleted)
             .OrderBy(p => p.Name)
             .Select(p => new VoiceProfileSummary(p.Id, p.Name, p.UpdatedAt))
             .ToListAsync(cancellationToken);
@@ -44,16 +50,14 @@ public class AiVoiceProfileController : ControllerBase
         return Ok(profiles);
     }
 
-    /// <summary>
-    /// Get a specific voice profile by ID.
-    /// </summary>
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(VoiceProfileResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<VoiceProfileResponse>> GetProfile(Guid id, CancellationToken cancellationToken)
     {
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(cancellationToken);
         var profile = await _db.AiVoiceProfiles
-            .FirstOrDefaultAsync(p => p.Id == id && p.UserId == CurrentUserId && !p.IsDeleted, cancellationToken);
+            .FirstOrDefaultAsync(p => p.Id == id && p.WorkspaceId == workspaceId && !p.IsDeleted, cancellationToken);
 
         if (profile == null)
         {
@@ -63,9 +67,6 @@ public class AiVoiceProfileController : ControllerBase
         return Ok(MapToResponse(profile));
     }
 
-    /// <summary>
-    /// Create a new voice profile.
-    /// </summary>
     [HttpPost]
     [ProducesResponseType(typeof(VoiceProfileResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
@@ -81,10 +82,14 @@ public class AiVoiceProfileController : ControllerBase
             return ValidationProblem(new ValidationProblemDetails(errors));
         }
 
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(cancellationToken);
+        var userId = _currentUser.GetCurrentUserId();
+
         var profile = new AiVoiceProfile
         {
             Id = Guid.NewGuid(),
-            UserId = CurrentUserId,
+            WorkspaceId = workspaceId,
+            UserId = userId,
             Name = request.Name.Trim(),
             Description = request.Description?.Trim(),
             DoRules = request.DoRules?.Trim(),
@@ -98,14 +103,11 @@ public class AiVoiceProfileController : ControllerBase
         _db.AiVoiceProfiles.Add(profile);
         await _db.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Created voice profile {ProfileId} for user {UserId}", profile.Id, CurrentUserId);
+        _logger.LogInformation("Created voice profile {ProfileId} in workspace {WorkspaceId}", profile.Id, workspaceId);
 
         return CreatedAtAction(nameof(GetProfile), new { id = profile.Id }, MapToResponse(profile));
     }
 
-    /// <summary>
-    /// Update an existing voice profile.
-    /// </summary>
     [HttpPut("{id:guid}")]
     [ProducesResponseType(typeof(VoiceProfileResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
@@ -115,8 +117,9 @@ public class AiVoiceProfileController : ControllerBase
         [FromBody] UpdateVoiceProfileRequest request,
         CancellationToken cancellationToken)
     {
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(cancellationToken);
         var profile = await _db.AiVoiceProfiles
-            .FirstOrDefaultAsync(p => p.Id == id && p.UserId == CurrentUserId && !p.IsDeleted, cancellationToken);
+            .FirstOrDefaultAsync(p => p.Id == id && p.WorkspaceId == workspaceId && !p.IsDeleted, cancellationToken);
 
         if (profile == null)
         {
@@ -141,30 +144,27 @@ public class AiVoiceProfileController : ControllerBase
 
         await _db.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Updated voice profile {ProfileId} for user {UserId}", profile.Id, CurrentUserId);
+        _logger.LogInformation("Updated voice profile {ProfileId} in workspace {WorkspaceId}", profile.Id, workspaceId);
 
         return Ok(MapToResponse(profile));
     }
 
-    /// <summary>
-    /// Delete a voice profile.
-    /// </summary>
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> DeleteProfile(Guid id, CancellationToken cancellationToken)
     {
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(cancellationToken);
         var profile = await _db.AiVoiceProfiles
-            .FirstOrDefaultAsync(p => p.Id == id && p.UserId == CurrentUserId && !p.IsDeleted, cancellationToken);
+            .FirstOrDefaultAsync(p => p.Id == id && p.WorkspaceId == workspaceId && !p.IsDeleted, cancellationToken);
 
         if (profile == null)
         {
             return NotFound();
         }
 
-        // Check if profile is currently in use
-        if (await IsVoiceProfileInUseAsync(id, CurrentUserId, cancellationToken))
+        if (await IsVoiceProfileInUseAsync(id, workspaceId, cancellationToken))
         {
             return Conflict(new
             {
@@ -173,12 +173,11 @@ public class AiVoiceProfileController : ControllerBase
             });
         }
 
-        // Soft delete the profile
         profile.IsDeleted = true;
         profile.DeletedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Soft deleted voice profile {ProfileId} for user {UserId}", profile.Id, CurrentUserId);
+        _logger.LogInformation("Soft deleted voice profile {ProfileId} in workspace {WorkspaceId}", profile.Id, workspaceId);
 
         return NoContent();
     }
@@ -196,17 +195,12 @@ public class AiVoiceProfileController : ControllerBase
             profile.UpdatedAt
         );
 
-    private async Task<bool> IsVoiceProfileInUseAsync(Guid profileId, Guid userId, CancellationToken cancellationToken)
+    private Task<bool> IsVoiceProfileInUseAsync(Guid profileId, Guid workspaceId, CancellationToken cancellationToken)
     {
-        // TODO: Check if voiceProfileId is referenced in:
-        // - User settings/preferences (if they exist)
-        // - ScheduledPosts (if they store voiceProfileId)
-        // - Drafts (if they exist)
-        // - Any other persistent storage
-
-        // For now, since voiceProfileId is only used in transient AI requests,
-        // it's not persistently stored, so profiles are never "in use"
-        return false;
+        // voiceProfileId is currently only used in transient AI requests, so
+        // profiles are never "in use". This is intentionally a no-op until we
+        // start persisting voiceProfileId on posts/drafts/settings.
+        return Task.FromResult(false);
     }
 
     private static Dictionary<string, string[]> ValidateRequest(
@@ -257,7 +251,6 @@ public class AiVoiceProfileController : ControllerBase
             errors["examplePosts"] = [$"Example posts must not exceed {ValidationLimits.VoiceProfileExamplePostsMaxLength} characters."];
         }
 
-        // Check total combined length
         var totalLength = (name?.Length ?? 0) +
                           (description?.Length ?? 0) +
                           (doRules?.Length ?? 0) +

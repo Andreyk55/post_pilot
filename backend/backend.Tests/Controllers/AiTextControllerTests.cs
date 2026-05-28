@@ -6,6 +6,7 @@ using PostPilot.Api.Controllers;
 using PostPilot.Api.DTOs;
 using PostPilot.Api.Entities;
 using PostPilot.Api.Services.Ai;
+using PostPilot.Api.Services.Auth;
 using Xunit;
 
 namespace PostPilot.Api.Tests.Controllers;
@@ -14,12 +15,22 @@ public class AiTextControllerTests
 {
     private readonly Mock<IGeminiClient> _geminiClientMock;
     private readonly Mock<IAiRateLimiter> _rateLimiterMock;
+    private readonly Mock<ICurrentUserProvider> _currentUserMock;
+    private readonly Mock<ICurrentWorkspaceProvider> _currentWorkspaceMock;
     private readonly AiTextController _controller;
 
     public AiTextControllerTests()
     {
         _geminiClientMock = new Mock<IGeminiClient>();
         _rateLimiterMock = new Mock<IAiRateLimiter>();
+        _currentUserMock = new Mock<ICurrentUserProvider>();
+        _currentWorkspaceMock = new Mock<ICurrentWorkspaceProvider>();
+
+        _currentUserMock.Setup(x => x.GetCurrentUserId())
+            .Returns(Guid.Parse("00000000-0000-0000-0000-000000000001"));
+        _currentWorkspaceMock.Setup(x => x.GetCurrentWorkspaceIdAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Guid.Parse("00000000-0000-0000-0000-0000000000aa"));
+
         _controller = new AiTextController(
             _geminiClientMock.Object,
             _rateLimiterMock.Object,
@@ -27,6 +38,8 @@ public class AiTextControllerTests
             null!,
             null!,
             null!,
+            _currentUserMock.Object,
+            _currentWorkspaceMock.Object,
             NullLogger<AiTextController>.Instance);
     }
 

@@ -27,7 +27,7 @@ public class MediaUploadService : IMediaUploadService
         _logger = logger;
     }
 
-    public async Task<InitUploadResult> InitAsync(string fileName, string contentType, long sizeBytes, CancellationToken cancellationToken = default)
+    public async Task<InitUploadResult> InitAsync(Guid workspaceId, string fileName, string contentType, long sizeBytes, CancellationToken cancellationToken = default)
     {
         if (!_mediaService.IsValidMediaType(contentType))
             throw new ArgumentException($"Invalid content type: {contentType}. Allowed: {string.Join(", ", _mediaService.AllowedContentTypes)}");
@@ -44,6 +44,7 @@ public class MediaUploadService : IMediaUploadService
         var media = new Entities.Media
         {
             Id = Guid.NewGuid(),
+            WorkspaceId = workspaceId,
             StorageProvider = _storageOpts.Provider,
             Bucket = _storageOpts.Bucket,
             StorageKey = upload.StorageKey,
@@ -72,9 +73,9 @@ public class MediaUploadService : IMediaUploadService
             MediaType: upload.MediaType);
     }
 
-    public async Task<CompleteUploadResult> CompleteAsync(Guid mediaId, CancellationToken cancellationToken = default)
+    public async Task<CompleteUploadResult> CompleteAsync(Guid workspaceId, Guid mediaId, CancellationToken cancellationToken = default)
     {
-        var media = await _db.Media.FirstOrDefaultAsync(m => m.Id == mediaId, cancellationToken)
+        var media = await _db.Media.FirstOrDefaultAsync(m => m.Id == mediaId && m.WorkspaceId == workspaceId, cancellationToken)
             ?? throw new KeyNotFoundException($"Media {mediaId} not found.");
 
         if (media.Status == MediaUploadStatus.Uploaded)
@@ -105,9 +106,9 @@ public class MediaUploadService : IMediaUploadService
         return new CompleteUploadResult(media.Id, media.StorageKey, info.SizeBytes, media.ContentType, media.UploadedAt!.Value);
     }
 
-    public async Task<bool> DeleteAsync(Guid mediaId, CancellationToken cancellationToken = default)
+    public async Task<bool> DeleteAsync(Guid workspaceId, Guid mediaId, CancellationToken cancellationToken = default)
     {
-        var media = await _db.Media.FirstOrDefaultAsync(m => m.Id == mediaId, cancellationToken);
+        var media = await _db.Media.FirstOrDefaultAsync(m => m.Id == mediaId && m.WorkspaceId == workspaceId, cancellationToken);
         if (media is null)
             return false;
 

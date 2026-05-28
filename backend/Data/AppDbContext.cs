@@ -30,6 +30,8 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Status).HasConversion<string>();
             entity.Property(e => e.PostType).HasConversion<string>().HasDefaultValue(PostPilot.Api.Enums.PostType.Feed);
 
+            entity.HasIndex(e => e.WorkspaceId);
+
             // Index for finding due posts efficiently
             entity.HasIndex(e => new { e.Status, e.ScheduledAt });
             entity.HasIndex(e => new { e.Status, e.NextRetryAt });
@@ -59,15 +61,18 @@ public class AppDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => new { e.PostId, e.Order });
+            entity.HasIndex(e => e.WorkspaceId);
             entity.Property(e => e.MediaUrl).IsRequired();
         });
 
         modelBuilder.Entity<MetaConnection>(entity =>
         {
             entity.HasKey(e => e.Id);
-            // UserId is unique only among currently-connected rows. Disconnected rows
-            // remain as history so re-connecting the same user produces a new active row.
-            entity.HasIndex(e => e.UserId)
+            entity.HasIndex(e => e.WorkspaceId);
+            // (WorkspaceId, UserId) is unique only among currently-connected rows so a
+            // workspace doesn't accumulate duplicate active connections for the same user.
+            // Disconnected rows remain as history so re-connecting produces a new active row.
+            entity.HasIndex(e => new { e.WorkspaceId, e.UserId })
                 .IsUnique()
                 .HasFilter("\"IsConnected\" = true");
             entity.Property(e => e.AccessToken).IsRequired();
@@ -94,6 +99,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<ConnectedPage>(entity =>
         {
             entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.WorkspaceId);
             // Same (MetaConnectionId, PageId) can recur across disconnected/reconnected cycles;
             // uniqueness only applies to currently-connected rows.
             entity.HasIndex(e => new { e.MetaConnectionId, e.PageId })
@@ -107,6 +113,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<ConnectedInstagramAccount>(entity =>
         {
             entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.WorkspaceId);
             entity.HasIndex(e => new { e.MetaConnectionId, e.IgBusinessId })
                 .IsUnique()
                 .HasFilter("\"IsConnected\" = true");
@@ -126,6 +133,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<AiVoiceProfile>(entity =>
         {
             entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.WorkspaceId);
             entity.HasIndex(e => e.UserId);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Description).HasMaxLength(1000);
@@ -138,6 +146,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Media>(entity =>
         {
             entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.WorkspaceId);
             entity.HasIndex(e => e.StorageKey).IsUnique();
             entity.HasIndex(e => e.Status);
             entity.Property(e => e.Status).HasConversion<string>();
@@ -159,6 +168,8 @@ public class AppDbContext : DbContext
             // Unique provider identity — find-or-create on login keys off this pair.
             entity.HasIndex(e => new { e.AuthProvider, e.ExternalAuthUserId }).IsUnique();
             entity.HasIndex(e => e.Email);
+            // No FK constraint on CurrentWorkspaceId — it's a soft pointer that the
+            // CurrentWorkspaceProvider re-validates against WorkspaceMember on every request.
         });
 
         modelBuilder.Entity<Workspace>(entity =>

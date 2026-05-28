@@ -14,6 +14,12 @@ public class Media
 {
     public Guid Id { get; set; }
 
+    /// <summary>
+    /// Workspace this media belongs to. Set from current user's workspace at
+    /// upload init; never accepted from the client.
+    /// </summary>
+    public Guid WorkspaceId { get; set; }
+
     /// <summary>Storage backend that owns this object (e.g. "s3-compatible", "local-disk").</summary>
     public string StorageProvider { get; set; } = string.Empty;
 

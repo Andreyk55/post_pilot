@@ -9,7 +9,13 @@ public class AiVoiceProfile
     public Guid Id { get; set; }
 
     /// <summary>
-    /// Owner of this voice profile.
+    /// Workspace this voice profile belongs to. All members of the workspace
+    /// share the same set of voice profiles.
+    /// </summary>
+    public Guid WorkspaceId { get; set; }
+
+    /// <summary>
+    /// Owner of this voice profile (the user who created it).
     /// </summary>
     public Guid UserId { get; set; }
 

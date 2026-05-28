@@ -12,6 +12,7 @@ import { AuthCallback } from './pages/AuthCallback'
 import { PasswordGate } from './components/PasswordGate'
 import { LoginScreen } from './components/LoginScreen'
 import { AuthProvider, useAuth } from './hooks/useAuth'
+import { WorkspacesProvider } from './hooks/useWorkspaces'
 import './App.css'
 
 function MainApp() {
@@ -79,11 +80,13 @@ function App() {
     <PasswordGate>
       <BrowserRouter>
         <AuthProvider>
-          <Routes>
-            <Route path="/oauth/meta/callback" element={<MetaOAuthCallback />} />
-            <Route path="/auth/callback" element={<AuthCallback />} />
-            <Route path="/*" element={<RequireAuth><MainApp /></RequireAuth>} />
-          </Routes>
+          <WorkspacesProvider>
+            <Routes>
+              <Route path="/oauth/meta/callback" element={<MetaOAuthCallback />} />
+              <Route path="/auth/callback" element={<AuthCallback />} />
+              <Route path="/*" element={<RequireAuth><MainApp /></RequireAuth>} />
+            </Routes>
+          </WorkspacesProvider>
         </AuthProvider>
       </BrowserRouter>
     </PasswordGate>

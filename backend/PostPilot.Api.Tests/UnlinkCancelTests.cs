@@ -7,6 +7,7 @@ using PostPilot.Api.Data;
 using PostPilot.Api.Entities;
 using PostPilot.Api.Enums;
 using PostPilot.Api.Services;
+using PostPilot.Api.Services.Auth;
 using PostPilot.Api.Services.Publishing;
 using PostPilot.Api.Services.Scheduling;
 using PostPilot.Api.Settings;
@@ -48,7 +49,9 @@ public class UnlinkCancelTests : IDisposable
     {
         var loggerMock = new Mock<ILogger<PostsController>>();
         var insightsMock = new Mock<IFacebookInsightsService>();
-        return new PostsController(_dbContext, _schedulerMock.Object, insightsMock.Object, loggerMock.Object);
+        var workspaceMock = new Mock<ICurrentWorkspaceProvider>();
+        workspaceMock.Setup(x => x.GetCurrentWorkspaceIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync(WorkspaceId);
+        return new PostsController(_dbContext, _schedulerMock.Object, insightsMock.Object, workspaceMock.Object, loggerMock.Object);
     }
 
     private MetaOAuthService MakeOAuthService()
@@ -73,12 +76,14 @@ public class UnlinkCancelTests : IDisposable
     }
 
     private static readonly Guid UserId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+    private static readonly Guid WorkspaceId = Guid.Parse("00000000-0000-0000-0000-0000000000aa");
 
     private MetaConnection SeedConnection(out ConnectedPage page, out ConnectedInstagramAccount ig)
     {
         var connection = new MetaConnection
         {
             Id = Guid.NewGuid(),
+            WorkspaceId = WorkspaceId,
             UserId = UserId,
             AccessToken = "user-token",
             TokenExpiresAt = DateTime.UtcNow.AddDays(60),
@@ -89,6 +94,7 @@ public class UnlinkCancelTests : IDisposable
         page = new ConnectedPage
         {
             Id = Guid.NewGuid(),
+            WorkspaceId = WorkspaceId,
             MetaConnectionId = connection.Id,
             PageId = "fb-page-1",
             Name = "Test Page",
@@ -99,6 +105,7 @@ public class UnlinkCancelTests : IDisposable
         ig = new ConnectedInstagramAccount
         {
             Id = Guid.NewGuid(),
+            WorkspaceId = WorkspaceId,
             MetaConnectionId = connection.Id,
             IgBusinessId = "ig-biz-1",
             Username = "testuser",
@@ -119,6 +126,7 @@ public class UnlinkCancelTests : IDisposable
         var post = new Post
         {
             Id = Guid.NewGuid(),
+            WorkspaceId = WorkspaceId,
             Content = $"post-{Guid.NewGuid()}",
             Platform = platform,
             PostType = PostType.Feed,
@@ -143,10 +151,10 @@ public class UnlinkCancelTests : IDisposable
         SeedConnection(out var page, out var ig);
 
         var service = MakeOAuthService();
-        await service.DisconnectAsync(UserId);
+        await service.DisconnectAsync(WorkspaceId);
 
         _dbContext.ChangeTracker.Clear();
-        var connection = await _dbContext.MetaConnections.FirstAsync(c => c.UserId == UserId);
+        var connection = await _dbContext.MetaConnections.FirstAsync(c => c.WorkspaceId == WorkspaceId);
         var pageAfter = await _dbContext.ConnectedPages.FindAsync(page.Id);
         var igAfter = await _dbContext.ConnectedInstagramAccounts.FindAsync(ig.Id);
 
@@ -176,7 +184,7 @@ public class UnlinkCancelTests : IDisposable
         var postCountBefore = await _dbContext.Posts.CountAsync();
 
         var service = MakeOAuthService();
-        await service.DisconnectAsync(UserId);
+        await service.DisconnectAsync(WorkspaceId);
 
         _dbContext.ChangeTracker.Clear();
 
@@ -211,7 +219,7 @@ public class UnlinkCancelTests : IDisposable
         var published = AddPost(PostStatus.Published, Platform.Facebook, targetPageId: page.Id);
 
         var service = MakeOAuthService();
-        await service.DisconnectAsync(UserId);
+        await service.DisconnectAsync(WorkspaceId);
 
         _dbContext.ChangeTracker.Clear();
         var controller = MakeController();
@@ -235,6 +243,7 @@ public class UnlinkCancelTests : IDisposable
         var disconnectedPage = new ConnectedPage
         {
             Id = Guid.NewGuid(),
+            WorkspaceId = WorkspaceId,
             PageId = "fb-page-disconnected",
             Name = "Gone",
             AccessToken = "tok",
@@ -280,7 +289,7 @@ public class UnlinkCancelTests : IDisposable
         AddPost(PostStatus.Published, Platform.Facebook, targetPageId: page.Id);
 
         var service = MakeOAuthService();
-        await service.DisconnectAsync(UserId);
+        await service.DisconnectAsync(WorkspaceId);
 
         _dbContext.ChangeTracker.Clear();
         var controller = MakeController();

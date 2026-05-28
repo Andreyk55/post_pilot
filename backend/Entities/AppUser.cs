@@ -28,6 +28,14 @@ public class AppUser
 
     public string? AvatarUrl { get; set; }
 
+    /// <summary>
+    /// Which workspace the user is currently acting in. Authoritative source
+    /// is the DB, not the auth cookie. WorkspaceMember is still what decides
+    /// whether the user is *allowed* in this workspace; this only tracks
+    /// which one is selected.
+    /// </summary>
+    public Guid? CurrentWorkspaceId { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

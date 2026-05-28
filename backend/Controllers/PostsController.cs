@@ -1,34 +1,40 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PostPilot.Api.Data;
 using PostPilot.Api.DTOs;
 using PostPilot.Api.Entities;
 using PostPilot.Api.Enums;
+using PostPilot.Api.Services.Auth;
 using PostPilot.Api.Services.Publishing;
 using PostPilot.Api.Services.Scheduling;
 
 namespace PostPilot.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/[controller]")]
 public class PostsController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly IPostScheduler _scheduler;
     private readonly IFacebookInsightsService _facebookInsights;
+    private readonly ICurrentWorkspaceProvider _currentWorkspace;
     private readonly ILogger<PostsController> _logger;
 
     public PostsController(
         AppDbContext context,
         IPostScheduler scheduler,
         IFacebookInsightsService facebookInsights,
+        ICurrentWorkspaceProvider currentWorkspace,
         ILogger<PostsController> logger)
     {
         _context = context;
         _scheduler = scheduler;
         _facebookInsights = facebookInsights;
+        _currentWorkspace = currentWorkspace;
         _logger = logger;
     }
 
@@ -43,7 +49,8 @@ public class PostsController : ControllerBase
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 50);
 
-        var query = _context.Posts.AsQueryable();
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
+        var query = _context.Posts.Where(p => p.WorkspaceId == workspaceId);
 
         if (status.HasValue)
         {
@@ -94,11 +101,12 @@ public class PostsController : ControllerBase
     [HttpGet("{id}")]
     public async Task<ActionResult<PostDto>> GetPost(Guid id)
     {
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
         var post = await _context.Posts
             .Include(p => p.TargetPage)
             .Include(p => p.TargetInstagramAccount)
             .Include(p => p.MediaItems)
-            .FirstOrDefaultAsync(p => p.Id == id);
+            .FirstOrDefaultAsync(p => p.Id == id && p.WorkspaceId == workspaceId);
 
         if (post == null)
         {
@@ -111,11 +119,12 @@ public class PostsController : ControllerBase
     [HttpGet("{id}/details")]
     public async Task<ActionResult<PostDetailsDto>> GetPostDetails(Guid id, CancellationToken cancellationToken)
     {
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(cancellationToken);
         var post = await _context.Posts
             .Include(p => p.TargetPage)
             .Include(p => p.TargetInstagramAccount)
             .Include(p => p.MediaItems)
-            .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
+            .FirstOrDefaultAsync(p => p.Id == id && p.WorkspaceId == workspaceId, cancellationToken);
 
         if (post == null)
         {
@@ -262,6 +271,7 @@ public class PostsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<PostDto>> CreatePost(CreatePostRequest request)
     {
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
         var validationErrors = ValidateCreatePostRequest(request);
         if (validationErrors.Count > 0)
         {
@@ -283,7 +293,7 @@ public class PostsController : ControllerBase
             }
 
             var targetPage = await _context.Set<ConnectedPage>()
-                .FirstOrDefaultAsync(p => p.Id == request.TargetPageId.Value && p.IsConnected);
+                .FirstOrDefaultAsync(p => p.Id == request.TargetPageId.Value && p.WorkspaceId == workspaceId && p.IsConnected);
 
             if (targetPage == null)
             {
@@ -387,7 +397,7 @@ public class PostsController : ControllerBase
             }
 
             var targetIgAccount = await _context.Set<ConnectedInstagramAccount>()
-                .FirstOrDefaultAsync(a => a.Id == request.TargetInstagramAccountId.Value && a.IsConnected);
+                .FirstOrDefaultAsync(a => a.Id == request.TargetInstagramAccountId.Value && a.WorkspaceId == workspaceId && a.IsConnected);
 
             if (targetIgAccount == null)
             {
@@ -618,6 +628,7 @@ public class PostsController : ControllerBase
         var post = new Post
         {
             Id = Guid.NewGuid(),
+            WorkspaceId = workspaceId,
             // Stories don't support captions — ignore any content sent by the client
             Content = request.PostType == PostType.Story ? string.Empty : (request.Content ?? string.Empty),
             MediaUrl = request.MediaUrl,
@@ -647,6 +658,7 @@ public class PostsController : ControllerBase
                 .Select((m, i) => new PostMediaItem
                 {
                     Id = Guid.NewGuid(),
+                    WorkspaceId = workspaceId,
                     PostId = post.Id,
                     Order = i,
                     MediaUrl = m.MediaUrl,
@@ -682,7 +694,8 @@ public class PostsController : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdatePost(Guid id, UpdatePostRequest request)
     {
-        var post = await _context.Posts.FindAsync(id);
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
+        var post = await _context.Posts.FirstOrDefaultAsync(p => p.Id == id && p.WorkspaceId == workspaceId);
 
         if (post == null)
         {
@@ -716,7 +729,7 @@ public class PostsController : ControllerBase
             }
 
             var targetPage = await _context.Set<ConnectedPage>()
-                .FirstOrDefaultAsync(p => p.Id == request.TargetPageId.Value && p.IsConnected);
+                .FirstOrDefaultAsync(p => p.Id == request.TargetPageId.Value && p.WorkspaceId == workspaceId && p.IsConnected);
 
             if (targetPage == null)
             {
@@ -800,11 +813,12 @@ public class PostsController : ControllerBase
         [FromServices] IPostPublisherResolver publisherResolver,
         [FromServices] IStoryPublisherResolver storyPublisherResolver)
     {
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
         var post = await _context.Posts
             .Include(p => p.TargetPage)
             .Include(p => p.TargetInstagramAccount)
             .Include(p => p.MediaItems)
-            .FirstOrDefaultAsync(p => p.Id == id);
+            .FirstOrDefaultAsync(p => p.Id == id && p.WorkspaceId == workspaceId);
 
         if (post == null)
             return NotFound();
@@ -893,7 +907,8 @@ public class PostsController : ControllerBase
     [HttpPost("{id}/cancel")]
     public async Task<IActionResult> CancelPost(Guid id)
     {
-        var post = await _context.Posts.FindAsync(id);
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
+        var post = await _context.Posts.FirstOrDefaultAsync(p => p.Id == id && p.WorkspaceId == workspaceId);
 
         if (post == null)
         {
@@ -947,9 +962,10 @@ public class PostsController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeletePost(Guid id)
     {
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
         var post = await _context.Posts
             .Include(p => p.MediaItems)
-            .FirstOrDefaultAsync(p => p.Id == id);
+            .FirstOrDefaultAsync(p => p.Id == id && p.WorkspaceId == workspaceId);
 
         if (post == null)
         {
@@ -1003,9 +1019,10 @@ public class PostsController : ControllerBase
         [FromQuery] double y = 0.5,
         [FromServices] IPostPublisherResolver publisherResolver = null!)
     {
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
         var post = await _context.Posts
             .Include(p => p.TargetInstagramAccount)
-            .FirstOrDefaultAsync(p => p.Id == id);
+            .FirstOrDefaultAsync(p => p.Id == id && p.WorkspaceId == workspaceId);
 
         if (post == null) return NotFound("Post not found");
         if (post.Platform != Platform.Instagram) return BadRequest("Not an Instagram post");

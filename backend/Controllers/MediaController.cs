@@ -1,29 +1,35 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PostPilot.Api.DTOs;
 using PostPilot.Api.Enums;
+using PostPilot.Api.Services.Auth;
 using PostPilot.Api.Services.Media;
 using PostPilot.Api.Services.Validation;
 
 namespace PostPilot.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/[controller]")]
 public class MediaController : ControllerBase
 {
     private readonly IMediaService _mediaService;
     private readonly IMediaUploadService _uploadService;
     private readonly IMediaValidationService _validationService;
+    private readonly ICurrentWorkspaceProvider _currentWorkspace;
     private readonly ILogger<MediaController> _logger;
 
     public MediaController(
         IMediaService mediaService,
         IMediaUploadService uploadService,
         IMediaValidationService validationService,
+        ICurrentWorkspaceProvider currentWorkspace,
         ILogger<MediaController> logger)
     {
         _mediaService = mediaService;
         _uploadService = uploadService;
         _validationService = validationService;
+        _currentWorkspace = currentWorkspace;
         _logger = logger;
     }
 
@@ -79,7 +85,8 @@ public class MediaController : ControllerBase
     {
         try
         {
-            var result = await _uploadService.InitAsync(request.FileName, request.ContentType, request.SizeBytes, ct);
+            var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(ct);
+            var result = await _uploadService.InitAsync(workspaceId, request.FileName, request.ContentType, request.SizeBytes, ct);
             return Ok(new InitUploadResponse(
                 MediaId: result.MediaId,
                 StorageKey: result.StorageKey,
@@ -110,7 +117,8 @@ public class MediaController : ControllerBase
     {
         try
         {
-            var result = await _uploadService.CompleteAsync(request.MediaId, ct);
+            var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(ct);
+            var result = await _uploadService.CompleteAsync(workspaceId, request.MediaId, ct);
             return Ok(new CompleteUploadResponse(
                 MediaId: result.MediaId,
                 StorageKey: result.StorageKey,
@@ -136,7 +144,8 @@ public class MediaController : ControllerBase
     [HttpDelete("{mediaId:guid}")]
     public async Task<IActionResult> DeleteMedia(Guid mediaId, CancellationToken ct)
     {
-        var removed = await _uploadService.DeleteAsync(mediaId, ct);
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(ct);
+        var removed = await _uploadService.DeleteAsync(workspaceId, mediaId, ct);
         return removed ? NoContent() : NotFound();
     }
 
@@ -207,6 +216,7 @@ public class MediaController : ControllerBase
     /// Route: GET /api/media/files/{*storageKey}
     /// </summary>
     [HttpGet("files/{*storageKey}")]
+    [AllowAnonymous]
     public async Task<IActionResult> GetFile(string storageKey, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(storageKey))
@@ -242,6 +252,7 @@ public class MediaController : ControllerBase
     /// Route: GET /api/media/frames/{filename}
     /// </summary>
     [HttpGet("frames/{filename}")]
+    [AllowAnonymous]
     public IActionResult GetFrame(string filename)
     {
         // Only available in local mode

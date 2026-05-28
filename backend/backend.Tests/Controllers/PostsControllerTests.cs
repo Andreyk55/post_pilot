@@ -6,6 +6,7 @@ using PostPilot.Api.Controllers;
 using PostPilot.Api.Data;
 using PostPilot.Api.Entities;
 using PostPilot.Api.Enums;
+using PostPilot.Api.Services.Auth;
 using PostPilot.Api.Services.Publishing;
 using PostPilot.Api.Services.Scheduling;
 using Xunit;
@@ -14,9 +15,13 @@ namespace PostPilot.Api.Tests.Controllers;
 
 public class PostsControllerTests : IDisposable
 {
+    // Fixed test workspace id so seeded entities are visible to the workspace-scoped controller.
+    internal static readonly Guid TestWorkspaceId = Guid.Parse("00000000-0000-0000-0000-0000000000aa");
+
     private readonly AppDbContext _context;
     private readonly Mock<IPostScheduler> _schedulerMock;
     private readonly Mock<IFacebookInsightsService> _insightsMock;
+    private readonly Mock<ICurrentWorkspaceProvider> _workspaceMock;
     private readonly PostsController _controller;
 
     public PostsControllerTests()
@@ -28,6 +33,12 @@ public class PostsControllerTests : IDisposable
         _context = new AppDbContext(options);
         _schedulerMock = new Mock<IPostScheduler>();
         _insightsMock = new Mock<IFacebookInsightsService>();
+        _workspaceMock = new Mock<ICurrentWorkspaceProvider>();
+
+        _workspaceMock.Setup(x => x.GetCurrentWorkspaceIdAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(TestWorkspaceId);
+        _workspaceMock.Setup(x => x.GetCurrentWorkspaceAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CurrentWorkspaceInfo(Guid.NewGuid(), TestWorkspaceId, "Test"));
 
         _schedulerMock.Setup(x => x.ScheduleAsync(It.IsAny<PostPilot.Api.Entities.Post>()))
             .ReturnsAsync(new ScheduleResult(true, "test-arn", null));
@@ -36,6 +47,7 @@ public class PostsControllerTests : IDisposable
             _context,
             _schedulerMock.Object,
             _insightsMock.Object,
+            _workspaceMock.Object,
             NullLogger<PostsController>.Instance);
     }
 
@@ -52,6 +64,7 @@ public class PostsControllerTests : IDisposable
         var metaConnection = new MetaConnection
         {
             Id = Guid.NewGuid(),
+            WorkspaceId = TestWorkspaceId,
             UserId = Guid.Parse("00000000-0000-0000-0000-000000000001"),
             AccessToken = "test-token",
             TokenExpiresAt = DateTime.UtcNow.AddDays(60),
@@ -63,6 +76,7 @@ public class PostsControllerTests : IDisposable
         var connectedPage = new ConnectedPage
         {
             Id = Guid.NewGuid(),
+            WorkspaceId = TestWorkspaceId,
             MetaConnectionId = metaConnection.Id,
             PageId = "123456",
             Name = "Test Page",
@@ -74,6 +88,7 @@ public class PostsControllerTests : IDisposable
         var igAccount = new ConnectedInstagramAccount
         {
             Id = Guid.NewGuid(),
+            WorkspaceId = TestWorkspaceId,
             MetaConnectionId = metaConnection.Id,
             IgBusinessId = "ig-123",
             Username = "testuser",

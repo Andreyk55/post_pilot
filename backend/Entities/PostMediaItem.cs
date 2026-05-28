@@ -12,6 +12,12 @@ public class PostMediaItem
     public Guid Id { get; set; }
 
     /// <summary>
+    /// Workspace this media item belongs to. Mirrors the parent Post's
+    /// WorkspaceId; denormalized so workspace-scoped queries don't need to join.
+    /// </summary>
+    public Guid WorkspaceId { get; set; }
+
+    /// <summary>
     /// Parent post ID.
     /// </summary>
     public Guid PostId { get; set; }

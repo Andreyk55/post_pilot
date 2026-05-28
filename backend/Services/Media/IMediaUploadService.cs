@@ -12,11 +12,11 @@ namespace PostPilot.Api.Services.Media;
 /// </summary>
 public interface IMediaUploadService
 {
-    Task<InitUploadResult> InitAsync(string fileName, string contentType, long sizeBytes, CancellationToken cancellationToken = default);
+    Task<InitUploadResult> InitAsync(Guid workspaceId, string fileName, string contentType, long sizeBytes, CancellationToken cancellationToken = default);
 
-    Task<CompleteUploadResult> CompleteAsync(Guid mediaId, CancellationToken cancellationToken = default);
+    Task<CompleteUploadResult> CompleteAsync(Guid workspaceId, Guid mediaId, CancellationToken cancellationToken = default);
 
-    Task<bool> DeleteAsync(Guid mediaId, CancellationToken cancellationToken = default);
+    Task<bool> DeleteAsync(Guid workspaceId, Guid mediaId, CancellationToken cancellationToken = default);
 }
 
 public record InitUploadResult(

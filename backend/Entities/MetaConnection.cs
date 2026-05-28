@@ -3,7 +3,15 @@ namespace PostPilot.Api.Entities;
 public class MetaConnection
 {
     public Guid Id { get; set; }
-    public Guid UserId { get; set; } // For future user system, using fixed value for now
+
+    /// <summary>
+    /// Workspace this connection belongs to. A workspace can hold multiple Meta
+    /// connections (multiple brands' Meta accounts). Set from current workspace
+    /// at OAuth completion.
+    /// </summary>
+    public Guid WorkspaceId { get; set; }
+
+    public Guid UserId { get; set; } // The AppUser who connected this account.
     public required string AccessToken { get; set; }
     public DateTime TokenExpiresAt { get; set; }
     public DateTime ConnectedAt { get; set; }
@@ -30,6 +38,12 @@ public class MetaConnection
 public class ConnectedPage
 {
     public Guid Id { get; set; }
+
+    /// <summary>
+    /// Workspace this page belongs to. Mirrors the parent MetaConnection's
+    /// WorkspaceId at insert time; never changes.
+    /// </summary>
+    public Guid WorkspaceId { get; set; }
 
     /// <summary>
     /// Nullable so a disconnected parent MetaConnection can be removed (legacy paths)
@@ -63,6 +77,12 @@ public class ConnectedInstagramAccount
     public Guid Id { get; set; }
 
     /// <summary>
+    /// Workspace this Instagram account belongs to. Mirrors the parent
+    /// MetaConnection's WorkspaceId at insert time; never changes.
+    /// </summary>
+    public Guid WorkspaceId { get; set; }
+
+    /// <summary>
     /// Nullable so a disconnected parent MetaConnection can be removed without orphaning history.
     /// </summary>
     public Guid? MetaConnectionId { get; set; }
@@ -92,6 +112,14 @@ public class ConnectedInstagramAccount
 public class MetaOAuthState
 {
     public Guid Id { get; set; }
+
+    /// <summary>
+    /// Workspace this OAuth flow is bound to. Set when the flow starts so that
+    /// the resulting MetaConnection lands in the correct workspace even if the
+    /// user switches workspaces mid-flow.
+    /// </summary>
+    public Guid WorkspaceId { get; set; }
+
     public required string State { get; set; } // OAuth state parameter
     public string? TempAccessToken { get; set; }
     public DateTime? TokenExpiresAt { get; set; }

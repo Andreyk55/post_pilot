@@ -1,27 +1,30 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PostPilot.Api.DTOs;
 using PostPilot.Api.Services.Ai;
+using PostPilot.Api.Services.Auth;
 
 namespace PostPilot.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/ai")]
 public class AiMediaController : ControllerBase
 {
     private readonly IMediaAiService _mediaAiService;
     private readonly IAiRateLimiter _rateLimiter;
+    private readonly ICurrentUserProvider _currentUser;
     private readonly ILogger<AiMediaController> _logger;
-
-    // TODO: Replace with real user authentication
-    private static readonly Guid CurrentUserId = Guid.Parse("00000000-0000-0000-0000-000000000001");
 
     public AiMediaController(
         IMediaAiService mediaAiService,
         IAiRateLimiter rateLimiter,
+        ICurrentUserProvider currentUser,
         ILogger<AiMediaController> logger)
     {
         _mediaAiService = mediaAiService;
         _rateLimiter = rateLimiter;
+        _currentUser = currentUser;
         _logger = logger;
     }
 
@@ -41,6 +44,7 @@ public class AiMediaController : ControllerBase
         [FromBody] AiMediaRequest request,
         CancellationToken cancellationToken)
     {
+        var userId = _currentUser.GetCurrentUserId();
         // Validate request
         var validationErrors = ValidateRequest(request);
         if (validationErrors.Count > 0)
@@ -51,10 +55,10 @@ public class AiMediaController : ControllerBase
         // Check rate limit (thumbnail suggest is free, doesn't use AI)
         if (request.Action != AiMediaAction.ThumbnailSuggest)
         {
-            var canProceed = await _rateLimiter.TryAcquireAsync(CurrentUserId, cancellationToken);
+            var canProceed = await _rateLimiter.TryAcquireAsync(userId, cancellationToken);
             if (!canProceed)
             {
-                _logger.LogWarning("Rate limit exceeded for user {UserId}", CurrentUserId);
+                _logger.LogWarning("Rate limit exceeded for user {UserId}", userId);
 
                 return Problem(
                     title: "Rate limit exceeded",
@@ -248,6 +252,7 @@ public class AiMediaController : ControllerBase
         [FromBody] AiVideoCaptionIdeasRequest request,
         CancellationToken cancellationToken)
     {
+        var userId = _currentUser.GetCurrentUserId();
         // Validate request
         if (string.IsNullOrWhiteSpace(request.FrameData))
         {
@@ -277,10 +282,10 @@ public class AiMediaController : ControllerBase
         }
 
         // Check rate limit
-        var canProceed = await _rateLimiter.TryAcquireAsync(CurrentUserId, cancellationToken);
+        var canProceed = await _rateLimiter.TryAcquireAsync(userId, cancellationToken);
         if (!canProceed)
         {
-            _logger.LogWarning("Rate limit exceeded for user {UserId}", CurrentUserId);
+            _logger.LogWarning("Rate limit exceeded for user {UserId}", userId);
 
             return Problem(
                 title: "Rate limit exceeded",
