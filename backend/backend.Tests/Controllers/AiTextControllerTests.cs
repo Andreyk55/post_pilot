@@ -53,7 +53,7 @@ public class AiTextControllerTests
 
         var result = await _controller.ProcessText(request, CancellationToken.None);
 
-        var objectResult = Assert.IsType<ObjectResult>(result);
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(result);
         Assert.Equal(StatusCodes.Status400BadRequest, objectResult.StatusCode);
     }
 
@@ -68,7 +68,7 @@ public class AiTextControllerTests
 
         var result = await _controller.ProcessText(request, CancellationToken.None);
 
-        var objectResult = Assert.IsType<ObjectResult>(result);
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(result);
         Assert.Equal(StatusCodes.Status400BadRequest, objectResult.StatusCode);
     }
 
@@ -82,7 +82,7 @@ public class AiTextControllerTests
 
         var result = await _controller.ProcessText(request, CancellationToken.None);
 
-        var objectResult = Assert.IsType<ObjectResult>(result);
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(result);
         Assert.Equal(StatusCodes.Status400BadRequest, objectResult.StatusCode);
     }
 
@@ -98,7 +98,7 @@ public class AiTextControllerTests
 
         var result = await _controller.ProcessText(request, CancellationToken.None);
 
-        var objectResult = Assert.IsType<ObjectResult>(result);
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(result);
         Assert.Equal(StatusCodes.Status429TooManyRequests, objectResult.StatusCode);
     }
 
@@ -215,7 +215,7 @@ public class AiTextControllerTests
 
         var result = await _controller.ProcessText(request, CancellationToken.None);
 
-        var objectResult = Assert.IsType<ObjectResult>(result);
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(result);
         Assert.Equal(StatusCodes.Status429TooManyRequests, objectResult.StatusCode);
     }
 
@@ -239,7 +239,7 @@ public class AiTextControllerTests
 
         var result = await _controller.ProcessText(request, CancellationToken.None);
 
-        var objectResult = Assert.IsType<ObjectResult>(result);
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(result);
         Assert.Equal(StatusCodes.Status504GatewayTimeout, objectResult.StatusCode);
     }
 
@@ -263,7 +263,7 @@ public class AiTextControllerTests
 
         var result = await _controller.ProcessText(request, CancellationToken.None);
 
-        var objectResult = Assert.IsType<ObjectResult>(result);
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(result);
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, objectResult.StatusCode);
     }
 }

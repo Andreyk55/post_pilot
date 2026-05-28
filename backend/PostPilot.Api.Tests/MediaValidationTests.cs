@@ -36,7 +36,11 @@ public class MediaValidationTests
     [Fact]
     public void GetRules_UndefinedCombination_ReturnsNull()
     {
-        var rules = MediaValidationRules.GetRules(Platform.Facebook, Placement.Story, MediaType.Image);
+        // LinkedIn Story is not a defined placement (LinkedIn only has Feed).
+        // Originally this test used Facebook Story, but Facebook stories
+        // were added later — keep the assertion meaningful by picking a
+        // combination that is actually undefined.
+        var rules = MediaValidationRules.GetRules(Platform.LinkedIn, Placement.Story, MediaType.Image);
 
         Assert.Null(rules);
     }
@@ -51,8 +55,8 @@ public class MediaValidationTests
     [Fact]
     public void HasRules_NonExistingCombination_ReturnsFalse()
     {
-        // Story placement not defined for Facebook
-        Assert.False(MediaValidationRules.HasRules(Platform.Facebook, Placement.Story, MediaType.Image));
+        // LinkedIn Story placement not defined.
+        Assert.False(MediaValidationRules.HasRules(Platform.LinkedIn, Placement.Story, MediaType.Image));
     }
 }
 

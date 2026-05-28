@@ -36,6 +36,13 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => new { e.Status, e.ScheduledAt });
             entity.HasIndex(e => new { e.Status, e.NextRetryAt });
 
+            // Workspace FK — RESTRICT. A workspace with any post in it can't be hard-deleted.
+            // Posts must be removed (or soft-archived) before the workspace itself goes away.
+            entity.HasOne<Workspace>()
+                .WithMany()
+                .HasForeignKey(e => e.WorkspaceId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             // Foreign key to ConnectedPage — RESTRICT. Asset rows are soft-deleted
             // (DisconnectedAt + IsConnected=false), never hard-deleted, so Posts never lose
             // their target reference. Restrict acts as a schema-level safety net should
@@ -63,6 +70,14 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => new { e.PostId, e.Order });
             entity.HasIndex(e => e.WorkspaceId);
             entity.Property(e => e.MediaUrl).IsRequired();
+
+            // Workspace FK — RESTRICT. The parent Post already has the same restriction;
+            // we keep one here too so a denormalized WorkspaceId can never point at a
+            // workspace that no longer exists.
+            entity.HasOne<Workspace>()
+                .WithMany()
+                .HasForeignKey(e => e.WorkspaceId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<MetaConnection>(entity =>
@@ -76,6 +91,12 @@ public class AppDbContext : DbContext
                 .IsUnique()
                 .HasFilter("\"IsConnected\" = true");
             entity.Property(e => e.AccessToken).IsRequired();
+
+            // Workspace FK — RESTRICT.
+            entity.HasOne<Workspace>()
+                .WithMany()
+                .HasForeignKey(e => e.WorkspaceId)
+                .OnDelete(DeleteBehavior.Restrict);
             // NOTE: No HasDefaultValue / HasSentinel on IsConnected — both would make EF
             // treat the C# default `true` as "unset" and omit IsConnected from INSERT,
             // which in turn confuses change-tracking when adding new children via a tracked
@@ -105,9 +126,20 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => new { e.MetaConnectionId, e.PageId })
                 .IsUnique()
                 .HasFilter("\"IsConnected\" = true");
+            // Inside a single workspace, the same FB page must not be connected twice
+            // simultaneously. Across workspaces (agency use case) duplicates are allowed.
+            entity.HasIndex(e => new { e.WorkspaceId, e.PageId })
+                .IsUnique()
+                .HasFilter("\"IsConnected\" = true");
             entity.Property(e => e.PageId).IsRequired();
             entity.Property(e => e.Name).IsRequired();
             entity.Property(e => e.AccessToken).IsRequired();
+
+            // Workspace FK — RESTRICT.
+            entity.HasOne<Workspace>()
+                .WithMany()
+                .HasForeignKey(e => e.WorkspaceId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<ConnectedInstagramAccount>(entity =>
@@ -117,10 +149,20 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => new { e.MetaConnectionId, e.IgBusinessId })
                 .IsUnique()
                 .HasFilter("\"IsConnected\" = true");
+            // Same-workspace duplicate guard, mirroring ConnectedPage.
+            entity.HasIndex(e => new { e.WorkspaceId, e.IgBusinessId })
+                .IsUnique()
+                .HasFilter("\"IsConnected\" = true");
             entity.Property(e => e.IgBusinessId).IsRequired();
             entity.Property(e => e.Username).IsRequired();
             entity.Property(e => e.PageId).IsRequired();
             entity.Property(e => e.PageName).IsRequired();
+
+            // Workspace FK — RESTRICT.
+            entity.HasOne<Workspace>()
+                .WithMany()
+                .HasForeignKey(e => e.WorkspaceId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<MetaOAuthState>(entity =>
@@ -128,6 +170,12 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.State).IsUnique();
             entity.Property(e => e.State).IsRequired();
+
+            // Workspace FK — RESTRICT.
+            entity.HasOne<Workspace>()
+                .WithMany()
+                .HasForeignKey(e => e.WorkspaceId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<AiVoiceProfile>(entity =>
@@ -141,6 +189,12 @@ public class AppDbContext : DbContext
             entity.Property(e => e.DontRules).HasMaxLength(2000);
             entity.Property(e => e.BannedWords).HasMaxLength(1000);
             entity.Property(e => e.ExamplePosts).HasMaxLength(5000);
+
+            // Workspace FK — RESTRICT.
+            entity.HasOne<Workspace>()
+                .WithMany()
+                .HasForeignKey(e => e.WorkspaceId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Media>(entity =>
@@ -155,6 +209,12 @@ public class AppDbContext : DbContext
             entity.Property(e => e.StorageKey).IsRequired().HasMaxLength(500);
             entity.Property(e => e.OriginalFileName).HasMaxLength(500);
             entity.Property(e => e.ContentType).HasMaxLength(100);
+
+            // Workspace FK — RESTRICT.
+            entity.HasOne<Workspace>()
+                .WithMany()
+                .HasForeignKey(e => e.WorkspaceId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<AppUser>(entity =>
@@ -177,6 +237,13 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
             entity.HasIndex(e => e.OwnerUserId);
+
+            // Owner FK — RESTRICT. A user with any workspace they own can't be hard-deleted.
+            // If we ever build user-deletion we'll need to transfer ownership first.
+            entity.HasOne<AppUser>()
+                .WithMany()
+                .HasForeignKey(e => e.OwnerUserId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<WorkspaceMember>(entity =>
@@ -185,6 +252,19 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Role).HasConversion<string>().HasMaxLength(32);
             entity.HasIndex(e => new { e.WorkspaceId, e.UserId }).IsUnique();
             entity.HasIndex(e => e.UserId);
+
+            // Membership FKs — CASCADE. Removing a workspace or a user should also remove
+            // their membership rows; there is no historical value in keeping orphans here
+            // (unlike e.g. ConnectedPage, which keeps history for Posts).
+            entity.HasOne<Workspace>()
+                .WithMany()
+                .HasForeignKey(e => e.WorkspaceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne<AppUser>()
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

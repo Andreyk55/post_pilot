@@ -1224,18 +1224,26 @@ public class InstagramPublisher : IPostPublisher
     /// <summary>
     /// Resolves the page access token for an Instagram Business Account
     /// by looking up the linked Facebook Page.
+    ///
+    /// Defensive workspace scoping: in theory two workspaces could each own a
+    /// ConnectedPage with the same external PageId (the agency case), so we
+    /// must filter by the IG account's WorkspaceId. The legitimate callers
+    /// already pass an IG account fetched in-workspace, but the cheap
+    /// `WorkspaceId == ...` predicate makes the guarantee local and obvious.
     /// </summary>
     private async Task<string?> ResolveAccessTokenAsync(
         ConnectedInstagramAccount igAccount, CancellationToken cancellationToken)
     {
         var connectedPage = await _dbContext.Set<ConnectedPage>()
-            .FirstOrDefaultAsync(p => p.PageId == igAccount.PageId, cancellationToken);
+            .FirstOrDefaultAsync(
+                p => p.PageId == igAccount.PageId && p.WorkspaceId == igAccount.WorkspaceId,
+                cancellationToken);
 
         if (connectedPage == null)
         {
             _logger.LogWarning(
-                "No ConnectedPage found for Facebook PageId {PageId} linked to IG account {IgAccountId}",
-                igAccount.PageId, igAccount.Id);
+                "No ConnectedPage found for Facebook PageId {PageId} linked to IG account {IgAccountId} in workspace {WorkspaceId}",
+                igAccount.PageId, igAccount.Id, igAccount.WorkspaceId);
             return null;
         }
 

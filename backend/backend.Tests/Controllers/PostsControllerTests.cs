@@ -42,6 +42,10 @@ public class PostsControllerTests : IDisposable
 
         _schedulerMock.Setup(x => x.ScheduleAsync(It.IsAny<PostPilot.Api.Entities.Post>()))
             .ReturnsAsync(new ScheduleResult(true, "test-arn", null));
+        // Reschedule is called whenever UpdatePost detects ScheduledAt changed.
+        // Set a default so non-strict mocks don't return null and NRE inside the controller.
+        _schedulerMock.Setup(x => x.RescheduleAsync(It.IsAny<PostPilot.Api.Entities.Post>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ScheduleResult(true, "test-arn-resched", null));
 
         _controller = new PostsController(
             _context,
@@ -102,6 +106,38 @@ public class PostsControllerTests : IDisposable
         return igAccount;
     }
 
+    /// <summary>
+    /// Helper to create a connected Facebook ConnectedPage for tests that need
+    /// to schedule a Facebook post (production requires TargetPageId).
+    /// </summary>
+    private async Task<ConnectedPage> CreateTestFacebookPage()
+    {
+        var metaConnection = new MetaConnection
+        {
+            Id = Guid.NewGuid(),
+            WorkspaceId = TestWorkspaceId,
+            UserId = Guid.Parse("00000000-0000-0000-0000-000000000001"),
+            AccessToken = "test-token",
+            TokenExpiresAt = DateTime.UtcNow.AddDays(60),
+            ConnectedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+        var page = new ConnectedPage
+        {
+            Id = Guid.NewGuid(),
+            WorkspaceId = TestWorkspaceId,
+            MetaConnectionId = metaConnection.Id,
+            PageId = $"fb-page-{Guid.NewGuid():N}",
+            Name = "Test FB Page",
+            AccessToken = "page-token",
+            CreatedAt = DateTime.UtcNow,
+        };
+        _context.MetaConnections.Add(metaConnection);
+        _context.ConnectedPages.Add(page);
+        await _context.SaveChangesAsync();
+        return page;
+    }
+
     #region CreatePost Platform-Specific Validation Tests
 
     [Theory]
@@ -110,13 +146,19 @@ public class PostsControllerTests : IDisposable
     [InlineData(Platform.Twitter, 280)]
     public async Task CreatePost_TextAtExactMaxLength_Succeeds(Platform platform, int maxLength)
     {
+        // Facebook now requires a TargetPageId; LinkedIn/Twitter don't.
+        Guid? targetPageId = platform == Platform.Facebook
+            ? (await CreateTestFacebookPage()).Id
+            : null;
+
         var content = new string('x', maxLength);
         var request = new CreatePostRequest(
             Content: content,
             MediaUrl: null,
             MediaType: null,
             Platform: platform,
-            ScheduledAt: DateTime.UtcNow.AddHours(1));
+            ScheduledAt: DateTime.UtcNow.AddHours(1),
+            TargetPageId: targetPageId);
 
         var result = await _controller.CreatePost(request);
 
@@ -163,7 +205,7 @@ public class PostsControllerTests : IDisposable
 
         var result = await _controller.CreatePost(request);
 
-        var objectResult = Assert.IsType<ObjectResult>(result.Result);
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(result.Result);
         Assert.Equal(400, objectResult.StatusCode);
 
         var problemDetails = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
@@ -187,7 +229,7 @@ public class PostsControllerTests : IDisposable
 
         var result = await _controller.CreatePost(request);
 
-        var objectResult = Assert.IsType<ObjectResult>(result.Result);
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(result.Result);
         Assert.Equal(400, objectResult.StatusCode);
 
         var problemDetails = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
@@ -201,13 +243,19 @@ public class PostsControllerTests : IDisposable
     [InlineData(Platform.Twitter)]
     public async Task CreatePost_NullContent_Succeeds(Platform platform)
     {
-        // Posts can have null content (media-only posts)
+        // Posts can have null content (media-only posts).
+        // Facebook now requires a TargetPageId; LinkedIn/Twitter don't.
+        Guid? targetPageId = platform == Platform.Facebook
+            ? (await CreateTestFacebookPage()).Id
+            : null;
+
         var request = new CreatePostRequest(
             Content: null!,
             MediaUrl: "https://example.com/image.jpg",
             MediaType: MediaType.Image,
             Platform: platform,
-            ScheduledAt: DateTime.UtcNow.AddHours(1));
+            ScheduledAt: DateTime.UtcNow.AddHours(1),
+            TargetPageId: targetPageId);
 
         var result = await _controller.CreatePost(request);
 
@@ -231,7 +279,7 @@ public class PostsControllerTests : IDisposable
 
         var result = await _controller.CreatePost(request);
 
-        var objectResult = Assert.IsType<ObjectResult>(result.Result);
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(result.Result);
         Assert.Equal(409, objectResult.StatusCode);
     }
 
@@ -251,13 +299,16 @@ public class PostsControllerTests : IDisposable
 
         var result = await _controller.CreatePost(request);
 
-        var objectResult = Assert.IsType<ObjectResult>(result.Result);
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(result.Result);
         Assert.Equal(400, objectResult.StatusCode);
     }
 
     [Fact]
-    public async Task CreatePost_Instagram_RejectsVideo()
+    public async Task CreatePost_Instagram_AcceptsVideo()
     {
+        // Production now supports Instagram Reels/video posts (IG video publishing was
+        // added after this test originally asserted rejection). Test renamed + flipped
+        // to match current behaviour.
         var igAccount = await CreateTestInstagramAccount();
 
         var request = new CreatePostRequest(
@@ -270,8 +321,10 @@ public class PostsControllerTests : IDisposable
 
         var result = await _controller.CreatePost(request);
 
-        var objectResult = Assert.IsType<ObjectResult>(result.Result);
-        Assert.Equal(400, objectResult.StatusCode);
+        var createdResult = Assert.IsType<CreatedAtActionResult>(result.Result);
+        var post = Assert.IsType<PostDto>(createdResult.Value);
+        Assert.Equal(MediaType.Video, post.MediaType);
+        Assert.Equal(Platform.Instagram, post.Platform);
     }
 
     [Fact]
@@ -289,7 +342,7 @@ public class PostsControllerTests : IDisposable
 
         var result = await _controller.CreatePost(request);
 
-        var objectResult = Assert.IsType<ObjectResult>(result.Result);
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(result.Result);
         Assert.Equal(400, objectResult.StatusCode);
     }
 
@@ -328,7 +381,7 @@ public class PostsControllerTests : IDisposable
 
         var result = await _controller.CreatePost(request);
 
-        var objectResult = Assert.IsType<ObjectResult>(result.Result);
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(result.Result);
         Assert.Equal(409, objectResult.StatusCode);
     }
 
@@ -363,12 +416,19 @@ public class PostsControllerTests : IDisposable
     [InlineData(Platform.Twitter, 280)]
     public async Task UpdatePost_TextAtExactMaxLength_Succeeds(Platform platform, int maxLength)
     {
+        // Facebook requires a TargetPageId on update too.
+        Guid? targetPageId = platform == Platform.Facebook
+            ? (await CreateTestFacebookPage()).Id
+            : null;
+
         // Create a post first
         var post = new PostPilot.Api.Entities.Post
         {
             Id = Guid.NewGuid(),
+            WorkspaceId = TestWorkspaceId,
             Content = "Original content",
             Platform = platform,
+            TargetPageId = targetPageId,
             ScheduledAt = DateTime.UtcNow.AddHours(2),
             Status = PostStatus.Scheduled,
             CreatedAt = DateTime.UtcNow,
@@ -383,7 +443,8 @@ public class PostsControllerTests : IDisposable
             MediaUrl: null,
             MediaType: null,
             Platform: platform,
-            ScheduledAt: DateTime.UtcNow.AddHours(1));
+            ScheduledAt: DateTime.UtcNow.AddHours(1),
+            TargetPageId: targetPageId);
 
         var result = await _controller.UpdatePost(post.Id, request);
 
@@ -403,6 +464,7 @@ public class PostsControllerTests : IDisposable
         var post = new PostPilot.Api.Entities.Post
         {
             Id = Guid.NewGuid(),
+            WorkspaceId = TestWorkspaceId,
             Content = "Original content",
             Platform = platform,
             ScheduledAt = DateTime.UtcNow.AddHours(2),
@@ -423,7 +485,7 @@ public class PostsControllerTests : IDisposable
 
         var result = await _controller.UpdatePost(post.Id, request);
 
-        var objectResult = Assert.IsType<ObjectResult>(result);
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(result);
         Assert.Equal(400, objectResult.StatusCode);
 
         var problemDetails = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
@@ -440,6 +502,10 @@ public class PostsControllerTests : IDisposable
         return new Post
         {
             Id = Guid.NewGuid(),
+            // Must match the workspace the controller resolves through ICurrentWorkspaceProvider.
+            // Posts seeded without this are invisible to the workspace-scoped controller
+            // and every read/update/delete will return 404.
+            WorkspaceId = TestWorkspaceId,
             Content = "Test content",
             Platform = Platform.Facebook,
             ScheduledAt = DateTime.UtcNow.AddHours(1),
@@ -451,28 +517,28 @@ public class PostsControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task DeletePost_Scheduled_SetsCanceledStatusAndCallsSchedulerCancel()
+    public async Task DeletePost_Scheduled_Returns409Conflict()
     {
+        // Production policy changed: Scheduled/RetryPending/Processing posts must be
+        // canceled via POST /api/posts/{id}/cancel before they can be deleted. The
+        // single DELETE call no longer cascades cancel-then-delete.
         var post = CreateTestPost(PostStatus.Scheduled);
         _context.Posts.Add(post);
         await _context.SaveChangesAsync();
 
         var result = await _controller.DeletePost(post.Id);
 
-        Assert.IsType<NoContentResult>(result);
+        var conflict = Assert.IsType<ConflictObjectResult>(result);
+        Assert.Equal(409, conflict.StatusCode);
 
-        var updated = await _context.Posts.FindAsync(post.Id);
-        Assert.NotNull(updated);
-        Assert.Equal(PostStatus.Canceled, updated.Status);
-        Assert.NotNull(updated.CanceledAt);
-
-        _schedulerMock.Verify(
-            s => s.CancelScheduleAsync(It.Is<Post>(p => p.Id == post.Id), It.IsAny<CancellationToken>()),
-            Times.Once);
+        // Post remains untouched.
+        var unchanged = await _context.Posts.FindAsync(post.Id);
+        Assert.NotNull(unchanged);
+        Assert.Equal(PostStatus.Scheduled, unchanged.Status);
     }
 
     [Fact]
-    public async Task DeletePost_RetryPending_SetsCanceledStatusAndCallsSchedulerCancel()
+    public async Task DeletePost_RetryPending_Returns409Conflict()
     {
         var post = CreateTestPost(PostStatus.RetryPending);
         post.NextRetryAt = DateTime.UtcNow.AddMinutes(5);
@@ -481,16 +547,12 @@ public class PostsControllerTests : IDisposable
 
         var result = await _controller.DeletePost(post.Id);
 
-        Assert.IsType<NoContentResult>(result);
+        var conflict = Assert.IsType<ConflictObjectResult>(result);
+        Assert.Equal(409, conflict.StatusCode);
 
-        var updated = await _context.Posts.FindAsync(post.Id);
-        Assert.NotNull(updated);
-        Assert.Equal(PostStatus.Canceled, updated.Status);
-        Assert.NotNull(updated.CanceledAt);
-
-        _schedulerMock.Verify(
-            s => s.CancelScheduleAsync(It.Is<Post>(p => p.Id == post.Id), It.IsAny<CancellationToken>()),
-            Times.Once);
+        var unchanged = await _context.Posts.FindAsync(post.Id);
+        Assert.NotNull(unchanged);
+        Assert.Equal(PostStatus.RetryPending, unchanged.Status);
     }
 
     [Fact]
@@ -548,8 +610,10 @@ public class PostsControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task DeletePost_Canceled_Returns204Idempotent()
+    public async Task DeletePost_Canceled_HardDeletesRecord()
     {
+        // Production policy changed: deleting a Canceled post now hard-deletes the
+        // row (was idempotent / kept the row in earlier versions).
         var post = CreateTestPost(PostStatus.Canceled);
         post.CanceledAt = DateTime.UtcNow.AddMinutes(-5);
         _context.Posts.Add(post);
@@ -559,10 +623,8 @@ public class PostsControllerTests : IDisposable
 
         Assert.IsType<NoContentResult>(result);
 
-        // Post should still exist (not deleted, just already canceled)
-        var unchanged = await _context.Posts.FindAsync(post.Id);
-        Assert.NotNull(unchanged);
-        Assert.Equal(PostStatus.Canceled, unchanged.Status);
+        var deleted = await _context.Posts.FindAsync(post.Id);
+        Assert.Null(deleted);
     }
 
     [Fact]

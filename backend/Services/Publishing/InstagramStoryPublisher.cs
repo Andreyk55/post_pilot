@@ -532,17 +532,24 @@ public class InstagramStoryPublisher : IStoryPublisher
         return post.MediaUrl!;
     }
 
+    /// <summary>
+    /// Resolves the page access token for an Instagram story by looking up the
+    /// linked Facebook Page. Filtered by WorkspaceId so two workspaces holding
+    /// the same external PageId (agency case) never cross over.
+    /// </summary>
     private async Task<string?> ResolveAccessTokenAsync(
         ConnectedInstagramAccount igAccount, CancellationToken cancellationToken)
     {
         var connectedPage = await _dbContext.Set<ConnectedPage>()
-            .FirstOrDefaultAsync(p => p.PageId == igAccount.PageId, cancellationToken);
+            .FirstOrDefaultAsync(
+                p => p.PageId == igAccount.PageId && p.WorkspaceId == igAccount.WorkspaceId,
+                cancellationToken);
 
         if (connectedPage == null)
         {
             _logger.LogWarning(
-                "No ConnectedPage found for Facebook PageId {PageId} linked to IG account {IgAccountId}",
-                igAccount.PageId, igAccount.Id);
+                "No ConnectedPage found for Facebook PageId {PageId} linked to IG account {IgAccountId} in workspace {WorkspaceId}",
+                igAccount.PageId, igAccount.Id, igAccount.WorkspaceId);
             return null;
         }
 

@@ -163,48 +163,37 @@ public class PostsController : ControllerBase
                 externalPostUrl = $"https://www.facebook.com/{post.ExternalPostId}";
             }
 
-            // Try to get page access token - first from TargetPage, then look up by Facebook PageId
+            // Try to get page access token - first from TargetPage, then look up by Facebook PageId.
+            // CRITICAL: every ConnectedPage lookup MUST be filtered by the current workspaceId.
+            // Using a page from another workspace would call Meta with that workspace's token,
+            // returning cross-tenant engagement data.
             string? pageAccessToken = post.TargetPage?.AccessToken;
 
             if (string.IsNullOrEmpty(pageAccessToken))
             {
-                // TargetPage might be null if user reconnected Meta (new ConnectedPage IDs)
+                // TargetPage might be null if user reconnected Meta (new ConnectedPage IDs).
                 // Try to find the page by Facebook PageId from ExternalPostId (format: pageId_postId)
+                // within the SAME workspace as the post. No cross-workspace fallback — if the post's
+                // workspace has no matching page, we return engagement = null rather than risk leaking
+                // another workspace's access token.
                 var externalIdParts = post.ExternalPostId.Split('_');
                 if (externalIdParts.Length >= 2)
                 {
-                    // Standard format: pageId_postId
                     var facebookPageId = externalIdParts[0];
                     _logger.LogInformation(
-                        "Looking up page by Facebook PageId {FacebookPageId}",
-                        facebookPageId);
+                        "Looking up page by Facebook PageId {FacebookPageId} in workspace {WorkspaceId}",
+                        facebookPageId, workspaceId);
 
                     var currentPage = await _context.Set<ConnectedPage>()
-                        .FirstOrDefaultAsync(p => p.PageId == facebookPageId, cancellationToken);
+                        .FirstOrDefaultAsync(
+                            p => p.PageId == facebookPageId && p.WorkspaceId == workspaceId,
+                            cancellationToken);
 
                     pageAccessToken = currentPage?.AccessToken;
 
                     if (currentPage != null)
                     {
                         _logger.LogInformation("Found page {PageName} for engagement fetch", currentPage.Name);
-                    }
-                }
-
-                // If still no token (photo posts may not have pageId_postId format),
-                // fall back to the user's first connected page
-                if (string.IsNullOrEmpty(pageAccessToken))
-                {
-                    _logger.LogInformation(
-                        "ExternalPostId format not standard, falling back to first connected page");
-
-                    var firstPage = await _context.Set<ConnectedPage>()
-                        .FirstOrDefaultAsync(cancellationToken);
-
-                    pageAccessToken = firstPage?.AccessToken;
-
-                    if (firstPage != null)
-                    {
-                        _logger.LogInformation("Using page {PageName} for engagement fetch", firstPage.Name);
                     }
                 }
             }
@@ -221,8 +210,8 @@ public class PostsController : ControllerBase
             else
             {
                 _logger.LogWarning(
-                    "Cannot fetch engagement for post {PostId}: no page access token available",
-                    post.Id);
+                    "Cannot fetch engagement for post {PostId}: no page access token available in workspace {WorkspaceId}",
+                    post.Id, workspaceId);
             }
         }
 
@@ -1003,74 +992,6 @@ public class PostsController : ControllerBase
                     Status = StatusCodes.Status409Conflict,
                 });
         }
-    }
-
-    /// <summary>
-    /// DEBUG ONLY — Test IG user_tags by publishing an existing scheduled post's image
-    /// with a hardcoded tag. Call: POST /api/posts/{id}/test-user-tags?username=sometestaccount
-    /// This creates a new IG container with the tag and publishes it, logging everything.
-    /// Remove this endpoint after debugging is done.
-    /// </summary>
-    [HttpPost("{id}/test-user-tags")]
-    public async Task<IActionResult> TestUserTags(
-        Guid id,
-        [FromQuery] string username,
-        [FromQuery] double x = 0.5,
-        [FromQuery] double y = 0.5,
-        [FromServices] IPostPublisherResolver publisherResolver = null!)
-    {
-        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
-        var post = await _context.Posts
-            .Include(p => p.TargetInstagramAccount)
-            .FirstOrDefaultAsync(p => p.Id == id && p.WorkspaceId == workspaceId);
-
-        if (post == null) return NotFound("Post not found");
-        if (post.Platform != Platform.Instagram) return BadRequest("Not an Instagram post");
-        if (string.IsNullOrWhiteSpace(username)) return BadRequest("username query param required");
-
-        // Clean username
-        var cleanUsername = username.TrimStart('@').Trim();
-
-        // Build user_tags JSON
-        var userTags = JsonSerializer.Serialize(new[]
-        {
-            new { username = cleanUsername, x, y }
-        });
-
-        _logger.LogInformation(
-            "[TEST_USER_TAGS] Post {PostId} | username={Username} x={X} y={Y} | JSON: {Json}",
-            id, cleanUsername, x, y, userTags);
-
-        // Overwrite the post's InstagramUserTags with our test value
-        post.InstagramUserTags = userTags;
-        post.UpdatedAt = DateTime.UtcNow;
-        await _context.SaveChangesAsync();
-
-        _logger.LogInformation(
-            "[TEST_USER_TAGS] Updated post {PostId} InstagramUserTags in DB. Now publishing...",
-            id);
-
-        // Publish it
-        var publisher = publisherResolver.GetPublisher(post.Platform);
-        if (publisher == null) return BadRequest("No publisher for Instagram");
-
-        // Reset status so it can be published
-        post.Status = PostStatus.Scheduled;
-        await _context.SaveChangesAsync();
-
-        var result = await publisher.PublishAsync(post.Id);
-
-        await _context.Entry(post).ReloadAsync();
-
-        return Ok(new
-        {
-            success = result.Success,
-            externalPostId = result.ExternalPostId,
-            errorMessage = result.ErrorMessage,
-            userTagsSent = userTags,
-            postStatus = post.Status.ToString(),
-            externalPostUrl = post.ExternalPostUrl,
-        });
     }
 
     private static Dictionary<string, string[]> ValidateCreatePostRequest(CreatePostRequest request)

@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using PostPilot.Api.Data;
 using PostPilot.Api.DTOs;
 using PostPilot.Api.Enums;
 using PostPilot.Api.Services.Auth;
@@ -17,6 +19,7 @@ public class MediaController : ControllerBase
     private readonly IMediaUploadService _uploadService;
     private readonly IMediaValidationService _validationService;
     private readonly ICurrentWorkspaceProvider _currentWorkspace;
+    private readonly AppDbContext _db;
     private readonly ILogger<MediaController> _logger;
 
     public MediaController(
@@ -24,14 +27,25 @@ public class MediaController : ControllerBase
         IMediaUploadService uploadService,
         IMediaValidationService validationService,
         ICurrentWorkspaceProvider currentWorkspace,
+        AppDbContext db,
         ILogger<MediaController> logger)
     {
         _mediaService = mediaService;
         _uploadService = uploadService;
         _validationService = validationService;
         _currentWorkspace = currentWorkspace;
+        _db = db;
         _logger = logger;
     }
+
+    /// <summary>
+    /// Returns true when the storage key belongs to a Media row in the given workspace.
+    /// Used by stateless endpoints (validate / extract-metadata) to refuse keys from
+    /// other workspaces — otherwise a member of workspace A could probe whether a key
+    /// from workspace B exists in storage, or trigger a server-side download of it.
+    /// </summary>
+    private Task<bool> StorageKeyBelongsToWorkspaceAsync(string storageKey, Guid workspaceId, CancellationToken ct) =>
+        _db.Media.AnyAsync(m => m.StorageKey == storageKey && m.WorkspaceId == workspaceId, ct);
 
     /// <summary>
     /// Generates a pre-signed URL for uploading media (image or video).
@@ -210,10 +224,25 @@ public class MediaController : ControllerBase
     /// <summary>
     /// Streams a stored file by its full storage key. Catch-all route so keys like
     /// "media/{guid}.jpg" are preserved end-to-end without slicing on the client.
-    /// This URL is also what is handed to Meta (via App.PublicUrl) for publishing,
-    /// so the API proxies reads from whatever backend (local disk or S3-compatible)
-    /// is configured.
     /// Route: GET /api/media/files/{*storageKey}
+    ///
+    /// PUBLIC BY DESIGN — DO NOT add [Authorize] here without a replacement plan.
+    /// During publish, this URL is handed to Meta (via App.PublicUrl) so Facebook /
+    /// Instagram fetchers can pull the bytes directly. Those fetchers do not present
+    /// any auth, so the route MUST stay anonymous for publishing to work.
+    ///
+    /// Mitigations that make the unauth surface safe in practice:
+    ///   - Storage keys are "media/{guid}.{ext}", produced by IMediaService at upload
+    ///     time. The guid is server-generated and never exposed except to:
+    ///       (a) the workspace member who uploaded it (via /uploads/init response),
+    ///       (b) Meta during publishing.
+    ///   - There is no enumeration endpoint that lists keys.
+    ///   - Keys are not logged in any user-visible surface.
+    ///
+    /// Future hardening (not yet implemented):
+    ///   - Replace this with short-lived presigned URLs handed to Meta per publish.
+    ///   - Add a separate authenticated /api/media/files/{key}/private route for the
+    ///     SPA so we can drop the anonymous one once Meta migrates.
     /// </summary>
     [HttpGet("files/{*storageKey}")]
     [AllowAnonymous]
@@ -283,7 +312,8 @@ public class MediaController : ControllerBase
     /// </summary>
     [HttpPost("validate")]
     public async Task<ActionResult<MediaValidationResult>> ValidateMedia(
-        [FromBody] ValidateMediaByKeyRequest request)
+        [FromBody] ValidateMediaByKeyRequest request,
+        CancellationToken ct)
     {
         _logger.LogInformation("=== VALIDATE ENDPOINT HIT === StorageKey: {Key}, MimeType: {Mime}, Platform: {Platform}, Placement: {Placement}",
             request.StorageKey, request.MimeType, request.Platform, request.Placement);
@@ -298,6 +328,18 @@ public class MediaController : ControllerBase
         if (mediaType == MediaType.None)
         {
             return BadRequest(new { error = $"Invalid MIME type: {request.MimeType}" });
+        }
+
+        // Workspace ownership check: the StorageKey is supplied by the client, so we
+        // must verify it points at a Media row in the current workspace before doing
+        // anything that touches storage (download for validation, even just a HEAD).
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(ct);
+        if (!await StorageKeyBelongsToWorkspaceAsync(request.StorageKey, workspaceId, ct))
+        {
+            _logger.LogWarning(
+                "ValidateMedia: storage key {Key} not found in workspace {WorkspaceId}",
+                request.StorageKey, workspaceId);
+            return NotFound(new { error = "Media file not found" });
         }
 
         // Get file path from storage key. For S3-compatible storage this downloads
@@ -344,7 +386,8 @@ public class MediaController : ControllerBase
     /// </summary>
     [HttpPost("extract-metadata")]
     public async Task<ActionResult<ExtractedMediaMetadata>> ExtractMetadata(
-        [FromBody] ExtractMetadataRequest request)
+        [FromBody] ExtractMetadataRequest request,
+        CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.StorageKey))
         {
@@ -356,6 +399,16 @@ public class MediaController : ControllerBase
         if (mediaType == MediaType.None)
         {
             return BadRequest(new { error = $"Invalid MIME type: {request.MimeType}" });
+        }
+
+        // Workspace ownership check: see ValidateMedia for the rationale.
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(ct);
+        if (!await StorageKeyBelongsToWorkspaceAsync(request.StorageKey, workspaceId, ct))
+        {
+            _logger.LogWarning(
+                "ExtractMetadata: storage key {Key} not found in workspace {WorkspaceId}",
+                request.StorageKey, workspaceId);
+            return NotFound(new { error = "Media file not found" });
         }
 
         // Get file path from storage key. For S3-compatible storage this downloads
