@@ -873,23 +873,29 @@ public class PostsController : ControllerBase
             else
             {
                 // Publishing failed — return the error but don't 500
-                return StatusCode(StatusCodes.Status502BadGateway, new ProblemDetails
+                var problem = new ProblemDetails
                 {
-                    Title = "Publishing failed",
+                    Title = $"Publishing to {post.Platform} failed",
                     Detail = result.ErrorMessage ?? "An error occurred while publishing to the platform.",
                     Status = StatusCodes.Status502BadGateway,
-                });
+                };
+                problem.Extensions["platform"] = post.Platform.ToString();
+                problem.Extensions["postId"] = post.Id;
+                return StatusCode(StatusCodes.Status502BadGateway, problem);
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error during publish-now for post {PostId}", post.Id);
-            return StatusCode(StatusCodes.Status502BadGateway, new ProblemDetails
+            var problem = new ProblemDetails
             {
-                Title = "Publishing failed",
+                Title = $"Publishing to {post.Platform} failed",
                 Detail = ex.Message,
                 Status = StatusCodes.Status502BadGateway,
-            });
+            };
+            problem.Extensions["platform"] = post.Platform.ToString();
+            problem.Extensions["postId"] = post.Id;
+            return StatusCode(StatusCodes.Status502BadGateway, problem);
         }
     }
 

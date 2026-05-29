@@ -248,6 +248,9 @@ public class FacebookPagePublisher : IPostPublisher
                 imageUrl = post.MediaUrl;
             }
 
+            _logger.LogInformation("FB_IMAGE_URL postId={PostId} storageKey={MediaUrl} resolvedUrl={ImageUrl}",
+                post.Id, post.MediaUrl, imageUrl);
+
             url = $"{_graphApiBaseUrl}/{pageId}/photos";
             content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
@@ -278,6 +281,9 @@ public class FacebookPagePublisher : IPostPublisher
                 imageUrl = post.MediaUrl;
             }
 
+            _logger.LogInformation("FB_IMAGE_URL postId={PostId} storageKey={MediaUrl} resolvedUrl={ImageUrl} (legacy branch)",
+                post.Id, post.MediaUrl, imageUrl);
+
             url = $"{_graphApiBaseUrl}/{pageId}/photos";
             content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
@@ -307,7 +313,14 @@ public class FacebookPagePublisher : IPostPublisher
         _logger.LogInformation(PostPilotLogEvents.PublishAttempt,
             "FB_RESPONSE {StatusCode} postId={PostId} durationMs={DurationMs}",
             (int)response.StatusCode, post.Id, sw.ElapsedMilliseconds);
-        _logger.LogDebug("FB_RESPONSE_BODY postId={PostId} body={Body}", post.Id, responseBody);
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogInformation("FB_RESPONSE_BODY postId={PostId} body={Body}", post.Id, responseBody);
+        }
+        else
+        {
+            _logger.LogDebug("FB_RESPONSE_BODY postId={PostId} body={Body}", post.Id, responseBody);
+        }
 
         return ParseMetaResponse(post.Id, response, responseBody);
     }
