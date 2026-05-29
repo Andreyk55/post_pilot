@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -30,6 +31,12 @@ public static class DatabaseStartup
     /// a one-word category in the log so the operator can see at a glance
     /// whether it's auth / ssl / network / etc. API-only — the Worker does
     /// not call this.
+    ///
+    /// Logs (intentionally noisy so a deploy mismatch is obvious from the boot log):
+    ///   - the running assembly's InformationalVersion (confirms which build is up),
+    ///   - every migration the assembly knows about,
+    ///   - what's already applied vs pending BEFORE Migrate runs,
+    ///   - what got applied AFTER Migrate runs.
     /// </summary>
     public static async Task RunMigrationsAsync(IServiceProvider services)
     {
@@ -39,11 +46,64 @@ public static class DatabaseStartup
             .GetRequiredService<ILoggerFactory>()
             .CreateLogger("PostPilot.Migrations");
 
-        logger.LogInformation("Applying pending EF Core migrations...");
+        var asm = typeof(AppDbContext).Assembly;
+        var version = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+                   ?? asm.GetName().Version?.ToString()
+                   ?? "(unknown)";
+        logger.LogInformation(
+            "Migration runner starting — assembly={Assembly}, version={Version}",
+            asm.GetName().Name, version);
+
         try
         {
+            // What this build of the assembly knows about, in order.
+            var allInAssembly = db.Database.GetMigrations().ToList();
+            logger.LogInformation(
+                "Migrations known to assembly ({Count}):\n  {List}",
+                allInAssembly.Count,
+                string.Join("\n  ", allInAssembly));
+
+            // What's already applied in the DB.
+            var applied = (await db.Database.GetAppliedMigrationsAsync()).ToList();
+            logger.LogInformation(
+                "Migrations already applied in DB ({Count}):\n  {List}",
+                applied.Count,
+                applied.Count == 0 ? "(none)" : string.Join("\n  ", applied));
+
+            // What's pending (assembly minus applied).
+            var pending = (await db.Database.GetPendingMigrationsAsync()).ToList();
+            logger.LogInformation(
+                "Pending migrations ({Count}):\n  {List}",
+                pending.Count,
+                pending.Count == 0 ? "(none — DB is up to date)" : string.Join("\n  ", pending));
+
+            // Sanity check: if the assembly DOESN'T even contain the migration that
+            // would add the columns the new code needs, the deploy is stale. This
+            // is exactly the symptom we saw on prod (column m.Provider missing).
+            // We don't crash on this — just shout — because some old assemblies
+            // are legitimately deployed during rollbacks. But it makes it
+            // impossible to miss in the log.
+            if (pending.Count == 0 && applied.Count > 0
+                && !applied.Contains("20260529120000_AddProviderIdentityAndCancellationMetadata")
+                && !allInAssembly.Contains("20260529120000_AddProviderIdentityAndCancellationMetadata"))
+            {
+                logger.LogWarning(
+                    "This build does NOT contain migration 20260529120000_AddProviderIdentityAndCancellationMetadata. " +
+                    "If the running code references Provider/ProviderAccountId columns, requests will 500. " +
+                    "Deploy a newer image.");
+            }
+
+            logger.LogInformation("Applying pending EF Core migrations...");
             await db.Database.MigrateAsync();
-            logger.LogInformation("Migrations applied successfully.");
+
+            var appliedAfter = (await db.Database.GetAppliedMigrationsAsync()).ToList();
+            var justApplied = appliedAfter.Except(applied).ToList();
+            logger.LogInformation(
+                "Migrations applied successfully — {NewlyAppliedCount} new, total applied={TotalApplied}.\n" +
+                "Newly applied:\n  {List}",
+                justApplied.Count,
+                appliedAfter.Count,
+                justApplied.Count == 0 ? "(none — DB was already up to date)" : string.Join("\n  ", justApplied));
         }
         catch (NpgsqlException ex)
         {
