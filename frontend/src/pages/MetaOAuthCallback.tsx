@@ -55,8 +55,19 @@ export function MetaOAuthCallback() {
       console.error('OAuth callback error:', err)
       setStatus('error')
       const errorMsg = err instanceof Error ? err.message : 'Unknown error'
-      setErrorMessage(`Failed to complete authorization: ${errorMsg}`)
-      notifyOpener('META_OAUTH_ERROR', { error: 'callback_failed' })
+      // For 409 (workspace already has an active Meta connection), surface the
+      // exact server message — the spec asks the user to disconnect first.
+      const status = err instanceof Error && 'status' in err ? (err as { status?: number }).status : undefined
+      if (status === 409) {
+        setErrorMessage(errorMsg)
+      } else {
+        setErrorMessage(`Failed to complete authorization: ${errorMsg}`)
+      }
+      notifyOpener('META_OAUTH_ERROR', {
+        error: status === 409 ? 'already_connected' : 'callback_failed',
+        message: errorMsg,
+        status,
+      })
     }
   }
 

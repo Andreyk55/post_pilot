@@ -6,6 +6,7 @@ using PostPilot.Api.Data;
 using PostPilot.Api.DTOs;
 using PostPilot.Api.Entities;
 using PostPilot.Api.Enums;
+using PostPilot.Api.Services.Providers;
 using PostPilot.Api.Services.Scheduling;
 using PostPilot.Api.Settings;
 
@@ -25,6 +26,7 @@ public class MetaOAuthService : IMetaOAuthService
     private readonly MetaOptions _settings;
     private readonly ILogger<MetaOAuthService> _logger;
     private readonly IPostScheduler _scheduler;
+    private readonly IProviderConnectionService _providerConnections;
     private readonly string _graphApiBaseUrl;
     private readonly string _oAuthBaseUrl;
     private readonly int _oAuthStateExpirationMinutes;
@@ -35,6 +37,7 @@ public class MetaOAuthService : IMetaOAuthService
         MetaOptions settings,
         ILogger<MetaOAuthService> logger,
         IPostScheduler scheduler,
+        IProviderConnectionService providerConnections,
         MetaApiOptions metaApiOptions,
         PublishingOptions publishingOptions)
     {
@@ -43,6 +46,7 @@ public class MetaOAuthService : IMetaOAuthService
         _settings = settings;
         _logger = logger;
         _scheduler = scheduler;
+        _providerConnections = providerConnections;
         _graphApiBaseUrl = metaApiOptions.GraphApiBaseUrl;
         _oAuthBaseUrl = metaApiOptions.OAuthDialogBaseUrl;
         _oAuthStateExpirationMinutes = publishingOptions.OAuthStateExpirationMinutes;
@@ -285,59 +289,20 @@ public class MetaOAuthService : IMetaOAuthService
         var workspaceId = oauthState.WorkspaceId;
         _logger.LogInformation("Saving connection for workspace {WorkspaceId} (user {UserId})", workspaceId, userId);
 
-        // Look up any existing connection in this workspace by this user.
-        // If a disconnected one is found we reattach it along with any child
-        // pages/IGs that were previously soft-disconnected.
-        var existingConnection = await _context.MetaConnections
-            .Include(c => c.Pages)
-            .Include(c => c.InstagramAccounts)
-            .OrderByDescending(c => c.IsConnected)
-            .ThenByDescending(c => c.ConnectedAt)
-            .FirstOrDefaultAsync(c => c.WorkspaceId == workspaceId && c.UserId == userId);
+        // Reject second-account connect (product rule: at most one active Meta per workspace).
+        await _providerConnections.EnsureCanConnectAsync(workspaceId, ProviderType.Meta);
 
-        var now = DateTime.UtcNow;
-        MetaConnection connection;
-        if (existingConnection != null)
-        {
-            // Refresh tokens. Never delete the child asset rows — existing Posts FK them.
-            existingConnection.AccessToken = accessToken;
-            existingConnection.TokenExpiresAt = now.AddSeconds(expiresIn);
-            existingConnection.UpdatedAt = now;
+        // Resolve the stable Meta identity. Used for the "reconnect same account ⇒
+        // resurface history" rule.
+        var (metaUserId, metaUserName) = await FetchMetaUserIdentityAsync(accessToken);
 
-            if (!existingConnection.IsConnected)
-            {
-                // Reattaching after a disconnect: clear the soft-delete marker.
-                existingConnection.IsConnected = true;
-                existingConnection.DisconnectedAt = null;
-                existingConnection.ConnectedAt = now;
-                _logger.LogInformation(
-                    "Reattaching previously-disconnected connection {ConnectionId} for user {UserId}",
-                    existingConnection.Id, userId);
-            }
-            else
-            {
-                _logger.LogInformation("Refreshing token on connection {ConnectionId}", existingConnection.Id);
-            }
-
-            connection = existingConnection;
-        }
-        else
-        {
-            connection = new MetaConnection
-            {
-                Id = Guid.NewGuid(),
-                WorkspaceId = workspaceId,
-                UserId = userId,
-                AccessToken = accessToken,
-                TokenExpiresAt = now.AddSeconds(expiresIn),
-                ConnectedAt = now,
-                UpdatedAt = now,
-                IsConnected = true,
-                DisconnectedAt = null,
-            };
-            _context.MetaConnections.Add(connection);
-            _logger.LogInformation("Creating new connection {ConnectionId}", connection.Id);
-        }
+        var connection = await ResolveOrCreateMetaConnectionAsync(
+            workspaceId,
+            userId,
+            metaUserId,
+            metaUserName,
+            accessToken,
+            expiresIn);
 
         // Clean up OAuth state
         _context.MetaOAuthStates.Remove(oauthState);
@@ -349,6 +314,85 @@ public class MetaOAuthService : IMetaOAuthService
         return new MetaOAuthCompleteResponse(MapToDto(connection));
     }
 
+    /// <summary>
+    /// Implements the connect-side of the provider lifecycle for Meta:
+    ///
+    ///   1. If a previously-disconnected connection exists for the SAME provider
+    ///      account (Provider=Meta, matching ProviderAccountId), reactivate it so
+    ///      its historical Pages/IGs/Posts come back into view.
+    ///   2. Otherwise create a fresh connection row.
+    ///
+    /// Assumes the caller has already enforced "no active connection exists" via
+    /// <see cref="IProviderConnectionService.EnsureCanConnectAsync"/>.
+    /// </summary>
+    private async Task<MetaConnection> ResolveOrCreateMetaConnectionAsync(
+        Guid workspaceId,
+        Guid userId,
+        string? providerAccountId,
+        string? providerAccountName,
+        string accessToken,
+        int expiresIn)
+    {
+        var now = DateTime.UtcNow;
+
+        // Try to find a disconnected row for the SAME provider account.
+        // Only match by ProviderAccountId if we actually resolved one; a null id
+        // never matches anything (we don't want to merge two unknown accounts).
+        MetaConnection? existing = null;
+        if (!string.IsNullOrEmpty(providerAccountId))
+        {
+            existing = await _context.MetaConnections
+                .Include(c => c.Pages)
+                .Include(c => c.InstagramAccounts)
+                .FirstOrDefaultAsync(c =>
+                    c.WorkspaceId == workspaceId
+                    && c.Provider == ProviderType.Meta
+                    && c.ProviderAccountId == providerAccountId
+                    && !c.IsConnected);
+        }
+
+        if (existing != null)
+        {
+            existing.AccessToken = accessToken;
+            existing.TokenExpiresAt = now.AddSeconds(expiresIn);
+            existing.UpdatedAt = now;
+            existing.IsConnected = true;
+            existing.DisconnectedAt = null;
+            existing.ConnectedAt = now;
+            existing.UserId = userId; // Latest user who initiated the reconnect.
+            if (!string.IsNullOrEmpty(providerAccountName))
+            {
+                existing.ProviderAccountName = providerAccountName;
+            }
+
+            _logger.LogInformation(
+                "Reactivating Meta connection {ConnectionId} for provider account {ProviderAccountId}",
+                existing.Id, providerAccountId);
+            return existing;
+        }
+
+        var fresh = new MetaConnection
+        {
+            Id = Guid.NewGuid(),
+            WorkspaceId = workspaceId,
+            UserId = userId,
+            Provider = ProviderType.Meta,
+            ProviderAccountId = providerAccountId,
+            ProviderAccountName = providerAccountName,
+            AccessToken = accessToken,
+            TokenExpiresAt = now.AddSeconds(expiresIn),
+            ConnectedAt = now,
+            UpdatedAt = now,
+            IsConnected = true,
+            DisconnectedAt = null,
+        };
+        _context.MetaConnections.Add(fresh);
+        _logger.LogInformation(
+            "Creating new Meta connection {ConnectionId} for provider account {ProviderAccountId}",
+            fresh.Id, providerAccountId);
+        return fresh;
+    }
+
     private async Task DebugWhoLoggedInAsync(string accessToken)
     {
         var resp = await _httpClient.GetAsync(
@@ -356,6 +400,40 @@ public class MetaOAuthService : IMetaOAuthService
 
         var body = await resp.Content.ReadAsStringAsync();
         _logger.LogInformation("Meta /me response: {Body}", body);
+    }
+
+    /// <summary>
+    /// Look up the stable Meta user identity (FB user id + name) for the supplied
+    /// token. This is the <c>ProviderAccountId</c> we persist on the MetaConnection
+    /// so that disconnect/reconnect of the SAME account can resurface history.
+    ///
+    /// Returns <c>(null, null)</c> if Graph API fails — the OAuth flow continues
+    /// (the column is nullable) but logs a warning so we can investigate.
+    /// </summary>
+    private async Task<(string? Id, string? Name)> FetchMetaUserIdentityAsync(string accessToken)
+    {
+        try
+        {
+            var resp = await _httpClient.GetAsync(
+                $"{_graphApiBaseUrl}/me?fields=id,name&access_token={accessToken}");
+            var body = await resp.Content.ReadAsStringAsync();
+
+            if (!resp.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "Meta /me failed while resolving provider identity. Status: {Status}, Body: {Body}",
+                    resp.StatusCode, body);
+                return (null, null);
+            }
+
+            var data = JsonSerializer.Deserialize<MetaMeResponse>(body);
+            return (data?.Id, data?.Name);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to resolve Meta provider identity from /me");
+            return (null, null);
+        }
     }
 
     private async Task DebugPermissionsAsync(string accessToken)
@@ -476,43 +554,29 @@ public class MetaOAuthService : IMetaOAuthService
         var workspaceId = oauthState.WorkspaceId;
         var now = DateTime.UtcNow;
 
-        // Reuse the existing connection in this workspace (connected OR disconnected)
-        // for this user, or create a fresh one. We NEVER hard-delete — historical
-        // child rows are FK targets for Posts and must survive disconnect cycles.
-        var connection = await _context.MetaConnections
-            .Include(c => c.Pages)
-            .Include(c => c.InstagramAccounts)
-            .OrderByDescending(c => c.IsConnected)
-            .ThenByDescending(c => c.ConnectedAt)
-            .FirstOrDefaultAsync(c => c.WorkspaceId == workspaceId && c.UserId == userId);
+        // Enforce the product rule before touching state: at most one active Meta
+        // connection per workspace. Throws ProviderAlreadyConnectedException → 409.
+        await _providerConnections.EnsureCanConnectAsync(workspaceId, ProviderType.Meta);
 
-        if (connection == null)
+        // Resolve the stable Meta identity so we can resurface history if the SAME
+        // account is reconnecting after a disconnect.
+        var (metaUserId, metaUserName) = await FetchMetaUserIdentityAsync(oauthState.TempAccessToken);
+
+        var expiresIn = (int)Math.Max(0, (oauthState.TokenExpiresAt.Value - now).TotalSeconds);
+        var connection = await ResolveOrCreateMetaConnectionAsync(
+            workspaceId,
+            userId,
+            metaUserId,
+            metaUserName,
+            oauthState.TempAccessToken,
+            expiresIn);
+
+        // Re-fetch with navigation collections loaded so the asset reconcile below
+        // sees existing rows that ResolveOrCreate may not have included on a fresh row.
+        if (connection.Pages.Count == 0 && connection.InstagramAccounts.Count == 0)
         {
-            connection = new MetaConnection
-            {
-                Id = Guid.NewGuid(),
-                WorkspaceId = workspaceId,
-                UserId = userId,
-                AccessToken = oauthState.TempAccessToken,
-                TokenExpiresAt = oauthState.TokenExpiresAt.Value,
-                ConnectedAt = now,
-                UpdatedAt = now,
-                IsConnected = true,
-                DisconnectedAt = null,
-            };
-            _context.MetaConnections.Add(connection);
-        }
-        else
-        {
-            connection.AccessToken = oauthState.TempAccessToken;
-            connection.TokenExpiresAt = oauthState.TokenExpiresAt.Value;
-            connection.UpdatedAt = now;
-            if (!connection.IsConnected)
-            {
-                connection.IsConnected = true;
-                connection.DisconnectedAt = null;
-                connection.ConnectedAt = now;
-            }
+            await _context.Entry(connection).Collection(c => c.Pages).LoadAsync();
+            await _context.Entry(connection).Collection(c => c.InstagramAccounts).LoadAsync();
         }
 
         // Fetch pages with tokens
@@ -746,57 +810,34 @@ public class MetaOAuthService : IMetaOAuthService
 
     public async Task DisconnectAsync(Guid workspaceId)
     {
-        var connection = await _context.MetaConnections
-            .Include(c => c.Pages)
-            .Include(c => c.InstagramAccounts)
-            .FirstOrDefaultAsync(c => c.WorkspaceId == workspaceId && c.IsConnected);
+        // Snapshot the token BEFORE the generic disconnect flips the row off,
+        // so the best-effort revoke call still has something to send.
+        var accessTokenToRevoke = await _context.MetaConnections
+            .Where(c => c.WorkspaceId == workspaceId
+                     && c.Provider == ProviderType.Meta
+                     && c.IsConnected)
+            .Select(c => c.AccessToken)
+            .FirstOrDefaultAsync();
 
-        if (connection == null)
+        // Generic lifecycle: cancels non-executed posts, soft-disconnects assets,
+        // and flips the connection row to IsConnected=false. Idempotent on
+        // already-disconnected workspaces.
+        await _providerConnections.DisconnectAsync(workspaceId, ProviderType.Meta);
+
+        // Meta-specific: best-effort revoke. We never block disconnect on this —
+        // even if Meta is down, the workspace is fully disconnected locally.
+        if (!string.IsNullOrEmpty(accessTokenToRevoke))
         {
-            return; // Already disconnected
+            try
+            {
+                var revokeUrl = $"{_graphApiBaseUrl}/me/permissions?access_token={accessTokenToRevoke}";
+                await _httpClient.DeleteAsync(revokeUrl);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to revoke Meta token");
+            }
         }
-
-        // Cancel any active posts targeting this connection's assets first so the worker
-        // never picks up something whose connection is gone.
-        await CancelPostsForRemovedAssetsAsync(
-            workspaceId,
-            connection.Pages.Where(p => p.IsConnected).Select(p => p.Id),
-            connection.InstagramAccounts.Where(i => i.IsConnected).Select(i => i.Id),
-            ReasonAccountDisconnected,
-            MessageAccountDisconnected);
-
-        // Optionally revoke token with Meta — best-effort.
-        try
-        {
-            var revokeUrl = $"{_graphApiBaseUrl}/me/permissions?access_token={connection.AccessToken}";
-            await _httpClient.DeleteAsync(revokeUrl);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to revoke Meta token");
-        }
-
-        // Soft-disconnect the connection itself and every child asset.
-        // Rows are PRESERVED so that historical Post FKs stay valid.
-        var now = DateTime.UtcNow;
-        connection.IsConnected = false;
-        connection.DisconnectedAt = now;
-        connection.UpdatedAt = now;
-        // Invalidate the user token but leave the column populated for audit.
-        // (If you want to scrub it for security, set to string.Empty here.)
-
-        foreach (var page in connection.Pages.Where(p => p.IsConnected))
-        {
-            page.IsConnected = false;
-            page.DisconnectedAt = now;
-        }
-        foreach (var ig in connection.InstagramAccounts.Where(i => i.IsConnected))
-        {
-            ig.IsConnected = false;
-            ig.DisconnectedAt = now;
-        }
-
-        await _context.SaveChangesAsync();
     }
 
     public async Task<InstagramDiscoveryResponse> DiscoverInstagramEligibilityAsync(Guid workspaceId)
@@ -1208,12 +1249,23 @@ public class MetaOAuthService : IMetaOAuthService
                 ig.DisconnectedAt
             )).ToList(),
             connection.IsConnected,
-            connection.DisconnectedAt
+            connection.DisconnectedAt,
+            connection.ProviderAccountId,
+            connection.ProviderAccountName
         );
     }
 }
 
 // JSON response models for Meta Graph API (using snake_case naming)
+internal class MetaMeResponse
+{
+    [System.Text.Json.Serialization.JsonPropertyName("id")]
+    public string? Id { get; set; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("name")]
+    public string? Name { get; set; }
+}
+
 internal class MetaTokenResponse
 {
     [System.Text.Json.Serialization.JsonPropertyName("access_token")]

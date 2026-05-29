@@ -16,6 +16,33 @@ import { config } from '../config/appConfig'
 
 const API_URL = config.apiBaseUrl
 
+/**
+ * Error carrying the HTTP status so callers can distinguish 409
+ * (workspace already has an active provider connection) from generic failures.
+ */
+export class MetaApiError extends Error {
+  status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'MetaApiError'
+    this.status = status
+  }
+}
+
+async function readErrorBody(response: Response): Promise<{ error?: string; provider?: string }> {
+  try {
+    const text = await response.text()
+    if (!text) return {}
+    try {
+      return JSON.parse(text)
+    } catch {
+      return { error: text }
+    }
+  } catch {
+    return {}
+  }
+}
+
 export const metaApi = {
   /**
    * Start the Meta OAuth flow - returns the authorization URL
@@ -42,7 +69,13 @@ export const metaApi = {
   },
 
   /**
-   * Complete OAuth and save connection immediately (identity-level only, no page selection)
+   * Complete OAuth and save connection immediately (identity-level only, no page selection).
+   *
+   * On 409 (workspace already has an active Meta connection) the server returns
+   * { error, provider }. We surface that exact error message — the spec wants:
+   *   "This workspace already has a connected Meta account. Disconnect it
+   *    before connecting another one."
+   * Never silently retry or replace.
    */
   async completeOAuth(code: string, state: string): Promise<MetaOAuthCompleteResponse> {
     const response = await fetch(`${API_URL}/meta/oauth/complete`, {
@@ -51,9 +84,13 @@ export const metaApi = {
       body: JSON.stringify({ code, state }),
     })
     if (!response.ok) {
-      const errorText = await response.text()
-      console.error('Meta OAuth complete failed:', response.status, errorText)
-      throw new Error(`Failed to complete Meta OAuth: ${response.status} ${errorText}`)
+      const errorBody = await readErrorBody(response)
+      console.error('Meta OAuth complete failed:', response.status, errorBody)
+      const err = new MetaApiError(
+        errorBody.error ?? `Failed to complete Meta OAuth (${response.status})`,
+        response.status
+      )
+      throw err
     }
     return response.json()
   },

@@ -1,9 +1,10 @@
+import type { ReactNode } from 'react'
 import './ConfirmDialog.css'
 
 interface ConfirmDialogProps {
   isOpen: boolean
   title: string
-  message: string
+  message: ReactNode
   confirmText?: string
   cancelText?: string
   confirmVariant?: 'danger' | 'primary'
@@ -32,7 +33,7 @@ export function ConfirmDialog({
           <h3>{title}</h3>
         </div>
         <div className="confirm-dialog-body">
-          <p>{message}</p>
+          {typeof message === 'string' ? <p>{message}</p> : message}
         </div>
         <div className="confirm-dialog-footer">
           <button

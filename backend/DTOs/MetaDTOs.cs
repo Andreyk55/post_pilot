@@ -86,7 +86,12 @@ public record MetaConnectionDto(
     List<ConnectedPageDto> Pages,
     List<ConnectedInstagramAccountDto> InstagramAccounts,
     bool IsConnected = true,
-    DateTime? DisconnectedAt = null
+    DateTime? DisconnectedAt = null,
+    // Stable Meta account identity (FB user id + display name). Nullable on
+    // legacy rows that pre-date the AddProviderIdentityAndCancellationMetadata
+    // migration; populated for any new/reconnected row.
+    string? ProviderAccountId = null,
+    string? ProviderAccountName = null
 );
 
 public record ConnectedPageDto(

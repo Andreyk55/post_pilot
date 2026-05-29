@@ -29,6 +29,10 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Platform).HasConversion<string>();
             entity.Property(e => e.Status).HasConversion<string>();
             entity.Property(e => e.PostType).HasConversion<string>().HasDefaultValue(PostPilot.Api.Enums.PostType.Feed);
+            // Cancellation metadata. Stored as int because it's an open enum we may
+            // extend; Status is stored as string (legacy) but new enums default to int.
+            entity.Property(e => e.CancellationReason).HasConversion<int>();
+            entity.Property(e => e.CanceledBecauseProvider).HasConversion<int?>();
 
             entity.HasIndex(e => e.WorkspaceId);
 
@@ -84,12 +88,16 @@ public class AppDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.WorkspaceId);
-            // (WorkspaceId, UserId) is unique only among currently-connected rows so a
-            // workspace doesn't accumulate duplicate active connections for the same user.
-            // Disconnected rows remain as history so re-connecting produces a new active row.
-            entity.HasIndex(e => new { e.WorkspaceId, e.UserId })
+            // Product rule: at most ONE active connection per (workspace, provider).
+            // Disconnected rows remain as history so re-connecting the same
+            // provider account can resurface published/canceled posts.
+            entity.HasIndex(e => new { e.WorkspaceId, e.Provider })
                 .IsUnique()
                 .HasFilter("\"IsConnected\" = true");
+            // Helper index: lookup-by-stable-identity when reconnecting an
+            // account ("did this workspace already have a row for Meta user X?").
+            entity.HasIndex(e => new { e.WorkspaceId, e.Provider, e.ProviderAccountId });
+            entity.Property(e => e.Provider).HasConversion<int>();
             entity.Property(e => e.AccessToken).IsRequired();
 
             // Workspace FK — RESTRICT.

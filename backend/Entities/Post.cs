@@ -66,6 +66,26 @@ public class Post
     public DateTime? CanceledAt { get; set; }
 
     /// <summary>
+    /// Why this post was canceled. <see cref="CancellationReason.None"/> for posts
+    /// that were never canceled. Pre-existing canceled rows are <see cref="CancellationReason.None"/>
+    /// too — the field only carries meaning for rows written after this migration.
+    /// </summary>
+    public CancellationReason CancellationReason { get; set; } = CancellationReason.None;
+
+    /// <summary>
+    /// Provider whose disconnect/unlink caused this cancellation, when
+    /// <see cref="CancellationReason"/> is provider-related. Null otherwise.
+    /// </summary>
+    public ProviderType? CanceledBecauseProvider { get; set; }
+
+    /// <summary>
+    /// Stable provider-account id (e.g. Meta user id) that this post was tied to
+    /// at cancel time. Stamped so that when the same provider account is
+    /// reconnected later, we can still identify which cancellations belonged to it.
+    /// </summary>
+    public string? CanceledBecauseProviderAccountId { get; set; }
+
+    /// <summary>
     /// External ID returned by Meta Graph API (e.g., "page-id_post-id")
     /// Used for idempotency and linking back to Facebook
     /// </summary>

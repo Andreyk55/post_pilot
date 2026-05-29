@@ -32,6 +32,10 @@ export interface MetaConnection {
   connectedAt: string
   pages: ConnectedPage[]
   instagramAccounts: ConnectedInstagramAccount[]
+  // Stable Meta account identity (FB user id + display name). Nullable on
+  // rows that predate the provider-identity migration.
+  providerAccountId?: string | null
+  providerAccountName?: string | null
 }
 
 export interface ConnectedPage {

@@ -5,6 +5,7 @@ import { metaApi } from '../api/meta'
 import type { MetaConnection } from '../types/meta'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Toast } from '../components/Toast'
+import { buildProviderDisconnectMessage } from '../components/providerDisconnectMessage'
 
 interface ConnectedAccount {
   id: string
@@ -96,7 +97,17 @@ export function ConnectedAccountsPage() {
         await loadMetaConnection()
       } else if (event.data?.type === 'META_OAUTH_ERROR') {
         setConnecting(null)
-        alert('Failed to connect to Meta. Please try again.')
+        // 409 = workspace already has an active provider connection.
+        // Surface the server's exact message ("This workspace already has a
+        // connected Meta account. Disconnect it before connecting another one.")
+        // instead of a generic failure dialog.
+        const status = event.data?.status as number | undefined
+        const message = event.data?.message as string | undefined
+        if (status === 409 && message) {
+          alert(message)
+        } else {
+          alert('Failed to connect to Meta. Please try again.')
+        }
       }
     }
 
@@ -278,6 +289,11 @@ export function ConnectedAccountsPage() {
                 </svg>
                 Connected
               </span>
+              {metaConnection?.providerAccountName && (
+                <span className="connected-as">
+                  Connected as: <strong>{metaConnection.providerAccountName}</strong>
+                </span>
+              )}
             </div>
             <button
               className="disconnect-btn"
@@ -420,8 +436,8 @@ export function ConnectedAccountsPage() {
 
       <ConfirmDialog
         isOpen={showDisconnectDialog}
-        title="Disconnect Meta"
-        message="Are you sure you want to disconnect Meta? This will remove all connected Facebook Pages and Instagram accounts."
+        title="Disconnect Meta account?"
+        message={buildProviderDisconnectMessage('Meta')}
         confirmText="Disconnect"
         cancelText="Cancel"
         confirmVariant="danger"

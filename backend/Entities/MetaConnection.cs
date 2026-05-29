@@ -1,3 +1,5 @@
+using PostPilot.Api.Enums;
+
 namespace PostPilot.Api.Entities;
 
 public class MetaConnection
@@ -5,13 +7,39 @@ public class MetaConnection
     public Guid Id { get; set; }
 
     /// <summary>
-    /// Workspace this connection belongs to. A workspace can hold multiple Meta
-    /// connections (multiple brands' Meta accounts). Set from current workspace
-    /// at OAuth completion.
+    /// Workspace this connection belongs to. A workspace holds at most ONE active
+    /// connection per <see cref="Provider"/>. Disconnected rows survive in the table
+    /// as history so reconnecting the same provider account can resurface posts.
     /// </summary>
     public Guid WorkspaceId { get; set; }
 
-    public Guid UserId { get; set; } // The AppUser who connected this account.
+    /// <summary>
+    /// Identity-layer provider that owns this connection. Today this is always
+    /// <see cref="ProviderType.Meta"/>; the column exists so LinkedIn/X/TikTok
+    /// can land on the same table without further schema churn.
+    /// </summary>
+    public ProviderType Provider { get; set; } = ProviderType.Meta;
+
+    /// <summary>
+    /// Stable identifier returned by the provider that pins this connection to
+    /// a single external account. For Meta this is the FB user id from
+    /// <c>/me</c>. Nullable for transitional safety on pre-existing rows; new
+    /// rows always populate it. Combined with <see cref="Provider"/> it is the
+    /// identity used to "reconnect the same account ⇒ resurface history."
+    /// </summary>
+    public string? ProviderAccountId { get; set; }
+
+    /// <summary>
+    /// Human-friendly account name (e.g. Meta user's display name). Best-effort,
+    /// stamped at connect time; not used for identity matching.
+    /// </summary>
+    public string? ProviderAccountName { get; set; }
+
+    /// <summary>
+    /// The AppUser who connected this account (audit trail of who clicked "Connect").
+    /// Kept separate from the workspace-level provider identity.
+    /// </summary>
+    public Guid UserId { get; set; }
     public required string AccessToken { get; set; }
     public DateTime TokenExpiresAt { get; set; }
     public DateTime ConnectedAt { get; set; }

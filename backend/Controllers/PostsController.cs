@@ -62,18 +62,62 @@ public class PostsController : ControllerBase
             query = query.Where(p => p.PostType == postType.Value);
         }
 
-        // Only show posts whose target page/IG account AND its parent MetaConnection
-        // are currently connected. Disconnected rows survive in the DB for audit/history
-        // but are not surfaced through this list endpoint.
-        query = query.Where(p =>
-            (p.Platform == Platform.Facebook
-                && p.TargetPage != null
-                && p.TargetPage.IsConnected
-                && (p.TargetPage.MetaConnection == null || p.TargetPage.MetaConnection.IsConnected))
-            || (p.Platform == Platform.Instagram
-                && p.TargetInstagramAccount != null
-                && p.TargetInstagramAccount.IsConnected
-                && (p.TargetInstagramAccount.MetaConnection == null || p.TargetInstagramAccount.MetaConnection.IsConnected)));
+        // Provider-aware visibility filter.
+        //
+        // A post is visible iff its target's MetaConnection is the workspace's
+        // currently active Meta connection, identified by stable
+        // (Provider + ProviderAccountId). The ProviderAccountId match is what
+        // lets historical posts resurface when the SAME Meta account is
+        // reconnected later (the spec requires Published/Canceled history to
+        // come back).
+        //
+        // We fall back to a connection-id match for legacy/transitional rows
+        // whose ProviderAccountId hasn't been backfilled yet — those rows are
+        // equivalent to the active row by definition (they ARE the active row).
+        //
+        // The publishing worker uses a STRICTER filter (per-page IsConnected) —
+        // see PostPublishingWorker. Do NOT copy this filter there.
+        var activeMeta = await _context.MetaConnections
+            .Where(c => c.WorkspaceId == workspaceId
+                     && c.Provider == ProviderType.Meta
+                     && c.IsConnected)
+            .Select(c => new { c.Id, c.ProviderAccountId })
+            .FirstOrDefaultAsync();
+
+        if (activeMeta == null)
+        {
+            // No active Meta provider connection → hide every Meta-tied post.
+            query = query.Where(p => false);
+        }
+        else
+        {
+            var activeMetaId = activeMeta.Id;
+            var activeMetaProviderAccountId = activeMeta.ProviderAccountId;
+
+            query = query.Where(p =>
+                (p.Platform == Platform.Facebook
+                    && p.TargetPage != null
+                    && p.TargetPage.MetaConnection != null
+                    && p.TargetPage.MetaConnection.Provider == ProviderType.Meta
+                    && p.TargetPage.MetaConnection.IsConnected
+                    && (
+                        // Stable identity match (new rows post-migration).
+                        (activeMetaProviderAccountId != null
+                            && p.TargetPage.MetaConnection.ProviderAccountId == activeMetaProviderAccountId)
+                        // Legacy fallback: id-equal to the currently active row.
+                        || p.TargetPage.MetaConnection.Id == activeMetaId
+                    ))
+                || (p.Platform == Platform.Instagram
+                    && p.TargetInstagramAccount != null
+                    && p.TargetInstagramAccount.MetaConnection != null
+                    && p.TargetInstagramAccount.MetaConnection.Provider == ProviderType.Meta
+                    && p.TargetInstagramAccount.MetaConnection.IsConnected
+                    && (
+                        (activeMetaProviderAccountId != null
+                            && p.TargetInstagramAccount.MetaConnection.ProviderAccountId == activeMetaProviderAccountId)
+                        || p.TargetInstagramAccount.MetaConnection.Id == activeMetaId
+                    )));
+        }
 
         var totalCount = await query.CountAsync();
         var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);

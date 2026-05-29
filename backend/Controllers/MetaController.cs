@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using PostPilot.Api.DTOs;
 using PostPilot.Api.Services;
 using PostPilot.Api.Services.Auth;
+using PostPilot.Api.Services.Providers;
 
 namespace PostPilot.Api.Controllers;
 
@@ -73,6 +74,13 @@ public class MetaController : ControllerBase
             var result = await _metaOAuthService.CompleteOAuthAsync(request.Code, request.State, userId);
             return Ok(result);
         }
+        catch (ProviderAlreadyConnectedException ex)
+        {
+            // Product rule: workspace already has an active connection for this
+            // provider. UI must prompt the user to disconnect first.
+            _logger.LogWarning("OAuth complete rejected: {Message}", ex.Message);
+            return Conflict(new { error = ex.Message, provider = ex.Provider.ToString() });
+        }
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "OAuth complete failed: {Message}", ex.Message);
@@ -119,6 +127,11 @@ public class MetaController : ControllerBase
                 userId
             );
             return Ok(result);
+        }
+        catch (ProviderAlreadyConnectedException ex)
+        {
+            _logger.LogWarning("Save connection rejected: {Message}", ex.Message);
+            return Conflict(new { error = ex.Message, provider = ex.Provider.ToString() });
         }
         catch (InvalidOperationException ex)
         {

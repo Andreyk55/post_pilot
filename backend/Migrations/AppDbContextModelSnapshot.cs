@@ -319,6 +319,15 @@ namespace PostPilot.Api.Migrations
                     b.Property<bool>("IsConnected")
                         .HasColumnType("boolean");
 
+                    b.Property<int>("Provider")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ProviderAccountId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProviderAccountName")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("TokenExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -335,9 +344,11 @@ namespace PostPilot.Api.Migrations
 
                     b.HasIndex("WorkspaceId");
 
-                    b.HasIndex("WorkspaceId", "UserId")
+                    b.HasIndex("WorkspaceId", "Provider")
                         .IsUnique()
                         .HasFilter("\"IsConnected\" = true");
+
+                    b.HasIndex("WorkspaceId", "Provider", "ProviderAccountId");
 
                     b.ToTable("MetaConnections");
                 });
@@ -385,6 +396,15 @@ namespace PostPilot.Api.Migrations
 
                     b.Property<DateTime?>("CanceledAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("CanceledBecauseProvider")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CanceledBecauseProviderAccountId")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CancellationReason")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Content")
                         .IsRequired()

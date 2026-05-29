@@ -428,3 +428,24 @@
     justify-content: center;
   }
 }
+
+.connected-as {
+  display: block;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 0.4rem;
+}
+
+.provider-disconnect-message p {
+  margin: 0 0 0.5rem 0;
+}
+
+.provider-disconnect-message ul {
+  margin: 0.25rem 0 0 1.25rem;
+  padding: 0;
+}
+
+.provider-disconnect-message li {
+  margin-bottom: 0.25rem;
+  line-height: 1.4;
+}

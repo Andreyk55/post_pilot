@@ -4,6 +4,7 @@ using PostPilot.Api.Data;
 using PostPilot.Api.Enums;
 using PostPilot.Api.Services;
 using PostPilot.Api.Services.Media;
+using PostPilot.Api.Services.Providers;
 using PostPilot.Api.Services.Publishing;
 using PostPilot.Api.Services.Scheduling;
 using PostPilot.Api.Services.Validation;
@@ -55,6 +56,13 @@ public static class ServiceCollectionExtensions
 
         // Register Meta OAuth service
         services.AddHttpClient<IMetaOAuthService, MetaOAuthService>();
+
+        // ── Provider lifecycle (generic + per-provider handlers) ─────────────
+        // Generic orchestrator that enforces "one active connection per
+        // (workspace, provider)" and routes disconnects to provider-specific
+        // asset/post cleanup handlers.
+        services.AddScoped<IProviderConnectionService, ProviderConnectionService>();
+        services.AddScoped<IProviderLifecycleHandler, MetaProviderLifecycleHandler>();
 
         // ── Post scheduling ──────────────────────────────────────────────────
         services.AddScoped<IPostScheduler, PostScheduler>();
