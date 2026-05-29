@@ -65,12 +65,24 @@ public class UnlinkCancelTests : IDisposable
         };
         var publishingOpts = new PublishingOptions { OAuthStateExpirationMinutes = 10 };
 
+        // Real ProviderConnectionService + Meta lifecycle handler — disconnect's
+        // asset/post sweep lives in the handler, so a mock would no-op silently.
+        var handler = new PostPilot.Api.Services.Providers.MetaProviderLifecycleHandler(
+            _dbContext,
+            _schedulerMock.Object,
+            new Mock<ILogger<PostPilot.Api.Services.Providers.MetaProviderLifecycleHandler>>().Object);
+        var providerConnections = new PostPilot.Api.Services.Providers.ProviderConnectionService(
+            _dbContext,
+            new[] { (PostPilot.Api.Services.Providers.IProviderLifecycleHandler)handler },
+            new Mock<ILogger<PostPilot.Api.Services.Providers.ProviderConnectionService>>().Object);
+
         return new MetaOAuthService(
             _dbContext,
             httpClient,
             metaSettings,
             loggerMock.Object,
             _schedulerMock.Object,
+            providerConnections,
             new MetaApiOptions(),
             publishingOpts);
     }
@@ -198,7 +210,9 @@ public class UnlinkCancelTests : IDisposable
         Assert.Equal(PostStatus.Canceled, processingAfter!.Status);
         Assert.Equal(PostStatus.Published, publishedAfter!.Status);
 
-        Assert.StartsWith($"[{MetaOAuthService.ReasonAccountDisconnected}]", scheduledAfter.ErrorMessage);
+        // Disconnect now flows through MetaProviderLifecycleHandler which stamps
+        // [ProviderDisconnected]; the legacy [AccountDisconnected] reason is no longer used.
+        Assert.StartsWith("[ProviderDisconnected]", scheduledAfter.ErrorMessage);
 
         // Published post's FK still points at the (now disconnected) page — that's the whole point.
         Assert.Equal(page.Id, publishedAfter.TargetPageId);

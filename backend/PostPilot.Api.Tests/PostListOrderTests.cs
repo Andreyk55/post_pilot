@@ -46,18 +46,32 @@ public class PostListOrderTests : IDisposable
     public async Task GetPosts_ReturnsPostsOrderedByCreatedAtDescending()
     {
         // Arrange: 3 posts with different CreatedAt, ScheduledAt deliberately mismatched.
-        // GetPosts now filters by TargetPage.IsConnected, so we also need a real ConnectedPage
-        // row that the posts can FK to.
+        // GetPosts filters by TargetPage.MetaConnection.IsConnected, so we need a real
+        // MetaConnection + ConnectedPage row that the posts can FK to.
+        var connection = new MetaConnection
+        {
+            Id = Guid.NewGuid(),
+            WorkspaceId = TestWorkspaceId,
+            UserId = Guid.NewGuid(),
+            Provider = ProviderType.Meta,
+            AccessToken = "user-tok",
+            TokenExpiresAt = DateTime.UtcNow.AddDays(60),
+            ConnectedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            IsConnected = true,
+        };
         var page = new ConnectedPage
         {
             Id = Guid.NewGuid(),
             WorkspaceId = TestWorkspaceId,
+            MetaConnectionId = connection.Id,
             PageId = "fb-page-test",
             Name = "Test Page",
             AccessToken = "tok",
             CreatedAt = DateTime.UtcNow,
             IsConnected = true,
         };
+        _dbContext.MetaConnections.Add(connection);
         _dbContext.ConnectedPages.Add(page);
         await _dbContext.SaveChangesAsync();
         var pageId = page.Id;

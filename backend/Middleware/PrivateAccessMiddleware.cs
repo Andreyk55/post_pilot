@@ -13,6 +13,7 @@ namespace PostPilot.Api.Middleware;
 ///   /api/auth/google/callback
 ///   /api/auth/me
 ///   /api/auth/logout
+///   /api/media/files/{*storageKey}  — Meta fetches images here; no cookie
 ///   /health
 /// CORS preflight (OPTIONS) is always allowed through so the browser can
 /// negotiate cross-origin requests before sending the cookie.
@@ -103,6 +104,8 @@ public class PrivateAccessMiddleware
             if (string.Equals(path, allowed, StringComparison.OrdinalIgnoreCase))
                 return true;
         }
+        if (path.StartsWith("/api/media/files/", StringComparison.OrdinalIgnoreCase))
+            return true;
         return false;
     }
 }
