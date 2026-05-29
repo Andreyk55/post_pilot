@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "d:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj": {}
+    "D:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj": {}
   },
   "projects": {
-    "d:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj": {
+    "D:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "d:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj",
+        "projectUniqueName": "D:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj",
         "projectName": "PostPilot.Api",
-        "projectPath": "d:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj",
+        "projectPath": "D:\\dev\\projects\\post_pilot\\backend\\PostPilot.Api.csproj",
         "packagesPath": "C:\\Users\\KTZ\\.nuget\\packages\\",
-        "outputPath": "d:\\dev\\projects\\post_pilot\\backend\\obj\\",
+        "outputPath": "D:\\dev\\projects\\post_pilot\\backend\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\KTZ\\AppData\\Roaming\\NuGet\\NuGet.Config"
