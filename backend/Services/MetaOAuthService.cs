@@ -335,21 +335,14 @@ public class MetaOAuthService : IMetaOAuthService
     {
         var now = DateTime.UtcNow;
 
-        // Try to find a disconnected row for the SAME provider account.
-        // Only match by ProviderAccountId if we actually resolved one; a null id
-        // never matches anything (we don't want to merge two unknown accounts).
-        MetaConnection? existing = null;
-        if (!string.IsNullOrEmpty(providerAccountId))
-        {
-            existing = await _context.MetaConnections
-                .Include(c => c.Pages)
-                .Include(c => c.InstagramAccounts)
-                .FirstOrDefaultAsync(c =>
-                    c.WorkspaceId == workspaceId
-                    && c.Provider == ProviderType.Meta
-                    && c.ProviderAccountId == providerAccountId
-                    && !c.IsConnected);
-        }
+        // Find a previously-disconnected row to REACTIVATE rather than orphan.
+        //
+        // Reactivating (vs. inserting a fresh row) is what keeps historical Pages,
+        // IG accounts and their Posts — including Failed posts — attached to a row
+        // the visibility query treats as active. Insert a duplicate instead and the
+        // old page (with its Failed post) stays pinned to a permanently-disconnected
+        // row and disappears from My Posts forever. See ResolveDisconnectedMetaForReconnect.
+        var existing = await ResolveDisconnectedMetaForReconnectAsync(workspaceId, providerAccountId);
 
         if (existing != null)
         {
@@ -360,6 +353,14 @@ public class MetaOAuthService : IMetaOAuthService
             existing.DisconnectedAt = null;
             existing.ConnectedAt = now;
             existing.UserId = userId; // Latest user who initiated the reconnect.
+            // Backfill the stable identity if we resolved one this time but the
+            // historical row never had it (Graph /me had failed on an earlier connect,
+            // or the row predates the ProviderAccountId column). Without this, the next
+            // reconnect would fail to match by id again.
+            if (!string.IsNullOrEmpty(providerAccountId))
+            {
+                existing.ProviderAccountId = providerAccountId;
+            }
             if (!string.IsNullOrEmpty(providerAccountName))
             {
                 existing.ProviderAccountName = providerAccountName;
@@ -391,6 +392,61 @@ public class MetaOAuthService : IMetaOAuthService
             "Creating new Meta connection {ConnectionId} for provider account {ProviderAccountId}",
             fresh.Id, providerAccountId);
         return fresh;
+    }
+
+    /// <summary>
+    /// Finds the disconnected <see cref="MetaConnection"/> row that a reconnect should
+    /// reactivate, so its historical Pages/IGs/Posts come back into view.
+    ///
+    /// Matching strategy (callers have already enforced "no ACTIVE connection exists"
+    /// via <see cref="IProviderConnectionService.EnsureCanConnectAsync"/>):
+    ///
+    ///   1. If we resolved a stable <paramref name="providerAccountId"/>, prefer the
+    ///      disconnected row with that exact id — that is unambiguously "the same account".
+    ///   2. If no id-match exists (or we couldn't resolve an id at all, e.g. Graph /me
+    ///      failed), fall back to the most-recently-disconnected row whose stored
+    ///      ProviderAccountId is null/empty. A null stored id means "we never learned
+    ///      which account this was", so adopting it for the current reconnect is safe —
+    ///      and it's exactly the row a token-invalid → disconnect → reconnect cycle
+    ///      leaves behind when identity resolution was flaky. Reusing it reattaches the
+    ///      old page + its Failed post instead of orphaning them on a dead row.
+    ///
+    /// We deliberately DO NOT fall back to a disconnected row that carries a DIFFERENT
+    /// non-null ProviderAccountId — that would merge two distinct accounts' history.
+    /// </summary>
+    private async Task<MetaConnection?> ResolveDisconnectedMetaForReconnectAsync(
+        Guid workspaceId,
+        string? providerAccountId)
+    {
+        // 1. Exact stable-identity match.
+        if (!string.IsNullOrEmpty(providerAccountId))
+        {
+            var byId = await _context.MetaConnections
+                .Include(c => c.Pages)
+                .Include(c => c.InstagramAccounts)
+                .FirstOrDefaultAsync(c =>
+                    c.WorkspaceId == workspaceId
+                    && c.Provider == ProviderType.Meta
+                    && c.ProviderAccountId == providerAccountId
+                    && !c.IsConnected);
+            if (byId != null)
+            {
+                return byId;
+            }
+        }
+
+        // 2. Identity-unknown fallback: a disconnected row that never recorded which
+        // account it was. Pick the most recent so repeated cycles converge on one row.
+        return await _context.MetaConnections
+            .Include(c => c.Pages)
+            .Include(c => c.InstagramAccounts)
+            .Where(c =>
+                c.WorkspaceId == workspaceId
+                && c.Provider == ProviderType.Meta
+                && !c.IsConnected
+                && (c.ProviderAccountId == null || c.ProviderAccountId == ""))
+            .OrderByDescending(c => c.DisconnectedAt)
+            .FirstOrDefaultAsync();
     }
 
     private async Task DebugWhoLoggedInAsync(string accessToken)
