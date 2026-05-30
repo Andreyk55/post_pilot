@@ -20,20 +20,15 @@ public interface IMediaUploadService
     /// and for audit; sanitized server-side, NEVER trusted as a path.</param>
     /// <param name="contentType">MIME type declared by the client.</param>
     /// <param name="sizeBytes">Declared file size in bytes.</param>
-    /// <param name="provider">Optional identity provider this upload is for (e.g.
-    /// <see cref="ProviderType.Meta"/>). When supplied together with
-    /// <paramref name="providerConnectionId"/> the storage key embeds those segments
-    /// for layout-level tenancy. When null, the key uses the reserved
-    /// <c>providers/unassigned/connections/none</c> segments.</param>
-    /// <param name="providerConnectionId">Optional id of the specific provider connection (e.g.
-    /// <see cref="Entities.MetaConnection.Id"/>). Validated to belong to the same workspace.</param>
+    /// <param name="platform">Target publishing platform (Facebook or Instagram). Required —
+    /// MVP assumption is one upload belongs to one platform only, so storage layout is
+    /// partitioned by platform.</param>
     Task<InitUploadResult> InitAsync(
         Guid workspaceId,
         string fileName,
         string contentType,
         long sizeBytes,
-        ProviderType? provider = null,
-        Guid? providerConnectionId = null,
+        Platform platform,
         CancellationToken cancellationToken = default);
 
     Task<CompleteUploadResult> CompleteAsync(Guid workspaceId, Guid mediaId, CancellationToken cancellationToken = default);

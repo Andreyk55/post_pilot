@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using PostPilot.Api.Data;
-using PostPilot.Api.Entities;
 using PostPilot.Api.Enums;
 using PostPilot.Api.Settings;
 
@@ -8,12 +7,6 @@ namespace PostPilot.Api.Services.Media;
 
 public class MediaUploadService : IMediaUploadService
 {
-    // Reserved path segments used when the upload is not yet bound to a specific
-    // provider/account. Kept here as constants so the values are not duplicated
-    // across MediaService, tests, and the controller surface.
-    public const string UnassignedProviderSegment = "unassigned";
-    public const string NoConnectionSegment = "none";
-
     private readonly AppDbContext _db;
     private readonly IMediaService _mediaService;
     private readonly MediaStorageOptions _storageOpts;
@@ -38,8 +31,7 @@ public class MediaUploadService : IMediaUploadService
         string fileName,
         string contentType,
         long sizeBytes,
-        ProviderType? provider = null,
-        Guid? providerConnectionId = null,
+        Platform platform,
         CancellationToken cancellationToken = default)
     {
         if (!_mediaService.IsValidMediaType(contentType))
@@ -55,21 +47,12 @@ public class MediaUploadService : IMediaUploadService
         if (_storageOpts.IsSupabase && _storageOpts.Supabase.MaxUploadBytes > 0 && sizeBytes > _storageOpts.Supabase.MaxUploadBytes)
             throw new ArgumentException($"File too large. Provider cap is {_storageOpts.Supabase.MaxUploadBytes} bytes (got {sizeBytes}).");
 
-        // ── Resolve the provider/connection segments ────────────────────────
-        // The frontend may optionally select a provider connection it intends the
-        // upload to belong to. If it does, we MUST verify that connection lives in
-        // the same workspace the session resolves to — otherwise a member of
-        // workspace A could ask for an upload URL scoped under workspace B's
-        // connection, leaking the path structure (and potentially co-mingling
-        // objects under another tenant's prefix).
-        var (providerSegment, connectionSegment) = await ResolveProviderSegmentsAsync(
-            workspaceId, provider, providerConnectionId, cancellationToken);
-
         // Pre-assign mediaId so we can embed it in the storage path. The backend chooses
-        // the entire path — the frontend's fileName/contentType are inputs, not paths.
+        // the entire path — the frontend's fileName/contentType/platform are inputs, not paths.
+        // MediaService validates the platform value against the allow-list (Facebook/Instagram).
         var mediaId = Guid.NewGuid();
         var upload = await _mediaService.GenerateUploadUrlAsync(
-            workspaceId, providerSegment, connectionSegment, mediaId, fileName, contentType, cancellationToken);
+            workspaceId, platform, mediaId, fileName, contentType, cancellationToken);
 
         var media = new Entities.Media
         {
@@ -91,8 +74,8 @@ public class MediaUploadService : IMediaUploadService
 
         var expiresAt = DateTime.UtcNow.Add(_presignedUploadExpiration);
         _logger.LogInformation(
-            "Init upload mediaId={MediaId} key={Key} contentType={ContentType} sizeBytes={SizeBytes} provider={Provider} connection={Connection}",
-            media.Id, media.StorageKey, contentType, sizeBytes, providerSegment, connectionSegment);
+            "Init upload mediaId={MediaId} key={Key} contentType={ContentType} sizeBytes={SizeBytes} platform={Platform}",
+            media.Id, media.StorageKey, contentType, sizeBytes, platform);
 
         return new InitUploadResult(
             MediaId: media.Id,
@@ -101,56 +84,6 @@ public class MediaUploadService : IMediaUploadService
             ContentType: contentType,
             ExpiresAt: expiresAt,
             MediaType: upload.MediaType);
-    }
-
-    /// <summary>
-    /// Validates the (optional) provider + providerConnectionId pair against the current
-    /// workspace and returns the path segments to use in the storage key.
-    ///
-    /// Rules:
-    ///   - If no provider is given, segments fall back to <c>unassigned</c> / <c>none</c>.
-    ///   - If a provider but no connection id is given, only the provider segment is filled.
-    ///   - If a connection id is given, it MUST belong to the same workspace AND match
-    ///     the provider value (if both are given). Otherwise we refuse — never silently
-    ///     fall back to "unassigned", because that would mask a cross-workspace probe.
-    /// </summary>
-    private async Task<(string ProviderSegment, string ConnectionSegment)> ResolveProviderSegmentsAsync(
-        Guid workspaceId,
-        ProviderType? provider,
-        Guid? providerConnectionId,
-        CancellationToken cancellationToken)
-    {
-        if (provider is null && providerConnectionId is null)
-            return (UnassignedProviderSegment, NoConnectionSegment);
-
-        if (providerConnectionId is null)
-        {
-            return (provider!.Value.ToString().ToLowerInvariant(), NoConnectionSegment);
-        }
-
-        // Today the only provider connection table is MetaConnection. When LinkedIn /
-        // X / TikTok land, add their lookups here keyed on `provider`.
-        switch (provider ?? ProviderType.Meta)
-        {
-            case ProviderType.Meta:
-                var meta = await _db.Set<MetaConnection>()
-                    .Where(c => c.Id == providerConnectionId.Value && c.WorkspaceId == workspaceId)
-                    .Select(c => new { c.Id, c.Provider })
-                    .FirstOrDefaultAsync(cancellationToken);
-                if (meta is null)
-                {
-                    // Either the connection id doesn't exist, OR it belongs to a different
-                    // workspace. We collapse both to one error so callers can't distinguish
-                    // "doesn't exist" from "exists but isn't yours" via timing/error text.
-                    throw new UnauthorizedAccessException(
-                        $"Provider connection {providerConnectionId} is not accessible from this workspace.");
-                }
-                return (meta.Provider.ToString().ToLowerInvariant(), meta.Id.ToString("D"));
-
-            default:
-                throw new ArgumentException(
-                    $"Provider {provider} does not yet support connection-scoped uploads.");
-        }
     }
 
     public async Task<CompleteUploadResult> CompleteAsync(Guid workspaceId, Guid mediaId, CancellationToken cancellationToken = default)

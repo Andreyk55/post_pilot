@@ -8,14 +8,11 @@ namespace PostPilot.Api.Tests.Services.Media;
 
 /// <summary>
 /// Tests the application-level guarantees of <see cref="MediaService"/>:
-/// content-type allow-list, file-name sanitization, workspace + provider + connection
-/// scoped storage keys, and the publish-time fresh signed URL flow.
+/// content-type allow-list, file-name sanitization, workspace + platform scoped
+/// storage keys, and the publish-time fresh signed URL flow.
 /// </summary>
 public class MediaServiceUploadTests
 {
-    private const string Unassigned = MediaUploadService.UnassignedProviderSegment;
-    private const string NoConn     = MediaUploadService.NoConnectionSegment;
-
     private static (MediaService svc, FakeStorageProvider fake) Build(string provider = "supabase")
     {
         var fake = new FakeStorageProvider();
@@ -51,8 +48,7 @@ public class MediaServiceUploadTests
         await Assert.ThrowsAsync<ArgumentException>(() =>
             svc.GenerateUploadUrlAsync(
                 workspaceId: Guid.NewGuid(),
-                provider: Unassigned,
-                providerConnectionId: NoConn,
+                platform: Platform.Facebook,
                 mediaId: Guid.NewGuid(),
                 fileName: "evil.exe",
                 contentType: "application/x-msdownload"));
@@ -82,8 +78,7 @@ public class MediaServiceUploadTests
 
         var result = await svc.GenerateUploadUrlAsync(
             workspaceId: Guid.NewGuid(),
-            provider: Unassigned,
-            providerConnectionId: NoConn,
+            platform: Platform.Instagram,
             mediaId: Guid.NewGuid(),
             fileName: "ok" + ext,
             contentType: contentType);
@@ -93,84 +88,51 @@ public class MediaServiceUploadTests
     }
 
     [Fact]
-    public async Task GenerateUploadUrlAsync_FullKeyShape_WorkspaceProviderConnectionMedia()
+    public async Task GenerateUploadUrlAsync_Facebook_UsesMetaFacebookSegment()
     {
         var (svc, _) = Build();
         var workspaceId = Guid.NewGuid();
         var mediaId = Guid.NewGuid();
-        var connectionId = Guid.NewGuid();
 
         var result = await svc.GenerateUploadUrlAsync(
-            workspaceId,
-            provider: "meta",
-            providerConnectionId: connectionId.ToString("D"),
-            mediaId,
-            fileName: "photo.png",
-            contentType: "image/png");
+            workspaceId, Platform.Facebook, mediaId, "photo.png", "image/png");
 
-        // Every required segment, in the briefed order.
-        Assert.StartsWith($"workspaces/{workspaceId:D}/", result.StorageKey);
-        Assert.Contains($"/providers/meta/", result.StorageKey);
-        Assert.Contains($"/connections/{connectionId:D}/", result.StorageKey);
-        Assert.Contains($"/media/{mediaId:D}/", result.StorageKey);
+        // Final shape: workspaces/{ws}/providers/meta-facebook/media/{mediaId}/{safe}.png
+        Assert.StartsWith($"workspaces/{workspaceId:D}/providers/meta-facebook/media/{mediaId:D}/", result.StorageKey);
         Assert.EndsWith(".png", result.StorageKey);
+        // Old shape from the previous iteration must NOT survive.
+        Assert.DoesNotContain("/connections/", result.StorageKey);
+        Assert.DoesNotContain("/providers/unassigned/", result.StorageKey);
     }
 
     [Fact]
-    public async Task GenerateUploadUrlAsync_FallsBackToUnassignedAndNone_WhenProviderEmpty()
+    public async Task GenerateUploadUrlAsync_Instagram_UsesMetaInstagramSegment()
     {
         var (svc, _) = Build();
         var workspaceId = Guid.NewGuid();
         var mediaId = Guid.NewGuid();
 
         var result = await svc.GenerateUploadUrlAsync(
-            workspaceId,
-            provider: "",
-            providerConnectionId: "",
-            mediaId,
-            fileName: "photo.png",
-            contentType: "image/png");
+            workspaceId, Platform.Instagram, mediaId, "video.mp4", "video/mp4");
 
-        Assert.Contains("/providers/unassigned/", result.StorageKey);
-        Assert.Contains("/connections/none/", result.StorageKey);
+        Assert.StartsWith($"workspaces/{workspaceId:D}/providers/meta-instagram/media/{mediaId:D}/", result.StorageKey);
+        Assert.EndsWith(".mp4", result.StorageKey);
+        Assert.DoesNotContain("/connections/", result.StorageKey);
+        Assert.DoesNotContain("/providers/unassigned/", result.StorageKey);
     }
 
-    [Fact]
-    public async Task GenerateUploadUrlAsync_SanitizesProviderAndConnectionSegments()
+    [Theory]
+    [InlineData(Platform.Twitter)]
+    [InlineData(Platform.LinkedIn)]
+    public async Task GenerateUploadUrlAsync_UnsupportedPlatform_IsRejected(Platform platform)
     {
-        // Even if some future caller hands us a wild provider/connection string,
-        // the resulting key must stay shape-stable. The "/" in "../etc" or the
-        // ".." traversal in those segments must NOT introduce extra path levels
-        // — the layout MUST stay
-        // workspaces/{ws}/providers/{single-segment}/connections/{single-segment}/media/{id}/file
+        // MVP: only Facebook + Instagram have a defined storage segment. New
+        // platforms must be added explicitly to MediaService.MapPlatformToProviderSegment.
         var (svc, _) = Build();
-        var workspaceId = Guid.NewGuid();
-        var mediaId = Guid.NewGuid();
 
-        var result = await svc.GenerateUploadUrlAsync(
-            workspaceId,
-            provider: "../etc",
-            providerConnectionId: "../../secret",
-            mediaId,
-            fileName: "photo.png",
-            contentType: "image/png");
-
-        // ".." must be gone (it was the dangerous part).
-        Assert.DoesNotContain("..", result.StorageKey);
-
-        // The KEY SHAPE must remain exactly 7 segments: workspaces, {ws}, providers,
-        // {p}, connections, {c}, media, {id}, file → split on '/' gives 9 entries.
-        var parts = result.StorageKey.Split('/');
-        Assert.Equal(9, parts.Length);
-        Assert.Equal("workspaces", parts[0]);
-        Assert.Equal(workspaceId.ToString("D"), parts[1]);
-        Assert.Equal("providers", parts[2]);
-        // Provider segment is a single token — no slashes inside.
-        Assert.DoesNotContain("/", parts[3]);
-        Assert.Equal("connections", parts[4]);
-        Assert.DoesNotContain("/", parts[5]);
-        Assert.Equal("media", parts[6]);
-        Assert.Equal(mediaId.ToString("D"), parts[7]);
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            svc.GenerateUploadUrlAsync(
+                Guid.NewGuid(), platform, Guid.NewGuid(), "photo.png", "image/png"));
     }
 
     [Fact]
@@ -178,17 +140,24 @@ public class MediaServiceUploadTests
     {
         // The frontend is not trusted with the storage path. Even if it sends
         // "../../../etc/passwd.png", the resulting storage key must stay
-        // contained in this workspace/media folder.
+        // contained in this workspace/platform/media folder.
         var (svc, _) = Build();
         var workspaceId = Guid.NewGuid();
         var mediaId = Guid.NewGuid();
 
         var result = await svc.GenerateUploadUrlAsync(
-            workspaceId, Unassigned, NoConn, mediaId, "../../../etc/passwd.png", "image/png");
+            workspaceId, Platform.Facebook, mediaId, "../../../etc/passwd.png", "image/png");
 
-        Assert.StartsWith($"workspaces/{workspaceId:D}/providers/unassigned/connections/none/media/{mediaId:D}/", result.StorageKey);
+        Assert.StartsWith(
+            $"workspaces/{workspaceId:D}/providers/meta-facebook/media/{mediaId:D}/",
+            result.StorageKey);
         Assert.DoesNotContain("..", result.StorageKey);
         Assert.DoesNotContain("/etc/", result.StorageKey);
+
+        // Exactly 7 segments: workspaces, {ws}, providers, meta-facebook, media, {id}, file.
+        // Splitting on '/' gives 7 parts (no leading slash on storage keys).
+        var parts = result.StorageKey.Split('/');
+        Assert.Equal(7, parts.Length);
     }
 
     [Fact]
@@ -197,11 +166,22 @@ public class MediaServiceUploadTests
         var (svc, _) = Build();
 
         var result = await svc.GenerateUploadUrlAsync(
-            Guid.NewGuid(), Unassigned, NoConn, Guid.NewGuid(), "My Cool 📷 Photo.PNG", "image/png");
+            Guid.NewGuid(), Platform.Instagram, Guid.NewGuid(), "My Cool 📷 Photo.PNG", "image/png");
 
         // Last segment is the sanitized filename + extension.
         var fileName = result.StorageKey.Split('/').Last();
         Assert.Matches("^[a-z0-9_-]+\\.png$", fileName);
+    }
+
+    [Fact]
+    public async Task GenerateUploadUrlAsync_PreservesExtensionFromContentType_WhenFileNameHasNone()
+    {
+        var (svc, _) = Build();
+
+        var result = await svc.GenerateUploadUrlAsync(
+            Guid.NewGuid(), Platform.Facebook, Guid.NewGuid(), "photo-no-ext", "image/png");
+
+        Assert.EndsWith(".png", result.StorageKey);
     }
 
     [Fact]
@@ -254,7 +234,7 @@ public class MediaServiceUploadTests
 
         Assert.True(svc.IsStorageKey("media/abc.png"));
         Assert.True(svc.IsStorageKey(
-            $"workspaces/{Guid.NewGuid():D}/providers/meta/connections/{Guid.NewGuid():D}/media/{Guid.NewGuid():D}/x.png"));
+            $"workspaces/{Guid.NewGuid():D}/providers/meta-facebook/media/{Guid.NewGuid():D}/x.png"));
 
         // External URLs and null/empty must NOT be storage keys (they go
         // straight to Meta as-is).

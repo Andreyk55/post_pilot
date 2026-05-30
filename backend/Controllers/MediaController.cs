@@ -97,6 +97,9 @@ public class MediaController : ControllerBase
     [HttpPost("uploads/init")]
     public async Task<ActionResult<InitUploadResponse>> InitUpload([FromBody] InitUploadRequest request, CancellationToken ct)
     {
+        if (request.Platform is null)
+            return BadRequest(new { error = "Platform is required. Allowed values: Facebook, Instagram." });
+
         try
         {
             var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(ct);
@@ -105,8 +108,7 @@ public class MediaController : ControllerBase
                 request.FileName,
                 request.ContentType,
                 request.SizeBytes,
-                provider: request.Provider,
-                providerConnectionId: request.ProviderConnectionId,
+                platform: request.Platform.Value,
                 cancellationToken: ct);
             return Ok(new InitUploadResponse(
                 MediaId: result.MediaId,
@@ -121,13 +123,6 @@ public class MediaController : ControllerBase
         catch (ArgumentException ex)
         {
             return BadRequest(new { error = ex.Message });
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            // Cross-workspace provider-connection probe. Same status whether the row
-            // doesn't exist or belongs to another workspace so the failure mode does
-            // not double as a discovery oracle.
-            return NotFound(new { error = ex.Message });
         }
         catch (NotImplementedException ex)
         {
@@ -527,19 +522,18 @@ public record ExtractMetadataRequest(
 /// server returns a presigned URL and creates a Media row to track it.
 ///
 /// <para>
-/// <see cref="Provider"/> and <see cref="ProviderConnectionId"/> are OPTIONAL hints
-/// that bind the upload to a specific provider account (e.g. a Meta connection).
-/// The server validates that the connection lives in the caller's workspace before
-/// using it; mismatched values cause a 404. When omitted, the storage key uses the
-/// reserved <c>providers/unassigned/connections/none</c> segments.
+/// MVP assumption: each upload belongs to ONE platform only. <see cref="Platform"/> is
+/// required; the server maps it to the storage path segment
+/// (Facebook → <c>meta-facebook</c>, Instagram → <c>meta-instagram</c>). Any other
+/// platform value is rejected. The frontend MUST NOT send a storage key or path —
+/// only file metadata + platform.
 /// </para>
 /// </summary>
 public record InitUploadRequest(
     string FileName,
     string ContentType,
     long SizeBytes,
-    ProviderType? Provider = null,
-    Guid? ProviderConnectionId = null
+    Platform? Platform = null
 );
 
 public record InitUploadResponse(

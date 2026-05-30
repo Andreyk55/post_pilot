@@ -86,8 +86,7 @@ public class MediaService : IMediaService
 
     public async Task<UploadUrlResult> GenerateUploadUrlAsync(
         Guid workspaceId,
-        string provider,
-        string providerConnectionId,
+        Platform platform,
         Guid mediaId,
         string fileName,
         string contentType,
@@ -96,33 +95,40 @@ public class MediaService : IMediaService
         if (!IsValidMediaType(contentType))
             throw new ArgumentException($"Invalid content type: {contentType}. Allowed types: {string.Join(", ", AllowedContentTypes)}");
 
+        var providerPlatform = MapPlatformToProviderSegment(platform);
+
         var mediaType = GetMediaType(contentType);
         var extension = ExtensionFor(fileName, contentType, mediaType);
         var safeName = SanitizeFileName(fileName, extension);
 
-        // provider / providerConnectionId are sanitized through the same allow-list as
-        // file names so untrusted values can never escape their path segment. The
-        // literal tokens "unassigned" / "none" stay intact because they only contain
-        // [a-z0-9].
-        var providerSegment = SanitizeSegment(provider, fallback: "unassigned");
-        var connectionSegment = SanitizeSegment(providerConnectionId, fallback: "none");
-
-        // Workspace + provider/account scoped, server-chosen path. The frontend never
-        // picks any segment — it only supplies fileName/contentType (and optionally
-        // selects a provider connection by id, which the upload service validates against
-        // the current workspace before passing it in here). The legacy
-        // "media/{guid}.{ext}" shape is kept on the OLDER overload so existing posts
-        // referencing those keys keep resolving.
-        var key = $"workspaces/{workspaceId:D}/providers/{providerSegment}/connections/{connectionSegment}/media/{mediaId:D}/{safeName}";
+        // Workspace + platform scoped, server-chosen path. MVP assumption: each media
+        // upload belongs to one platform only — no cross-posting yet, so the path can
+        // carry a single deterministic platform segment.
+        var key = $"workspaces/{workspaceId:D}/providers/{providerPlatform}/media/{mediaId:D}/{safeName}";
 
         var uploadUrl = await _storage.CreateUploadUrlAsync(key, contentType, _uploadUrlExpiration, cancellationToken);
 
         _logger.LogInformation(
-            "Generated workspace-scoped upload URL for {MediaType} mediaId={MediaId} workspace={WorkspaceId} provider={Provider} connection={Connection} key={Key} (mode={RunMode})",
-            mediaType, mediaId, workspaceId, providerSegment, connectionSegment, key, _runMode);
+            "Generated workspace-scoped upload URL for {MediaType} mediaId={MediaId} workspace={WorkspaceId} platform={Platform} key={Key} (mode={RunMode})",
+            mediaType, mediaId, workspaceId, providerPlatform, key, _runMode);
 
         return new UploadUrlResult(uploadUrl, key, mediaType);
     }
+
+    /// <summary>
+    /// Maps a publishing <see cref="Platform"/> to the token used in the storage key.
+    /// The mapping is deliberately a hand-rolled switch (not <c>ToString().ToLower()</c>)
+    /// so adding a new enum member can't silently change the storage layout — every new
+    /// platform that should be uploadable has to land here explicitly.
+    /// </summary>
+    internal static string MapPlatformToProviderSegment(Platform platform) => platform switch
+    {
+        Platform.Facebook  => "meta-facebook",
+        Platform.Instagram => "meta-instagram",
+        _ => throw new ArgumentException(
+            $"Platform '{platform}' is not supported for media uploads yet. " +
+            "Supported: Facebook, Instagram."),
+    };
 
     public string GenerateDownloadUrl(string storageKey, TimeSpan expiration)
     {
@@ -253,28 +259,6 @@ public class MediaService : IMediaService
             "video/quicktime" => ".mov",
             _ => mediaType == MediaType.Video ? ".mp4" : ".jpg",
         };
-    }
-
-    /// <summary>
-    /// Sanitizes an arbitrary string for use as a single path segment. Collapses every
-    /// run of disallowed characters to <c>-</c>, lowercases, trims leading/trailing
-    /// dashes, and caps at 80 chars. Returns <paramref name="fallback"/> on empty input.
-    /// Used for the provider / providerConnectionId path segments to keep the key shape
-    /// predictable regardless of what value the caller hands in.
-    /// </summary>
-    private static string SanitizeSegment(string? value, string fallback)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return fallback;
-
-        var s = Regex.Replace(value.ToLowerInvariant(), "[^a-z0-9_-]+", "-").Trim('-');
-        if (string.IsNullOrEmpty(s))
-            return fallback;
-
-        if (s.Length > 80)
-            s = s[..80];
-
-        return s;
     }
 
     /// <summary>

@@ -37,13 +37,23 @@ the GitHub Actions environment) and verify it does not appear in any
 The backend (never the frontend) builds object keys in this shape:
 
 ```
-workspaces/{workspaceId}/providers/{provider}/connections/{providerConnectionId}/media/{mediaId}/{safeFileName}
+workspaces/{workspaceId}/providers/{providerPlatform}/media/{mediaId}/{safeFileName}
 ```
 
-When the upload is not yet tied to a specific provider account, the reserved
-segments `providers/unassigned/connections/none/` are used. If the upload
-request includes a `providerConnectionId`, the backend rejects it (404) unless
-the connection belongs to the caller's current workspace.
+MVP rule: each upload belongs to one publishing platform only — no cross-posting
+yet, so the path carries a single deterministic platform segment.
+
+`providerPlatform` allow-list (mapped server-side from the typed `Platform` enum
+the client sends in the init request):
+
+| Platform value | providerPlatform segment |
+|---|---|
+| `Facebook`  | `meta-facebook`  |
+| `Instagram` | `meta-instagram` |
+
+Any other platform value is rejected. The frontend MUST send only file metadata
+(name, content type, size) plus the typed `Platform` value — never a storage
+key or path.
 
 ## Real-user auth (Auth section)
 

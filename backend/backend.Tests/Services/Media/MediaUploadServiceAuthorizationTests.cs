@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using PostPilot.Api.Data;
-using PostPilot.Api.Entities;
 using PostPilot.Api.Enums;
 using PostPilot.Api.Services.Media;
 using PostPilot.Api.Settings;
@@ -10,13 +9,12 @@ using Xunit;
 namespace PostPilot.Api.Tests.Services.Media;
 
 /// <summary>
-/// Tenant-isolation tests for <see cref="MediaUploadService"/>. The whole upload/
-/// complete/delete API trusts the workspaceId argument; it MUST come from the
-/// authenticated session (the controller pulls it from
-/// <c>ICurrentWorkspaceProvider</c>). These tests verify that handing the
-/// service a workspaceId for workspace A cannot read or delete media that
-/// belongs to workspace B, and that a Meta connection id from workspace B
-/// cannot be used to scope an upload under workspace A's prefix.
+/// Tenant-isolation tests for <see cref="MediaUploadService"/>. The upload/complete/
+/// delete API trusts the workspaceId argument; it MUST come from the authenticated
+/// session (the controller pulls it from <c>ICurrentWorkspaceProvider</c>). These
+/// tests verify that handing the service a workspaceId for workspace A cannot read
+/// or delete media that belongs to workspace B, and that the storage key generation
+/// is platform-partitioned per the MVP rule.
 /// </summary>
 public class MediaUploadServiceAuthorizationTests
 {
@@ -71,7 +69,7 @@ public class MediaUploadServiceAuthorizationTests
             WorkspaceId = workspaceA,
             StorageProvider = "supabase",
             Bucket = "postpilot-media",
-            StorageKey = $"workspaces/{workspaceA:D}/providers/unassigned/connections/none/media/{mediaId:D}/photo.png",
+            StorageKey = $"workspaces/{workspaceA:D}/providers/meta-facebook/media/{mediaId:D}/photo.png",
             OriginalFileName = "photo.png",
             ContentType = "image/png",
             Status = MediaUploadStatus.Uploaded,
@@ -106,7 +104,8 @@ public class MediaUploadServiceAuthorizationTests
                 workspaceId: Guid.NewGuid(),
                 fileName: "huge.png",
                 contentType: "image/png",
-                sizeBytes: 2048));
+                sizeBytes: 2048,
+                platform: Platform.Facebook));
     }
 
     [Fact]
@@ -121,126 +120,75 @@ public class MediaUploadServiceAuthorizationTests
                 workspaceId: Guid.NewGuid(),
                 fileName: "doc.pdf",
                 contentType: "application/pdf",
-                sizeBytes: 100));
+                sizeBytes: 100,
+                platform: Platform.Instagram));
     }
 
     [Fact]
-    public async Task InitAsync_BackendChoosesPath_FrontendNameIsSanitized()
+    public async Task InitAsync_RejectsUnsupportedPlatform()
+    {
+        var db = NewDb();
+        var media = NewMediaService(new RecordingStorage());
+        var svc = new MediaUploadService(db, media, Opts(), NullLogger<MediaUploadService>.Instance);
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            svc.InitAsync(
+                workspaceId: Guid.NewGuid(),
+                fileName: "photo.png",
+                contentType: "image/png",
+                sizeBytes: 100,
+                platform: Platform.LinkedIn));
+
+        // No Media row should have been created on the validation-failure path.
+        Assert.False(await db.Media.AnyAsync());
+    }
+
+    [Fact]
+    public async Task InitAsync_Facebook_BackendChoosesPath_FrontendNameIsSanitized()
     {
         var db = NewDb();
         var media = NewMediaService(new RecordingStorage());
         var svc = new MediaUploadService(db, media, Opts(), NullLogger<MediaUploadService>.Instance);
         var workspaceId = Guid.NewGuid();
 
+        // Frontend hands us a traversal-style name AND tries to push a different
+        // "platform" by spelling. The backend ignores anything except the typed
+        // Platform enum value and the sanitized file name.
         var result = await svc.InitAsync(
-            workspaceId, "../../../etc/passwd.png", "image/png", 100);
+            workspaceId, "../../../etc/passwd.png", "image/png", 100, Platform.Facebook);
 
-        // Even though the frontend supplied a traversal-style name, the storage
-        // key must stay inside this workspace's media folder, under the reserved
-        // unassigned/none segments since no provider was supplied.
         Assert.StartsWith(
-            $"workspaces/{workspaceId:D}/providers/unassigned/connections/none/media/{result.MediaId:D}/",
+            $"workspaces/{workspaceId:D}/providers/meta-facebook/media/{result.MediaId:D}/",
             result.StorageKey);
         Assert.DoesNotContain("..", result.StorageKey);
         Assert.DoesNotContain("/etc/", result.StorageKey);
+        Assert.DoesNotContain("/connections/", result.StorageKey);
+        Assert.DoesNotContain("/providers/unassigned/", result.StorageKey);
 
         // The Media row was created with the SAME mediaId we returned and
         // the workspace the caller passed in.
         var row = await db.Media.FirstAsync(m => m.Id == result.MediaId);
         Assert.Equal(workspaceId, row.WorkspaceId);
         Assert.Equal(MediaUploadStatus.PendingUpload, row.Status);
+        Assert.Equal("supabase", row.StorageProvider);
+        Assert.Equal("postpilot-media", row.Bucket);
     }
 
     [Fact]
-    public async Task InitAsync_WithOwnMetaConnection_EmbedsConnectionIdInKey()
+    public async Task InitAsync_Instagram_UsesMetaInstagramSegment()
     {
         var db = NewDb();
         var media = NewMediaService(new RecordingStorage());
         var svc = new MediaUploadService(db, media, Opts(), NullLogger<MediaUploadService>.Instance);
-
         var workspaceId = Guid.NewGuid();
-        var connectionId = Guid.NewGuid();
-        db.Set<MetaConnection>().Add(new MetaConnection
-        {
-            Id = connectionId,
-            WorkspaceId = workspaceId,
-            UserId = Guid.NewGuid(),
-            AccessToken = "tok",
-            TokenExpiresAt = DateTime.UtcNow.AddHours(1),
-            ConnectedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-            Provider = ProviderType.Meta,
-        });
-        await db.SaveChangesAsync();
 
         var result = await svc.InitAsync(
-            workspaceId,
-            "photo.png",
-            "image/png",
-            100,
-            provider: ProviderType.Meta,
-            providerConnectionId: connectionId);
+            workspaceId, "reel.mp4", "video/mp4", 100, Platform.Instagram);
 
-        Assert.Contains($"/providers/meta/", result.StorageKey);
-        Assert.Contains($"/connections/{connectionId:D}/", result.StorageKey);
-    }
-
-    [Fact]
-    public async Task InitAsync_WithConnectionFromAnotherWorkspace_IsRejected()
-    {
-        // The whole point of the connection-scoped path: passing another
-        // workspace's connection id must NOT let me sneak an upload under
-        // that workspace's prefix. We collapse "not found" and "wrong
-        // workspace" into the same UnauthorizedAccessException so callers
-        // can't distinguish the two via timing or error text.
-        var db = NewDb();
-        var media = NewMediaService(new RecordingStorage());
-        var svc = new MediaUploadService(db, media, Opts(), NullLogger<MediaUploadService>.Instance);
-
-        var attackerWorkspace = Guid.NewGuid();
-        var victimWorkspace = Guid.NewGuid();
-        var victimConnectionId = Guid.NewGuid();
-        db.Set<MetaConnection>().Add(new MetaConnection
-        {
-            Id = victimConnectionId,
-            WorkspaceId = victimWorkspace,
-            UserId = Guid.NewGuid(),
-            AccessToken = "tok",
-            TokenExpiresAt = DateTime.UtcNow.AddHours(1),
-            ConnectedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-            Provider = ProviderType.Meta,
-        });
-        await db.SaveChangesAsync();
-
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-            svc.InitAsync(
-                attackerWorkspace,
-                "photo.png",
-                "image/png",
-                100,
-                provider: ProviderType.Meta,
-                providerConnectionId: victimConnectionId));
-
-        // No Media row should have been created on the failure path.
-        Assert.False(await db.Media.AnyAsync());
-    }
-
-    [Fact]
-    public async Task InitAsync_WithUnknownConnectionId_IsRejected()
-    {
-        var db = NewDb();
-        var media = NewMediaService(new RecordingStorage());
-        var svc = new MediaUploadService(db, media, Opts(), NullLogger<MediaUploadService>.Instance);
-
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-            svc.InitAsync(
-                Guid.NewGuid(),
-                "photo.png",
-                "image/png",
-                100,
-                provider: ProviderType.Meta,
-                providerConnectionId: Guid.NewGuid()));
+        Assert.StartsWith(
+            $"workspaces/{workspaceId:D}/providers/meta-instagram/media/{result.MediaId:D}/",
+            result.StorageKey);
+        Assert.EndsWith(".mp4", result.StorageKey);
     }
 
     private sealed class RecordingStorage : IMediaStorageProvider

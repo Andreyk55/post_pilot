@@ -25,27 +25,26 @@ public interface IMediaService
     Task<UploadUrlResult> GenerateUploadUrlAsync(string fileName, string contentType);
 
     /// <summary>
-    /// Workspace + provider/account scoped variant. Generates a storage key that embeds
-    /// the workspace, the identity provider, the specific provider connection (account)
-    /// and the media id, so storage layout alone enforces tenant separation even before
-    /// any DB-side ownership check. Frontend never picks the key — it provides the
-    /// original file name and content type only; the backend chooses the path.
+    /// Workspace + platform scoped variant. Generates a storage key that embeds the
+    /// workspace, the target publishing platform, and the media id, so storage layout
+    /// alone enforces tenant separation and per-platform partitioning. Frontend never
+    /// picks the key — it provides the original file name and content type plus the
+    /// selected <see cref="Platform"/>; the backend composes the final path.
     ///
     /// <para>Final key shape:
-    /// <c>workspaces/{workspaceId}/providers/{provider}/connections/{providerConnectionId}/media/{mediaId}/{safeFileName}</c>
+    /// <c>workspaces/{workspaceId}/providers/{providerPlatform}/media/{mediaId}/{safeFileName}</c>
     /// </para>
     ///
     /// <para>
-    /// When the upload is not yet tied to a specific provider/account, pass
-    /// <c>provider="unassigned"</c> and <c>providerConnectionId="none"</c>. These literal
-    /// tokens are reserved — caller-supplied strings are otherwise sanitized to the same
-    /// allow-list as file names to keep the key shape predictable.
+    /// Platform → providerPlatform token mapping (server-side, hard-coded):
+    ///   <see cref="Platform.Facebook"/>  → <c>meta-facebook</c>
+    ///   <see cref="Platform.Instagram"/> → <c>meta-instagram</c>
+    /// Any other platform value is rejected with <see cref="ArgumentException"/>.
     /// </para>
     /// </summary>
     Task<UploadUrlResult> GenerateUploadUrlAsync(
         Guid workspaceId,
-        string provider,
-        string providerConnectionId,
+        Platform platform,
         Guid mediaId,
         string fileName,
         string contentType,
