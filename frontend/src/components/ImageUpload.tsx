@@ -7,13 +7,14 @@ interface ImageUploadProps {
   onUploadError: (error: string) => void
   onClear: () => void
   onUploadingChange?: (isUploading: boolean) => void
+  platform: 'Facebook' | 'Instagram'
 }
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif']
 const MAX_SIZE_MB = 10
 const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024
 
-export function ImageUpload({ onUploadComplete, onUploadError, onClear, onUploadingChange }: ImageUploadProps) {
+export function ImageUpload({ onUploadComplete, onUploadError, onClear, onUploadingChange, platform }: ImageUploadProps) {
   const [uploading, setUploading] = useState(false)
   const [preview, setPreview] = useState<string | null>(null)
   const [progress, setProgress] = useState(0)
@@ -56,6 +57,7 @@ export function ImageUpload({ onUploadComplete, onUploadError, onClear, onUpload
         fileName: file.name,
         contentType: file.type,
         sizeBytes: file.size,
+        platform,
       })
       setProgress(30)
 

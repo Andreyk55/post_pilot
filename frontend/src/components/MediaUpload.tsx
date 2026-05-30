@@ -132,6 +132,12 @@ export function MediaUpload({
     const file = e.target.files?.[0]
     if (!file) return
 
+    if (selectedPlatform !== 'facebook' && selectedPlatform !== 'instagram') {
+      onUploadError('Select Facebook or Instagram before uploading media.')
+      e.target.value = ''
+      return
+    }
+
     // Reset validation state
     setValidationStatus('Pending')
     setValidationErrors([])
@@ -169,6 +175,7 @@ export function MediaUpload({
         fileName: file.name,
         contentType: file.type,
         sizeBytes: file.size,
+        platform: selectedPlatform === 'facebook' ? 'Facebook' : 'Instagram',
       })
       setProgress(20)
 

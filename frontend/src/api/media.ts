@@ -48,6 +48,7 @@ export interface InitUploadRequest {
   fileName: string
   contentType: string
   sizeBytes: number
+  platform: 'Facebook' | 'Instagram'
 }
 
 export interface InitUploadResponse {

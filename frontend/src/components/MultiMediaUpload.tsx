@@ -77,6 +77,11 @@ export function MultiMediaUpload({
     // Reset file input
     if (fileInputRef.current) fileInputRef.current.value = ''
 
+    if (!isFacebook && !isInstagram) {
+      setUploadError('Select Facebook or Instagram before uploading media.')
+      return
+    }
+
     // --- Instagram-specific validation via pure function ---
     if (isInstagram) {
       const existingAsInfo = items.map(i => ({
@@ -180,6 +185,7 @@ export function MultiMediaUpload({
           fileName: file.name,
           contentType: file.type,
           sizeBytes: file.size,
+          platform: isFacebook ? 'Facebook' : 'Instagram',
         })
 
         // Step 2: client uploads bytes directly to object storage (or local endpoint in dev).
