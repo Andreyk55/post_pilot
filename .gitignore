@@ -41,3 +41,7 @@ appsettings.*.local.json
 # Local uploaded media (production uses object storage)
 backend/uploads/*
 !backend/uploads/.gitkeep
+
+# .NET build output
+**/[Bb]in/
+**/[Oo]bj/
