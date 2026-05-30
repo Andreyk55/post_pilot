@@ -12,7 +12,29 @@ namespace PostPilot.Api.Services.Media;
 /// </summary>
 public interface IMediaUploadService
 {
-    Task<InitUploadResult> InitAsync(Guid workspaceId, string fileName, string contentType, long sizeBytes, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Step 1 of the upload flow.
+    /// </summary>
+    /// <param name="workspaceId">Authoritative workspace from the session — never trusted from the client.</param>
+    /// <param name="fileName">Original file name from the client. Used for the storage key's basename
+    /// and for audit; sanitized server-side, NEVER trusted as a path.</param>
+    /// <param name="contentType">MIME type declared by the client.</param>
+    /// <param name="sizeBytes">Declared file size in bytes.</param>
+    /// <param name="provider">Optional identity provider this upload is for (e.g.
+    /// <see cref="ProviderType.Meta"/>). When supplied together with
+    /// <paramref name="providerConnectionId"/> the storage key embeds those segments
+    /// for layout-level tenancy. When null, the key uses the reserved
+    /// <c>providers/unassigned/connections/none</c> segments.</param>
+    /// <param name="providerConnectionId">Optional id of the specific provider connection (e.g.
+    /// <see cref="Entities.MetaConnection.Id"/>). Validated to belong to the same workspace.</param>
+    Task<InitUploadResult> InitAsync(
+        Guid workspaceId,
+        string fileName,
+        string contentType,
+        long sizeBytes,
+        ProviderType? provider = null,
+        Guid? providerConnectionId = null,
+        CancellationToken cancellationToken = default);
 
     Task<CompleteUploadResult> CompleteAsync(Guid workspaceId, Guid mediaId, CancellationToken cancellationToken = default);
 

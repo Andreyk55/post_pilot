@@ -10,7 +10,7 @@ For the full step-by-step runbook see [docs/deployment-vps.md](../docs/deploymen
 
 | File | Purpose |
 |---|---|
-| [docker-compose.yml](docker-compose.yml) | Stack: `postpilot-api`, `postpilot-worker`, `postpilot-minio`, plus `postpilot-postgres` under the `localdb` compose profile. Pulls images from GHCR. |
+| [docker-compose.yml](docker-compose.yml) | Stack: `postpilot-api`, `postpilot-worker`, plus `postpilot-postgres` under the `localdb` compose profile. Pulls images from GHCR. Media lives in Supabase Storage — no MinIO container. |
 | [server.local.env.example](server.local.env.example) | Template for local-Postgres mode. Copy to `/opt/postpilot/server.env` and start with `--profile localdb`. |
 | [server.supabase.env.example](server.supabase.env.example) | Template for Supabase mode. Copy to `/opt/postpilot/server.env` and start without the profile flag. |
 | [nginx/postpilot-api.conf](nginx/postpilot-api.conf) | Host nginx config: TLS termination + reverse proxy to `127.0.0.1:5122`. |

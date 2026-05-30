@@ -11,6 +11,8 @@ namespace PostPilot.Api.Settings.Validators;
 /// through the legacy PUT /api/media/upload/{file} endpoint, which is gated to
 /// Local mode and returns 404 in Server mode. Combining the two silently breaks
 /// image uploads in production, so reject it at startup.
+///
+/// Supabase + S3-compatible both satisfy the "real object storage" requirement.
 /// </summary>
 public class MediaStorageRunModeValidator : IValidateOptions<MediaStorageOptions>
 {
@@ -30,10 +32,10 @@ public class MediaStorageRunModeValidator : IValidateOptions<MediaStorageOptions
         {
             return ValidateOptionsResult.Fail(
                 "MediaStorage:Provider='local-disk' is not supported when App:RunMode='server'. " +
-                "Server mode requires S3-compatible object storage (set MediaStorage__Provider=s3-compatible " +
-                "and configure Bucket / InternalEndpoint / PublicUploadEndpoint / AccessKey / SecretKey). " +
-                "Local-disk storage in Server mode would silently break image uploads — the API hands the " +
-                "browser /api/media/upload/{file}, which 404s outside Local mode.");
+                "Server mode requires object storage. Set MediaStorage__Provider=supabase " +
+                "(recommended) or MediaStorage__Provider=s3-compatible. Local-disk storage in " +
+                "Server mode would silently break image uploads — the API hands the browser " +
+                "/api/media/upload/{file}, which 404s outside Local mode.");
         }
 
         return ValidateOptionsResult.Success;

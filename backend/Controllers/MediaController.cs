@@ -100,7 +100,14 @@ public class MediaController : ControllerBase
         try
         {
             var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(ct);
-            var result = await _uploadService.InitAsync(workspaceId, request.FileName, request.ContentType, request.SizeBytes, ct);
+            var result = await _uploadService.InitAsync(
+                workspaceId,
+                request.FileName,
+                request.ContentType,
+                request.SizeBytes,
+                provider: request.Provider,
+                providerConnectionId: request.ProviderConnectionId,
+                cancellationToken: ct);
             return Ok(new InitUploadResponse(
                 MediaId: result.MediaId,
                 StorageKey: result.StorageKey,
@@ -114,6 +121,13 @@ public class MediaController : ControllerBase
         catch (ArgumentException ex)
         {
             return BadRequest(new { error = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            // Cross-workspace provider-connection probe. Same status whether the row
+            // doesn't exist or belongs to another workspace so the failure mode does
+            // not double as a discovery oracle.
+            return NotFound(new { error = ex.Message });
         }
         catch (NotImplementedException ex)
         {
@@ -511,11 +525,21 @@ public record ExtractMetadataRequest(
 /// <summary>
 /// Step 1 of the direct upload flow. Client declares the file it intends to upload;
 /// server returns a presigned URL and creates a Media row to track it.
+///
+/// <para>
+/// <see cref="Provider"/> and <see cref="ProviderConnectionId"/> are OPTIONAL hints
+/// that bind the upload to a specific provider account (e.g. a Meta connection).
+/// The server validates that the connection lives in the caller's workspace before
+/// using it; mismatched values cause a 404. When omitted, the storage key uses the
+/// reserved <c>providers/unassigned/connections/none</c> segments.
+/// </para>
 /// </summary>
 public record InitUploadRequest(
     string FileName,
     string ContentType,
-    long SizeBytes
+    long SizeBytes,
+    ProviderType? Provider = null,
+    Guid? ProviderConnectionId = null
 );
 
 public record InitUploadResponse(

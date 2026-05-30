@@ -14,6 +14,37 @@
 Legacy flat names (`APP_RUN_MODE`, `META_APP_ID`, `META_APP_SECRET`, `GEMINI_API_KEY`)
 are still accepted for backward compatibility.
 
+## Media storage (production: Supabase Storage)
+
+Backend and worker only. NEVER set these in any Vercel/frontend build.
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `MediaStorage__Provider` | yes (prod) | `Supabase` in production. `s3-compatible` is kept for rollback to MinIO/S3/R2; `local-disk` is dev-only and rejected when `App__RunMode=Server`. |
+| `MediaStorage__Supabase__Url` | yes (when Supabase) | Project URL, e.g. `https://YOUR_PROJECT.supabase.co`. |
+| `MediaStorage__Supabase__ServiceRoleKey` | yes (when Supabase) | Service-role JWT. Bypasses RLS — treat like a DB password. Backend/worker only. |
+| `MediaStorage__Supabase__Bucket` | yes (when Supabase) | Must already exist and be **private**. Default: `postpilot-media`. |
+| `MediaStorage__Supabase__SignedUrlExpirySeconds` | optional | Lifetime of signed upload/download URLs handed to the browser and Meta. Default `3600` (1h). |
+| `MediaStorage__Supabase__MaxUploadBytes` | optional | Hard ceiling enforced at `/api/media/uploads/init`. `0` = no extra cap. |
+
+The Supabase service-role key MUST NOT be exposed to the frontend — it grants
+full project access. Configure it in `/opt/postpilot/server.env` on the VPS (or
+the GitHub Actions environment) and verify it does not appear in any
+`VITE_*` / `NEXT_PUBLIC_*` / Vercel project variable.
+
+### Storage key layout
+
+The backend (never the frontend) builds object keys in this shape:
+
+```
+workspaces/{workspaceId}/providers/{provider}/connections/{providerConnectionId}/media/{mediaId}/{safeFileName}
+```
+
+When the upload is not yet tied to a specific provider account, the reserved
+segments `providers/unassigned/connections/none/` are used. If the upload
+request includes a `providerConnectionId`, the backend rejects it (404) unless
+the connection belongs to the caller's current workspace.
+
 ## Real-user auth (Auth section)
 
 | Variable | Required | Purpose |

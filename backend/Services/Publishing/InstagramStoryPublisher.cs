@@ -238,7 +238,7 @@ public class InstagramStoryPublisher : IStoryPublisher
         Post post, string accessToken, CancellationToken cancellationToken)
     {
         var igUserId = post.TargetInstagramAccount!.IgBusinessId;
-        var mediaUrl = ResolveMediaUrl(post);
+        var mediaUrl = await ResolveMediaUrlAsync(post, cancellationToken);
 
         // Create story container with media_type=STORIES
         var containerResult = await CreateStoryContainerAsync(
@@ -274,7 +274,7 @@ public class InstagramStoryPublisher : IStoryPublisher
         // Step A: Create container if we don't have one yet
         if (string.IsNullOrEmpty(post.InstagramCreationId))
         {
-            var mediaUrl = ResolveMediaUrl(post);
+            var mediaUrl = await ResolveMediaUrlAsync(post, cancellationToken);
 
             var containerResult = await CreateStoryContainerAsync(
                 igUserId, mediaUrl, null, "video_url", accessToken, cancellationToken);
@@ -520,11 +520,11 @@ public class InstagramStoryPublisher : IStoryPublisher
     //  HELPERS
     // ──────────────────────────────────────────────
 
-    private string ResolveMediaUrl(Post post)
+    private async Task<string> ResolveMediaUrlAsync(Post post, CancellationToken cancellationToken)
     {
         if (_mediaService.IsStorageKey(post.MediaUrl!))
         {
-            var url = _mediaService.GetPublishingUrl(post.MediaUrl!, _mediaDownloadUrlExpiration);
+            var url = await _mediaService.GetPublishingUrlAsync(post.MediaUrl!, _mediaDownloadUrlExpiration, cancellationToken);
             _logger.LogInformation("Generated publishing URL for storage key {StorageKey} for IG story {PostId}",
                 post.MediaUrl, post.Id);
             return url;

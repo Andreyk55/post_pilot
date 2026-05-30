@@ -8,15 +8,21 @@
 #   - The API container binds 5122 on 127.0.0.1 only — NEVER on 0.0.0.0.
 #   - Postgres has NO host port published, so it is unreachable from the
 #     public internet. API/Worker reach it over the compose network via the
-#     service name `postpilot-postgres`.
+#     service name `postpilot-postgres` (only when --profile localdb is used).
 #   - Frontend is hosted separately on Vercel
 #     (https://post-auto-pilot.vercel.app) and is NOT in this file.
+#
+# Media storage:
+#   Media is stored in Supabase Storage (private bucket). The API and Worker
+#   sign short-lived upload/download URLs at request time — bytes go directly
+#   between the browser/Meta and Supabase, never through this VPS. MinIO is
+#   no longer part of the production stack.
 #
 # Usage on the VPS:
 #   sudo mkdir -p /opt/postpilot
 #   # copy this compose file to /opt/postpilot/prod/docker-compose.yml
-#   # copy either server.local.env.example or server.supabase.env.example
-#   # to /opt/postpilot/server.env, then fill it in
+#   # copy prod/server.supabase.env.example to /opt/postpilot/server.env
+#   # and fill it in (Supabase DB + Supabase Storage)
 #   cd /opt/postpilot
 #   docker compose -f prod/docker-compose.yml pull
 #   docker compose -f prod/docker-compose.yml up -d
@@ -28,8 +34,8 @@
 
 services:
   # Local Docker Postgres — only runs under the `localdb` compose profile.
-  # Default deployment uses Supabase (see prod/server.supabase.env.example), in
-  # which case this container is not started. To run with local Postgres
+  # Default deployment uses Supabase Postgres (see prod/server.supabase.env.example),
+  # in which case this container is not started. To run with local Postgres
   # instead, start the stack with `--profile localdb` AND set
   # ConnectionStrings__DefaultConnection in server.env to point at
   # Host=postpilot-postgres.
@@ -64,9 +70,8 @@ services:
     # No `depends_on: postpilot-postgres` — the DB might be Supabase (out
     # of compose) instead of the local container. If you use --profile localdb,
     # the API will still wait on its own connect+migrate retries on startup.
-    depends_on:
-      postpilot-minio-init:
-        condition: service_completed_successfully
+    # No `depends_on: postpilot-minio*` either — MinIO has been removed; media
+    # lives in Supabase Storage, which the API talks to over the public internet.
     restart: unless-stopped
 
   postpilot-worker:
@@ -80,70 +85,23 @@ services:
     depends_on:
       postpilot-api:
         condition: service_started
-      postpilot-minio-init:
-        condition: service_completed_successfully
     restart: unless-stopped
 
-  # ── Object storage (MinIO, S3-compatible) ────────────────────────────────
-  # Server mode hands presigned PUT URLs to the browser; bytes land here.
-  # S3 signature v4 binds the signature to the host the URL is signed for,
-  # so MINIO_SERVER_URL must match what the browser actually hits — i.e.
-  # the public HTTPS hostname terminated by the host nginx
-  # (prod/nginx/postpilot-media.conf reverse-proxies to 127.0.0.1:9000).
-  postpilot-minio:
-    # Pinned: `latest` could land an incompatible MinIO during a prod pull.
-    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
-    container_name: postpilot-minio
-    env_file:
-      - /opt/postpilot/server.env
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-      # What MinIO advertises in console redirects and signs presigned URLs
-      # against. Must equal the public host the browser reaches it on.
-      MINIO_SERVER_URL: https://media.post-pilot.cloud-ip.cc
-      MINIO_BROWSER_REDIRECT_URL: https://media.post-pilot.cloud-ip.cc
-      # CORS for browser PUTs from the Vercel frontend. Without this the
-      # preflight on the presigned URL fails before the upload starts.
-      MINIO_API_CORS_ALLOW_ORIGIN: "https://post-auto-pilot.vercel.app"
-    command: server /data --console-address ":9001"
-    ports:
-      # S3 API and console BOTH bound to loopback only. The public internet
-      # reaches MinIO only through nginx on media.post-pilot.cloud-ip.cc → 127.0.0.1:9000.
-      # Console (9001) is intentionally NOT proxied; use `ssh -L 9001:127.0.0.1:9001`
-      # to reach it.
-      - "127.0.0.1:9000:9000"
-      - "127.0.0.1:9001:9001"
-    volumes:
-      - postpilot-minio-data:/data
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 12
-      start_period: 10s
-    restart: unless-stopped
+  # ── MinIO services removed (2026-05-29) ────────────────────────────────
+  # PostPilot now uses Supabase Storage. The previous postpilot-minio and
+  # postpilot-minio-init services are intentionally deleted; the bucket
+  # bootstrap is no longer needed (the Supabase bucket `postpilot-media`
+  # is created once in the Supabase dashboard).
+  #
+  # If you need to roll back to MinIO temporarily, restore those services
+  # from git history (commit before this change) and set
+  # MediaStorage__Provider=s3-compatible in server.env. The provider
+  # selection is already config-driven; no code change is required.
 
-  # One-shot bucket bootstrap. Idempotent — `mc mb --ignore-existing` is a
-  # no-op on subsequent runs. API/Worker `depends_on` this with
-  # `service_completed_successfully` so they only start once the bucket
-  # exists.
-  postpilot-minio-init:
-    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
-    container_name: postpilot-minio-init
-    env_file:
-      - /opt/postpilot/server.env
-    depends_on:
-      postpilot-minio:
-        condition: service_healthy
-    entrypoint: >
-      sh -c "
-      mc alias set local http://postpilot-minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD &&
-      mc mb --ignore-existing local/$$MEDIA_STORAGE_BUCKET &&
-      echo 'bucket ready: '$$MEDIA_STORAGE_BUCKET
-      "
-    restart: "no"
-
+# Only postgres data is volume-backed now (and only under the localdb profile).
+# The MinIO volume (postpilot-minio-data) has been removed from this file but
+# the named volume on the VPS is NOT auto-deleted by docker compose. To free
+# the disk after a successful Supabase migration, manually run:
+#   docker volume rm postpilot_postpilot-minio-data    # one-time, irreversible
 volumes:
   postpilot-postgres-data:
-  postpilot-minio-data:

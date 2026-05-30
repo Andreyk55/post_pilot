@@ -15,11 +15,41 @@ public interface IMediaService
 
     /// <summary>
     /// Generates an upload URL and storage key for a file.
+    /// Storage key uses the legacy <c>media/{guid}.{ext}</c> shape. Prefer
+    /// <see cref="GenerateUploadUrlAsync(Guid, Guid, string, string, CancellationToken)"/>
+    /// for new code so the key is workspace-scoped on the backend side.
     /// </summary>
     /// <param name="fileName">Original file name (used to extract extension)</param>
     /// <param name="contentType">MIME type of the file</param>
     /// <returns>Upload URL result containing the URL and storage key</returns>
     Task<UploadUrlResult> GenerateUploadUrlAsync(string fileName, string contentType);
+
+    /// <summary>
+    /// Workspace + provider/account scoped variant. Generates a storage key that embeds
+    /// the workspace, the identity provider, the specific provider connection (account)
+    /// and the media id, so storage layout alone enforces tenant separation even before
+    /// any DB-side ownership check. Frontend never picks the key — it provides the
+    /// original file name and content type only; the backend chooses the path.
+    ///
+    /// <para>Final key shape:
+    /// <c>workspaces/{workspaceId}/providers/{provider}/connections/{providerConnectionId}/media/{mediaId}/{safeFileName}</c>
+    /// </para>
+    ///
+    /// <para>
+    /// When the upload is not yet tied to a specific provider/account, pass
+    /// <c>provider="unassigned"</c> and <c>providerConnectionId="none"</c>. These literal
+    /// tokens are reserved — caller-supplied strings are otherwise sanitized to the same
+    /// allow-list as file names to keep the key shape predictable.
+    /// </para>
+    /// </summary>
+    Task<UploadUrlResult> GenerateUploadUrlAsync(
+        Guid workspaceId,
+        string provider,
+        string providerConnectionId,
+        Guid mediaId,
+        string fileName,
+        string contentType,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Generates a download URL for a stored file.
@@ -30,19 +60,27 @@ public interface IMediaService
     string GenerateDownloadUrl(string storageKey, TimeSpan expiration);
 
     /// <summary>
-    /// Generates the URL that external services (e.g., Meta Graph API) should fetch the media from.
-    /// Always returns a URL pointing at the API's <c>/api/media/files/{storageKey}</c> route,
-    /// rooted at <c>App.PublicUrl</c> (or <c>LocalServerBaseUrl</c> when PublicUrl is not set).
+    /// Returns the URL external services (e.g. Meta Graph API) should fetch the media from.
     ///
-    /// The route is provider-independent: the API streams the bytes from whatever storage
-    /// backend is configured. This keeps Meta's request flow stable across storage backends
-    /// and allows the public surface to remain a single API origin.
+    /// <para>
+    /// For providers that can mint short-lived signed download URLs (Supabase, S3-compatible
+    /// in server mode), this returns a freshly-signed URL pointing directly at the bucket —
+    /// the worker calls this at publish time, so a post scheduled 30 days in the future still
+    /// hands Meta a valid URL the moment publishing runs.
+    /// </para>
+    ///
+    /// <para>
+    /// For local-disk (development) this falls back to the API's
+    /// <c>/api/media/files/{storageKey}</c> route rooted at <c>App.PublicUrl</c>, which the API
+    /// streams from local storage.
+    /// </para>
     /// </summary>
     Task<string> GetPublishingUrlAsync(string storageKey, TimeSpan? expiration = null, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Synchronous convenience wrapper around <see cref="GetPublishingUrlAsync"/>. Safe to call
-    /// from sync code paths since the implementation is pure string formatting (no I/O).
+    /// Synchronous convenience wrapper around <see cref="GetPublishingUrlAsync"/>. For object-storage
+    /// backends this performs a blocking network call to Supabase/S3 to sign the URL — prefer the
+    /// async variant in publish/worker code paths. Kept for legacy sync callers only.
     /// </summary>
     string GetPublishingUrl(string storageKey, TimeSpan? expiration = null);
 

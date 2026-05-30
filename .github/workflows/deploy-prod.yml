@@ -109,8 +109,13 @@ jobs:
           set -euo pipefail
           echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
           cd /opt/postpilot
+          # The MinIO services were removed from prod/docker-compose.yml on
+          # 2026-05-29. Existing MinIO containers (postpilot-minio,
+          # postpilot-minio-init) are not in the new compose file, so they
+          # become "orphans". --remove-orphans cleans them up so a redeploy
+          # leaves only API + worker (+ postgres on the localdb profile).
           docker compose --env-file /opt/postpilot/server.env -f prod/docker-compose.yml pull
-          docker compose --env-file /opt/postpilot/server.env -f prod/docker-compose.yml up -d
+          docker compose --env-file /opt/postpilot/server.env -f prod/docker-compose.yml up -d --remove-orphans
           docker compose --env-file /opt/postpilot/server.env -f prod/docker-compose.yml ps
           docker logout ghcr.io >/dev/null 2>&1 || true
           REMOTE

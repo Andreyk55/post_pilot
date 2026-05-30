@@ -218,7 +218,7 @@ public class FacebookStoryPublisher : IStoryPublisher
             string imageUrl;
             if (_mediaService.IsStorageKey(post.MediaUrl!))
             {
-                imageUrl = _mediaService.GetPublishingUrl(post.MediaUrl!, _mediaDownloadUrlExpiration);
+                imageUrl = await _mediaService.GetPublishingUrlAsync(post.MediaUrl!, _mediaDownloadUrlExpiration, cancellationToken);
                 _logger.LogInformation("Generated publishing URL for storage key {StorageKey} for FB story {PostId}",
                     post.MediaUrl, post.Id);
             }
@@ -260,7 +260,7 @@ public class FacebookStoryPublisher : IStoryPublisher
         string videoUrl;
         if (_mediaService.IsStorageKey(post.MediaUrl!))
         {
-            videoUrl = _mediaService.GetPublishingUrl(post.MediaUrl!, _videoDownloadUrlExpiration);
+            videoUrl = await _mediaService.GetPublishingUrlAsync(post.MediaUrl!, _videoDownloadUrlExpiration, cancellationToken);
             _logger.LogInformation("Generated publishing URL for video storage key {StorageKey} for FB story {PostId}",
                 post.MediaUrl, post.Id);
         }

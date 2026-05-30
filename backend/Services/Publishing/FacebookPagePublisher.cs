@@ -239,7 +239,7 @@ public class FacebookPagePublisher : IPostPublisher
             string imageUrl;
             if (_mediaService.IsStorageKey(post.MediaUrl))
             {
-                imageUrl = _mediaService.GetPublishingUrl(post.MediaUrl, _metaDownloadUrlExpiration);
+                imageUrl = await _mediaService.GetPublishingUrlAsync(post.MediaUrl, _metaDownloadUrlExpiration, cancellationToken);
                 _logger.LogInformation("Generated publishing URL for storage key {StorageKey} for post {PostId}",
                     post.MediaUrl, post.Id);
             }
@@ -272,7 +272,7 @@ public class FacebookPagePublisher : IPostPublisher
             string imageUrl;
             if (_mediaService.IsStorageKey(post.MediaUrl))
             {
-                imageUrl = _mediaService.GetPublishingUrl(post.MediaUrl, _metaDownloadUrlExpiration);
+                imageUrl = await _mediaService.GetPublishingUrlAsync(post.MediaUrl, _metaDownloadUrlExpiration, cancellationToken);
                 _logger.LogInformation("Generated publishing URL for storage key {StorageKey} for post {PostId}",
                     post.MediaUrl, post.Id);
             }
@@ -358,7 +358,7 @@ public class FacebookPagePublisher : IPostPublisher
         for (int i = 0; i < mediaItems.Count; i++)
         {
             var item = mediaItems[i];
-            var imageUrl = ResolveMediaUrlForItem(item);
+            var imageUrl = await ResolveMediaUrlForItemAsync(item, cancellationToken);
 
             var uploadResult = await UploadUnpublishedPhotoAsync(
                 pageId, imageUrl, accessToken, cancellationToken);
@@ -501,13 +501,14 @@ public class FacebookPagePublisher : IPostPublisher
     }
 
     /// <summary>
-    /// Resolves a public URL for a PostMediaItem (generates download URL if storage key).
+    /// Resolves a public URL for a PostMediaItem (generates a fresh signed download URL if storage key).
+    /// Called at publish time so a scheduled post 30 days out still gets a current URL.
     /// </summary>
-    private string ResolveMediaUrlForItem(PostMediaItem item)
+    private async Task<string> ResolveMediaUrlForItemAsync(PostMediaItem item, CancellationToken cancellationToken)
     {
         if (_mediaService.IsStorageKey(item.MediaUrl))
         {
-            return _mediaService.GetPublishingUrl(item.MediaUrl, _metaDownloadUrlExpiration);
+            return await _mediaService.GetPublishingUrlAsync(item.MediaUrl, _metaDownloadUrlExpiration, cancellationToken);
         }
         return item.MediaUrl;
     }
@@ -519,7 +520,7 @@ public class FacebookPagePublisher : IPostPublisher
         if (_mediaService.IsStorageKey(post.MediaUrl!))
         {
             // Use longer expiration for videos since processing takes time
-            videoUrl = _mediaService.GetPublishingUrl(post.MediaUrl!, _videoDownloadUrlExpiration);
+            videoUrl = await _mediaService.GetPublishingUrlAsync(post.MediaUrl!, _videoDownloadUrlExpiration, cancellationToken);
             _logger.LogInformation("Generated publishing URL for video storage key {StorageKey} for post {PostId}",
                 post.MediaUrl, post.Id);
         }
@@ -542,7 +543,7 @@ public class FacebookPagePublisher : IPostPublisher
         // Add thumbnail URL if available and feature is enabled
         if (_featureSettings.EnableFacebookThumbnail && !string.IsNullOrEmpty(post.SelectedThumbnailUrl))
         {
-            var thumbnailUrl = GetThumbnailUrl(post.SelectedThumbnailUrl);
+            var thumbnailUrl = await GetThumbnailUrlAsync(post.SelectedThumbnailUrl, cancellationToken);
             if (!string.IsNullOrEmpty(thumbnailUrl))
             {
                 parameters["thumb"] = thumbnailUrl;
@@ -574,12 +575,12 @@ public class FacebookPagePublisher : IPostPublisher
         return ParseMetaResponse(post.Id, response, responseBody);
     }
 
-    private string? GetThumbnailUrl(string thumbnailUrl)
+    private async Task<string?> GetThumbnailUrlAsync(string thumbnailUrl, CancellationToken cancellationToken)
     {
-        // If it's a storage key, route the thumbnail fetch through the API.
+        // If it's a storage key, sign a fresh publishing URL just-in-time.
         if (_mediaService.IsStorageKey(thumbnailUrl))
         {
-            return _mediaService.GetPublishingUrl(thumbnailUrl, _metaDownloadUrlExpiration);
+            return await _mediaService.GetPublishingUrlAsync(thumbnailUrl, _metaDownloadUrlExpiration, cancellationToken);
         }
 
         // If it's a local API path, we can't use it directly with Meta

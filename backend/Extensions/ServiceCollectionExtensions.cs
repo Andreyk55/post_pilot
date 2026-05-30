@@ -146,32 +146,43 @@ public static class ServiceCollectionExtensions
             // AppOptions.RunMode is kept for legacy callers but does not select storage.
             var storageOpts = sp.GetRequiredService<MediaStorageOptions>();
 
-            if (storageOpts.IsS3Compatible)
+            return storageOpts.ProviderType switch
             {
-                return new S3CompatibleMediaStorageProvider(
+                MediaStorageProviderType.Supabase => new SupabaseMediaStorageProvider(
                     storageOpts,
-                    sp.GetRequiredService<ILogger<S3CompatibleMediaStorageProvider>>());
-            }
+                    sp.GetRequiredService<ILogger<SupabaseMediaStorageProvider>>()),
 
-            // Default to local-disk for development without MinIO.
-            var mediaOpts = sp.GetRequiredService<MediaOptions>();
-            return new LocalDiskMediaStorageProvider(
-                sp.GetRequiredService<ILogger<LocalDiskMediaStorageProvider>>(),
-                mediaOpts.EffectiveBaseUrl);
+                MediaStorageProviderType.S3Compatible => new S3CompatibleMediaStorageProvider(
+                    storageOpts,
+                    sp.GetRequiredService<ILogger<S3CompatibleMediaStorageProvider>>()),
+
+                // Default to local-disk for development without object storage.
+                _ => new LocalDiskMediaStorageProvider(
+                    sp.GetRequiredService<ILogger<LocalDiskMediaStorageProvider>>(),
+                    sp.GetRequiredService<MediaOptions>().EffectiveBaseUrl),
+            };
         });
 
         services.AddSingleton<IMediaService>(sp =>
         {
             var runMode = sp.GetRequiredService<AppOptions>().RunModeEnum;
             var mediaOpts = sp.GetRequiredService<MediaOptions>();
+            var storageOpts = sp.GetRequiredService<MediaStorageOptions>();
+            // Default publish-URL lifetime: long enough for Meta to fetch + retry, short
+            // enough to limit damage if a URL leaks. 1h matches the Supabase default.
+            var defaultPublishExpiry = storageOpts.IsSupabase
+                ? TimeSpan.FromSeconds(storageOpts.Supabase.SignedUrlExpirySeconds)
+                : TimeSpan.FromHours(1);
             return new MediaService(
                 sp.GetRequiredService<IMediaStorageProvider>(),
+                storageOpts,
                 runMode,
                 sp.GetRequiredService<ILogger<MediaService>>(),
                 uploadUrlExpiration: TimeSpan.FromMinutes(mediaOpts.UploadUrlExpirationMinutes),
                 maxImageFileSizeBytes: mediaOpts.MaxImageFileSizeBytes,
                 maxVideoFileSizeBytes: mediaOpts.MaxVideoFileSizeBytes,
-                publishingBaseUrl: mediaOpts.EffectiveBaseUrl);
+                publishingBaseUrl: mediaOpts.EffectiveBaseUrl,
+                defaultPublishingUrlExpiration: defaultPublishExpiry);
         });
 
         services.AddScoped<IMediaUploadService, MediaUploadService>();
