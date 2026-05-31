@@ -74,6 +74,13 @@ public class MetaController : ControllerBase
             var result = await _metaOAuthService.CompleteOAuthAsync(request.Code, request.State, userId);
             return Ok(result);
         }
+        catch (ProviderOwnedByAnotherWorkspaceException ex)
+        {
+            // Generic ownership rule: the social account/page is owned by a DIFFERENT
+            // workspace. UI must tell the user to disconnect it there first.
+            _logger.LogWarning("OAuth complete rejected (owned elsewhere): {Message}", ex.Message);
+            return Conflict(new { error = ex.Message, provider = ex.Provider.ToString() });
+        }
         catch (ProviderAlreadyConnectedException ex)
         {
             // Product rule: workspace already has an active connection for this
@@ -127,6 +134,11 @@ public class MetaController : ControllerBase
                 userId
             );
             return Ok(result);
+        }
+        catch (ProviderOwnedByAnotherWorkspaceException ex)
+        {
+            _logger.LogWarning("Save connection rejected (owned elsewhere): {Message}", ex.Message);
+            return Conflict(new { error = ex.Message, provider = ex.Provider.ToString() });
         }
         catch (ProviderAlreadyConnectedException ex)
         {

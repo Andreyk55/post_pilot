@@ -33,6 +33,7 @@ public class FacebookStoryPublisher : IStoryPublisher
     private readonly IMediaService _mediaService;
     private readonly HttpClient _httpClient;
     private readonly ILogger<FacebookStoryPublisher> _logger;
+    private readonly Providers.IProviderConnectionService _providerConnections;
     private readonly string _graphApiBaseUrl;
     private readonly TimeSpan _mediaDownloadUrlExpiration;
     private readonly TimeSpan _videoDownloadUrlExpiration;
@@ -49,22 +50,29 @@ public class FacebookStoryPublisher : IStoryPublisher
         506   // Duplicate post
     };
 
-    // Meta error codes — permanent (don't retry)
-    private static readonly HashSet<int> PermanentErrorCodes = new()
+    // Meta error codes — auth/token problems (don't retry; flag ReauthRequired).
+    private static readonly HashSet<int> AuthErrorCodes = new()
     {
         10,   // Permission denied
-        100,  // Invalid parameter
         102,  // Session invalidated
-        197,  // Empty post
         190,  // Access token expired or invalid
         200,  // Permission error
-        210,  // User not visible
         220,  // Application does not have permission
         230,  // Incorrect permission
-        240,  // Desktop app cannot call this function
         250,  // Insufficient permission
-        260,  // Terms of service not accepted
         270,  // Permission revoked
+        463,  // Access token expired
+        467,  // Access token invalid
+    };
+
+    // Meta error codes — permanent (don't retry, not an auth problem)
+    private static readonly HashSet<int> PermanentErrorCodes = new()
+    {
+        100,  // Invalid parameter
+        197,  // Empty post
+        210,  // User not visible
+        240,  // Desktop app cannot call this function
+        260,  // Terms of service not accepted
         294   // App not installed
     };
 
@@ -76,6 +84,7 @@ public class FacebookStoryPublisher : IStoryPublisher
         IMediaService mediaService,
         HttpClient httpClient,
         ILogger<FacebookStoryPublisher> logger,
+        Providers.IProviderConnectionService providerConnections,
         MetaApiOptions metaApiOptions,
         PublishingOptions publishingOptions)
     {
@@ -84,6 +93,7 @@ public class FacebookStoryPublisher : IStoryPublisher
         _mediaService = mediaService;
         _httpClient = httpClient;
         _logger = logger;
+        _providerConnections = providerConnections;
         _graphApiBaseUrl = metaApiOptions.GraphApiBaseUrl;
         _mediaDownloadUrlExpiration = TimeSpan.FromMinutes(publishingOptions.MediaDownloadUrlExpirationMinutes);
         _videoDownloadUrlExpiration = TimeSpan.FromMinutes(publishingOptions.VideoDownloadUrlExpirationMinutes);
@@ -93,9 +103,10 @@ public class FacebookStoryPublisher : IStoryPublisher
     {
         _logger.LogInformation("Starting Facebook story publish for post {PostId}", postId);
 
-        // Step 1: Load post with target page
+        // Step 1: Load post with target page (+ its parent connection)
         var post = await _dbContext.Posts
             .Include(p => p.TargetPage)
+                .ThenInclude(tp => tp!.MetaConnection)
             .FirstOrDefaultAsync(p => p.Id == postId, cancellationToken);
 
         if (post == null)
@@ -112,6 +123,17 @@ public class FacebookStoryPublisher : IStoryPublisher
                 postId, post.ExternalPostId);
             return new PublishResult(true, ExternalPostId: post.ExternalPostId,
                 ErrorType: PublishErrorType.AlreadyPublished);
+        }
+
+        // Step 2.5: PUBLISH GATE — block while ReauthRequired (ownership held, token
+        // invalid). Before claiming so the post isn't stranded and isn't retried.
+        if (PublishGate.IsReauthRequired(post.TargetPage, post.TargetPage?.MetaConnection))
+        {
+            _logger.LogWarning(
+                "FB_STORY_PUBLISH_BLOCKED_REAUTH postId={PostId} — connection needs reauthorization; not publishing.",
+                postId);
+            return new PublishResult(false, ErrorType: PublishErrorType.Permanent,
+                ErrorMessage: "Publishing is paused because the Meta connection needs to be reauthorized. Reconnect to resume.");
         }
 
         // Step 3: Atomically claim the post
@@ -566,6 +588,9 @@ public class FacebookStoryPublisher : IStoryPublisher
 
     private PublishErrorType ClassifyError(int errorCode, int? subcode = null, string? fbTraceId = null, string? message = null)
     {
+        if (AuthErrorCodes.Contains(errorCode))
+            return PublishErrorType.Auth;
+
         if (PermanentErrorCodes.Contains(errorCode))
             return PublishErrorType.Permanent;
 
@@ -668,6 +693,17 @@ public class FacebookStoryPublisher : IStoryPublisher
         post.RetryCount++;
         post.ErrorMessage = result.ErrorMessage;
         post.UpdatedAt = DateTime.UtcNow;
+
+        if (result.ErrorType == PublishErrorType.Auth)
+        {
+            // Token invalid: fail the post (stays visible), flag ReauthRequired,
+            // never disconnect / release ownership / cancel posts.
+            post.Status = PostStatus.Failed;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await _providerConnections.MarkReauthRequiredAsync(
+                post.WorkspaceId, ProviderType.Meta, cancellationToken);
+            return result;
+        }
 
         if (result.ErrorType == PublishErrorType.Permanent || post.RetryCount >= post.MaxRetries)
         {

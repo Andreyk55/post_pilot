@@ -75,6 +75,57 @@ public class MetaProviderLifecycleHandler : IProviderLifecycleHandler
         await _context.SaveChangesAsync(ct);
     }
 
+    public async Task<IReadOnlyCollection<string>> FindAssetsOwnedByOtherWorkspaceAsync(
+        Guid workspaceId,
+        IEnumerable<string> candidateExternalAssetIds,
+        CancellationToken ct)
+    {
+        var candidates = candidateExternalAssetIds
+            .Where(id => !string.IsNullOrEmpty(id))
+            .ToHashSet();
+        if (candidates.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        // Owned = IsConnected (Active OR ReauthRequired) in a DIFFERENT workspace.
+        var ownedPages = await _context.ConnectedPages
+            .Where(p => p.WorkspaceId != workspaceId
+                     && p.IsConnected
+                     && candidates.Contains(p.PageId))
+            .Select(p => p.PageId)
+            .ToListAsync(ct);
+
+        var ownedIgs = await _context.ConnectedInstagramAccounts
+            .Where(i => i.WorkspaceId != workspaceId
+                     && i.IsConnected
+                     && candidates.Contains(i.IgBusinessId))
+            .Select(i => i.IgBusinessId)
+            .ToListAsync(ct);
+
+        return ownedPages.Concat(ownedIgs).ToHashSet();
+    }
+
+    public async Task SetAssetsStatusAsync(
+        Guid connectionId,
+        ConnectionStatus status,
+        CancellationToken ct)
+    {
+        // Flip Status on owned asset rows only; never touch IsConnected.
+        var pages = await _context.ConnectedPages
+            .Where(p => p.MetaConnectionId == connectionId && p.IsConnected)
+            .ToListAsync(ct);
+        var igs = await _context.ConnectedInstagramAccounts
+            .Where(i => i.MetaConnectionId == connectionId && i.IsConnected)
+            .ToListAsync(ct);
+
+        if (pages.Count == 0 && igs.Count == 0) return;
+
+        foreach (var p in pages) p.Status = status;
+        foreach (var i in igs) i.Status = status;
+        await _context.SaveChangesAsync(ct);
+    }
+
     private async Task CancelNonExecutedPostsAsync(
         Guid workspaceId,
         IReadOnlySet<Guid> pageIds,

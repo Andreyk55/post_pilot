@@ -36,6 +36,9 @@ export interface MetaConnection {
   // rows that predate the provider-identity migration.
   providerAccountId?: string | null
   providerAccountName?: string | null
+  // "Active" | "ReauthRequired". When ReauthRequired the connection is still owned
+  // but its token is invalid — show a reconnect action; posts stay visible/retryable.
+  status?: string
 }
 
 export interface ConnectedPage {

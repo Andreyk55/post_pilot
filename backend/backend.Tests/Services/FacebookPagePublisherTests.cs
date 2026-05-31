@@ -6,7 +6,9 @@ using Moq;
 using PostPilot.Api.Data;
 using PostPilot.Api.Entities;
 using PostPilot.Api.Enums;
+using Microsoft.Extensions.Logging.Abstractions;
 using PostPilot.Api.Services.Media;
+using PostPilot.Api.Services.Providers;
 using PostPilot.Api.Services.Publishing;
 using PostPilot.Api.Services.Scheduling;
 using PostPilot.Api.Settings;
@@ -68,6 +70,14 @@ public class FacebookPagePublisherTests : IDisposable
 
     private FacebookPagePublisher CreatePublisher(HttpClient httpClient)
     {
+        // Real provider connection service + Meta handler so the Auth-error path
+        // actually flags the connection ReauthRequired against this DbContext.
+        var metaHandler = new MetaProviderLifecycleHandler(
+            _dbContext, _schedulerMock.Object, NullLogger<MetaProviderLifecycleHandler>.Instance);
+        var providerConnections = new ProviderConnectionService(
+            _dbContext, new[] { (IProviderLifecycleHandler)metaHandler },
+            NullLogger<ProviderConnectionService>.Instance);
+
         return new FacebookPagePublisher(
             _dbContext,
             _schedulerMock.Object,
@@ -75,6 +85,7 @@ public class FacebookPagePublisherTests : IDisposable
             _featureSettings,
             httpClient,
             _loggerMock.Object,
+            providerConnections,
             _metaApiOptions,
             _publishingOptions);
     }
@@ -326,9 +337,9 @@ public class FacebookPagePublisherTests : IDisposable
     [Fact]
     public async Task MultiPhoto_FailedUpload_PermanentError_ResultsInPermanentErrorType()
     {
-        // Arrange: photo upload fails with permanent error code
+        // Arrange: photo upload fails with a true permanent (content) error code.
         var responses = new Queue<HttpResponseMessage>();
-        responses.Enqueue(PhotoUploadFailure(190, "Access token expired")); // code 190 = permanent
+        responses.Enqueue(PhotoUploadFailure(100, "Invalid parameter")); // code 100 = permanent
 
         var handler = new FakeHttpHandler(responses);
         var httpClient = new HttpClient(handler);
@@ -341,6 +352,25 @@ public class FacebookPagePublisherTests : IDisposable
         // Assert
         Assert.False(result.Success);
         Assert.Equal(PublishErrorType.Permanent, result.ErrorType);
+    }
+
+    [Fact]
+    public async Task MultiPhoto_FailedUpload_TokenExpired_ResultsInAuthErrorType()
+    {
+        // Code 190 (access token expired/invalid) now classifies as Auth so the
+        // publisher flags the workspace connection ReauthRequired without disconnecting.
+        var responses = new Queue<HttpResponseMessage>();
+        responses.Enqueue(PhotoUploadFailure(190, "Access token expired"));
+
+        var handler = new FakeHttpHandler(responses);
+        var httpClient = new HttpClient(handler);
+        var publisher = CreatePublisher(httpClient);
+        var post = CreateMultiPhotoPost(2);
+
+        var result = await publisher.CallMetaApiAsync(post, CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal(PublishErrorType.Auth, result.ErrorType);
     }
 
     // ──────────────────────────────────────────────

@@ -250,26 +250,77 @@ public class ProviderConnectionLifecycleTests : IDisposable
         await _providerService.EnsureCanConnectAsync(WorkspaceAId, ProviderType.Meta);
     }
 
-    // ── B. Workspace isolation ───────────────────────────────────────────────
+    // ── B. Cross-workspace exclusive ownership ───────────────────────────────
+    //
+    // Product rule (supersedes the old "agency use case" that allowed the same
+    // account in two workspaces): a provider account/page/IG may be OWNED by only
+    // ONE workspace at a time. Ownership is held while IsConnected = true (Active
+    // OR ReauthRequired) and released only by a real Disconnect.
 
     [Fact]
-    public async Task Same_provider_account_can_be_connected_to_two_workspaces_independently()
+    public async Task Different_workspace_connecting_same_account_is_blocked_while_owned()
     {
         SeedMeta(WorkspaceAId, UserAId, MetaAccountAlpha);
-        SeedMeta(WorkspaceBId, UserBId, MetaAccountAlpha);
 
-        var inA = await _providerService.GetActiveConnectionAsync(WorkspaceAId, ProviderType.Meta);
-        var inB = await _providerService.GetActiveConnectionAsync(WorkspaceBId, ProviderType.Meta);
+        // Workspace B tries to connect the SAME Meta account → blocked.
+        var ex = await Assert.ThrowsAsync<ProviderOwnedByAnotherWorkspaceException>(
+            () => _providerService.EnsureNotOwnedByAnotherWorkspaceAsync(
+                WorkspaceBId, ProviderType.Meta, MetaAccountAlpha, Array.Empty<string>()));
+        Assert.Contains("already connected to another workspace", ex.Message);
+    }
 
-        Assert.NotNull(inA);
-        Assert.NotNull(inB);
-        Assert.NotEqual(inA!.ConnectionId, inB!.ConnectionId);
+    [Fact]
+    public async Task Different_workspace_connecting_same_page_is_blocked_while_owned()
+    {
+        var (_, page, _) = SeedMeta(WorkspaceAId, UserAId, MetaAccountAlpha);
 
-        // Disconnect in A leaves B untouched.
+        // Workspace B tries to connect a DIFFERENT account but the SAME page asset.
+        var ex = await Assert.ThrowsAsync<ProviderOwnedByAnotherWorkspaceException>(
+            () => _providerService.EnsureNotOwnedByAnotherWorkspaceAsync(
+                WorkspaceBId, ProviderType.Meta, MetaAccountBeta, new[] { page.PageId }));
+        Assert.Equal(ProviderType.Meta, ex.Provider);
+    }
+
+    [Fact]
+    public async Task ReauthRequired_account_still_blocks_another_workspace()
+    {
+        SeedMeta(WorkspaceAId, UserAId, MetaAccountAlpha);
+
+        // A's connection goes ReauthRequired (token invalid) — ownership retained.
+        await _providerService.MarkReauthRequiredAsync(WorkspaceAId, ProviderType.Meta);
+
+        // B is still blocked.
+        await Assert.ThrowsAsync<ProviderOwnedByAnotherWorkspaceException>(
+            () => _providerService.EnsureNotOwnedByAnotherWorkspaceAsync(
+                WorkspaceBId, ProviderType.Meta, MetaAccountAlpha, Array.Empty<string>()));
+    }
+
+    [Fact]
+    public async Task Same_workspace_is_not_blocked_by_its_own_ownership()
+    {
+        var (_, page, ig) = SeedMeta(WorkspaceAId, UserAId, MetaAccountAlpha);
+
+        // Workspace A reconnecting its OWN account/page/IG must NOT be blocked.
+        await _providerService.EnsureNotOwnedByAnotherWorkspaceAsync(
+            WorkspaceAId, ProviderType.Meta, MetaAccountAlpha, new[] { page.PageId, ig.IgBusinessId });
+    }
+
+    [Fact]
+    public async Task Disconnect_releases_ownership_so_another_workspace_can_connect()
+    {
+        var (_, page, ig) = SeedMeta(WorkspaceAId, UserAId, MetaAccountAlpha);
+
+        // While A owns it, B is blocked.
+        await Assert.ThrowsAsync<ProviderOwnedByAnotherWorkspaceException>(
+            () => _providerService.EnsureNotOwnedByAnotherWorkspaceAsync(
+                WorkspaceBId, ProviderType.Meta, MetaAccountAlpha, new[] { page.PageId, ig.IgBusinessId }));
+
+        // A disconnects (real user-initiated) → ownership released.
         await _providerService.DisconnectAsync(WorkspaceAId, ProviderType.Meta);
 
-        Assert.Null(await _providerService.GetActiveConnectionAsync(WorkspaceAId, ProviderType.Meta));
-        Assert.NotNull(await _providerService.GetActiveConnectionAsync(WorkspaceBId, ProviderType.Meta));
+        // Now B can connect the same account/page/IG.
+        await _providerService.EnsureNotOwnedByAnotherWorkspaceAsync(
+            WorkspaceBId, ProviderType.Meta, MetaAccountAlpha, new[] { page.PageId, ig.IgBusinessId });
     }
 
     // ── C. Disconnect cancels non-executed posts; executed untouched ────────

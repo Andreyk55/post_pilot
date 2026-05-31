@@ -48,8 +48,22 @@ public class MetaConnection
     /// <summary>
     /// Current connection state. False = the user has disconnected this account.
     /// Always written in lockstep with <see cref="DisconnectedAt"/>: true ↔ DisconnectedAt is null.
+    ///
+    /// This is the ownership axis: <c>true</c> means this workspace OWNS the provider
+    /// account (<see cref="Provider"/> + <see cref="ProviderAccountId"/>) and no other
+    /// workspace may connect it. Only a real Disconnect sets this false and releases
+    /// ownership. A token going invalid sets <see cref="Status"/> to
+    /// <see cref="ConnectionStatus.ReauthRequired"/> but leaves this <c>true</c>.
     /// </summary>
     public bool IsConnected { get; set; } = true;
+
+    /// <summary>
+    /// Refines the owned state (only meaningful while <see cref="IsConnected"/> is true):
+    /// <see cref="ConnectionStatus.Active"/> = token believed valid;
+    /// <see cref="ConnectionStatus.ReauthRequired"/> = token invalid, user must reconnect
+    /// in this workspace. Both states still own (block) the provider account.
+    /// </summary>
+    public ConnectionStatus Status { get; set; } = ConnectionStatus.Active;
 
     /// <summary>
     /// Audit trail of when the account was disconnected. Null while connected.
@@ -88,8 +102,18 @@ public class ConnectedPage
     /// <summary>
     /// Current connection state. False = page is unlinked/disconnected.
     /// Kept in lockstep with <see cref="DisconnectedAt"/>: true ↔ DisconnectedAt is null.
+    ///
+    /// Ownership axis for this asset (Provider=Meta + <see cref="PageId"/> as the external
+    /// asset id): <c>true</c> means this workspace owns the page and no other workspace may
+    /// connect it.
     /// </summary>
     public bool IsConnected { get; set; } = true;
+
+    /// <summary>
+    /// Refines the owned state. See <see cref="ConnectionStatus"/>. Mirrors the parent
+    /// connection's status on reauth so the UI can flag a page that needs reconnect.
+    /// </summary>
+    public ConnectionStatus Status { get; set; } = ConnectionStatus.Active;
 
     /// <summary>
     /// Audit trail of when the page was disconnected. Null while connected.
@@ -124,8 +148,17 @@ public class ConnectedInstagramAccount
 
     /// <summary>
     /// Current connection state. False = account is unlinked/disconnected.
+    ///
+    /// Ownership axis for this asset (Provider=Meta + <see cref="IgBusinessId"/> as the
+    /// external asset id): <c>true</c> means this workspace owns the IG account and no
+    /// other workspace may connect it.
     /// </summary>
     public bool IsConnected { get; set; } = true;
+
+    /// <summary>
+    /// Refines the owned state. See <see cref="ConnectionStatus"/>.
+    /// </summary>
+    public ConnectionStatus Status { get; set; } = ConnectionStatus.Active;
 
     /// <summary>
     /// Audit trail of when the account was disconnected. Null while connected.

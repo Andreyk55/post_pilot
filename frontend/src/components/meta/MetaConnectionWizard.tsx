@@ -4,7 +4,7 @@ import type {
   InstagramAccount,
   MetaConnectionStatus,
 } from '../../types/meta'
-import { metaApi } from '../../api/meta'
+import { metaApi, MetaApiError } from '../../api/meta'
 import { PageSelectionStep } from './PageSelectionStep'
 import { InstagramSelectionStep } from './InstagramSelectionStep'
 import './MetaConnectionWizard.css'
@@ -137,7 +137,15 @@ export function MetaConnectionWizard({
       }
       onComplete()
     } catch (err) {
-      setError('Failed to save connection. Please try again.')
+      // 409 = the account/page is owned by another workspace (or this workspace
+      // already has an active connection). Surface the server's exact message so
+      // the user knows to disconnect it from the owning workspace first — not a
+      // generic failure.
+      if (err instanceof MetaApiError && err.status === 409) {
+        setError(err.message)
+      } else {
+        setError('Failed to save connection. Please try again.')
+      }
       setStep('instagram')
       console.error('Save connection error:', err)
     } finally {

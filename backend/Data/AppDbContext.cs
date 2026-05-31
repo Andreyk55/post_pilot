@@ -94,10 +94,22 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => new { e.WorkspaceId, e.Provider })
                 .IsUnique()
                 .HasFilter("\"IsConnected\" = true");
+            // GENERIC OWNERSHIP RULE (cross-workspace): a provider account
+            // (Provider + ExternalAccountId) may be OWNED by only ONE workspace at a
+            // time. Ownership is held while IsConnected = true (covers both
+            // Status=Active and Status=ReauthRequired). A real Disconnect sets
+            // IsConnected=false and releases ownership so another workspace can connect.
+            // The partial filter is on IsConnected (not Status) precisely because
+            // ReauthRequired must keep blocking. ProviderAccountId NULLs are excluded
+            // so legacy rows that never resolved an identity don't collide.
+            entity.HasIndex(e => new { e.Provider, e.ProviderAccountId })
+                .IsUnique()
+                .HasFilter("\"IsConnected\" = true AND \"ProviderAccountId\" IS NOT NULL");
             // Helper index: lookup-by-stable-identity when reconnecting an
             // account ("did this workspace already have a row for Meta user X?").
             entity.HasIndex(e => new { e.WorkspaceId, e.Provider, e.ProviderAccountId });
             entity.Property(e => e.Provider).HasConversion<int>();
+            entity.Property(e => e.Status).HasConversion<int>();
             entity.Property(e => e.AccessToken).IsRequired();
 
             // Workspace FK — RESTRICT.
@@ -134,13 +146,19 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => new { e.MetaConnectionId, e.PageId })
                 .IsUnique()
                 .HasFilter("\"IsConnected\" = true");
-            // Inside a single workspace, the same FB page must not be connected twice
-            // simultaneously. Across workspaces (agency use case) duplicates are allowed.
-            entity.HasIndex(e => new { e.WorkspaceId, e.PageId })
+            // GENERIC OWNERSHIP RULE (cross-workspace): a Facebook Page (the external
+            // asset id) may be OWNED by only ONE workspace at a time. The previous
+            // per-workspace-only index allowed the same page in two workspaces ("agency
+            // use case"); the product rule now forbids that — a page connected in
+            // workspace A blocks workspace B until A disconnects. Ownership is held while
+            // IsConnected = true (Active OR ReauthRequired).
+            entity.HasIndex(e => e.PageId)
                 .IsUnique()
-                .HasFilter("\"IsConnected\" = true");
+                .HasFilter("\"IsConnected\" = true")
+                .HasDatabaseName("IX_ConnectedPages_PageId_Owned");
             entity.Property(e => e.PageId).IsRequired();
             entity.Property(e => e.Name).IsRequired();
+            entity.Property(e => e.Status).HasConversion<int>();
             entity.Property(e => e.AccessToken).IsRequired();
 
             // Workspace FK — RESTRICT.
@@ -157,11 +175,14 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => new { e.MetaConnectionId, e.IgBusinessId })
                 .IsUnique()
                 .HasFilter("\"IsConnected\" = true");
-            // Same-workspace duplicate guard, mirroring ConnectedPage.
-            entity.HasIndex(e => new { e.WorkspaceId, e.IgBusinessId })
+            // GENERIC OWNERSHIP RULE (cross-workspace): an Instagram account (external
+            // asset id) may be OWNED by only ONE workspace at a time. Mirrors ConnectedPage.
+            entity.HasIndex(e => e.IgBusinessId)
                 .IsUnique()
-                .HasFilter("\"IsConnected\" = true");
+                .HasFilter("\"IsConnected\" = true")
+                .HasDatabaseName("IX_ConnectedInstagramAccounts_IgBusinessId_Owned");
             entity.Property(e => e.IgBusinessId).IsRequired();
+            entity.Property(e => e.Status).HasConversion<int>();
             entity.Property(e => e.Username).IsRequired();
             entity.Property(e => e.PageId).IsRequired();
             entity.Property(e => e.PageName).IsRequired();

@@ -44,5 +44,13 @@ public enum PublishErrorType
     Permanent,
 
     /// <summary>Post was already published (idempotency check)</summary>
-    AlreadyPublished
+    AlreadyPublished,
+
+    /// <summary>
+    /// Token invalid / expired / session invalidated. Like <see cref="Permanent"/>
+    /// for the post itself (it fails and stays visible, not retried in a tight loop),
+    /// but ADDITIONALLY signals that the workspace's provider connection needs reauth.
+    /// Must NOT disconnect, release ownership, or cancel posts.
+    /// </summary>
+    Auth
 }

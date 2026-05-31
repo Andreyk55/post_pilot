@@ -39,6 +39,40 @@ public interface IProviderConnectionService
         CancellationToken ct = default);
 
     /// <summary>
+    /// Generic cross-workspace ownership guard. Throws
+    /// <see cref="ProviderOwnedByAnotherWorkspaceException"/> if the provider
+    /// account (<paramref name="externalAccountId"/>) or any of the provider assets
+    /// (<paramref name="externalAssetIds"/>, e.g. page ids / IG account ids) is
+    /// currently OWNED by a workspace OTHER than <paramref name="workspaceId"/>.
+    ///
+    /// "Owned" means a non-disconnected row (IsConnected = true — covers both
+    /// Active and ReauthRequired). Same-workspace ownership is allowed (reconnect).
+    /// Disconnected rows in other workspaces do NOT block.
+    ///
+    /// Provider OAuth services call this AFTER resolving the external ids from the
+    /// provider but BEFORE persisting any connection/asset state. It never modifies
+    /// the owning workspace.
+    /// </summary>
+    Task EnsureNotOwnedByAnotherWorkspaceAsync(
+        Guid workspaceId,
+        ProviderType provider,
+        string? externalAccountId,
+        IEnumerable<string> externalAssetIds,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Marks the workspace's owning connection (and its assets) as
+    /// <see cref="Enums.ConnectionStatus.ReauthRequired"/> WITHOUT releasing
+    /// ownership. Called when publishing fails because of an invalid/expired token
+    /// or invalidated session. Does NOT disconnect, does NOT cancel posts, does NOT
+    /// touch any other workspace. Idempotent and a no-op if no active connection exists.
+    /// </summary>
+    Task MarkReauthRequiredAsync(
+        Guid workspaceId,
+        ProviderType provider,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Disconnect the currently active provider connection for the workspace:
     /// soft-disconnect the connection row, soft-disconnect its assets, cancel
     /// non-executed posts, and stamp cancellation metadata.

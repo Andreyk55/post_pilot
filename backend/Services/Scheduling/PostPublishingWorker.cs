@@ -106,7 +106,11 @@ public class PostPublishingWorker : BackgroundService
             }
 
             // Find posts that are due for publication (Facebook + Instagram).
-            // Both the target asset AND its parent MetaConnection must be currently connected.
+            // PUBLISH GATE: the target asset AND its parent MetaConnection must be
+            // both connected (IsConnected) AND Active (Status). ReauthRequired holds
+            // ownership but blocks publishing until the user reconnects — publishing
+            // with an invalid token would just fail and re-flag. (Ownership blocking
+            // elsewhere uses IsConnected alone; publishing additionally requires Active.)
             // MetaOAuthService cancels active posts up-front when an asset is disconnected,
             // but this is the backstop that prevents any straggler from being published.
             duePosts = await dbContext.Posts
@@ -115,11 +119,17 @@ public class PostPublishingWorker : BackgroundService
                     (p.Platform == Platform.Facebook
                         && p.TargetPage != null
                         && p.TargetPage.IsConnected
-                        && (p.TargetPage.MetaConnection == null || p.TargetPage.MetaConnection.IsConnected))
+                        && p.TargetPage.Status == ConnectionStatus.Active
+                        && (p.TargetPage.MetaConnection == null
+                            || (p.TargetPage.MetaConnection.IsConnected
+                                && p.TargetPage.MetaConnection.Status == ConnectionStatus.Active)))
                     || (p.Platform == Platform.Instagram
                         && p.TargetInstagramAccount != null
                         && p.TargetInstagramAccount.IsConnected
-                        && (p.TargetInstagramAccount.MetaConnection == null || p.TargetInstagramAccount.MetaConnection.IsConnected)))
+                        && p.TargetInstagramAccount.Status == ConnectionStatus.Active
+                        && (p.TargetInstagramAccount.MetaConnection == null
+                            || (p.TargetInstagramAccount.MetaConnection.IsConnected
+                                && p.TargetInstagramAccount.MetaConnection.Status == ConnectionStatus.Active))))
                 .Where(p =>
                     (p.Status == PostStatus.Scheduled && p.ScheduledAt <= now) ||
                     ((p.Status == PostStatus.RetryPending || p.Status == PostStatus.Processing) && p.NextRetryAt != null && p.NextRetryAt <= now))

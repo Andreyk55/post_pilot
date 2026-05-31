@@ -35,6 +35,7 @@ public class InstagramStoryPublisher : IStoryPublisher
     private readonly IMediaService _mediaService;
     private readonly HttpClient _httpClient;
     private readonly ILogger<InstagramStoryPublisher> _logger;
+    private readonly Providers.IProviderConnectionService _providerConnections;
     private readonly string _graphApiBaseUrl;
     private readonly TimeSpan _mediaDownloadUrlExpiration;
     private readonly int _maxImagePollAttempts;
@@ -67,11 +68,10 @@ public class InstagramStoryPublisher : IStoryPublisher
         368,  // Temporarily blocked for policies violation
     };
 
-    // Meta error codes — permanent (don't retry)
-    private static readonly HashSet<int> PermanentErrorCodes = new()
+    // Meta error codes — auth/token problems (don't retry; flag ReauthRequired).
+    private static readonly HashSet<int> AuthErrorCodes = new()
     {
         10,    // Permission denied
-        100,   // Invalid parameter
         102,   // Session invalidated
         190,   // Access token expired or invalid
         200,   // Permission error
@@ -79,6 +79,14 @@ public class InstagramStoryPublisher : IStoryPublisher
         230,   // Incorrect permission
         250,   // Insufficient permission
         270,   // Permission revoked
+        463,   // Access token expired
+        467,   // Access token invalid
+    };
+
+    // Meta error codes — permanent (don't retry, not an auth problem)
+    private static readonly HashSet<int> PermanentErrorCodes = new()
+    {
+        100,   // Invalid parameter
         294,   // App not installed
         36003, // IG media creation failed
     };
@@ -91,6 +99,7 @@ public class InstagramStoryPublisher : IStoryPublisher
         IMediaService mediaService,
         HttpClient httpClient,
         ILogger<InstagramStoryPublisher> logger,
+        Providers.IProviderConnectionService providerConnections,
         MetaApiOptions metaApiOptions,
         PublishingOptions publishingOptions)
     {
@@ -99,6 +108,7 @@ public class InstagramStoryPublisher : IStoryPublisher
         _mediaService = mediaService;
         _httpClient = httpClient;
         _logger = logger;
+        _providerConnections = providerConnections;
         _graphApiBaseUrl = metaApiOptions.GraphApiBaseUrl;
         _mediaDownloadUrlExpiration = TimeSpan.FromMinutes(publishingOptions.MediaDownloadUrlExpirationMinutes);
         _maxImagePollAttempts = publishingOptions.ImagePollMaxAttempts;
@@ -109,9 +119,10 @@ public class InstagramStoryPublisher : IStoryPublisher
     {
         _logger.LogInformation("Starting Instagram story publish for post {PostId}", postId);
 
-        // Step 1: Load post with target IG account
+        // Step 1: Load post with target IG account (+ its parent connection)
         var post = await _dbContext.Posts
             .Include(p => p.TargetInstagramAccount)
+                .ThenInclude(ig => ig!.MetaConnection)
             .FirstOrDefaultAsync(p => p.Id == postId, cancellationToken);
 
         if (post == null)
@@ -128,6 +139,17 @@ public class InstagramStoryPublisher : IStoryPublisher
                 postId, post.ExternalPostId);
             return new PublishResult(true, ExternalPostId: post.ExternalPostId,
                 ErrorType: PublishErrorType.AlreadyPublished);
+        }
+
+        // Step 2.5: PUBLISH GATE — block while ReauthRequired (ownership held, token
+        // invalid). Before claiming so the post isn't stranded and isn't retried.
+        if (PublishGate.IsReauthRequired(post.TargetInstagramAccount, post.TargetInstagramAccount?.MetaConnection))
+        {
+            _logger.LogWarning(
+                "IG_STORY_PUBLISH_BLOCKED_REAUTH postId={PostId} — connection needs reauthorization; not publishing.",
+                postId);
+            return new PublishResult(false, ErrorType: PublishErrorType.Permanent,
+                ErrorMessage: "Publishing is paused because the Meta connection needs to be reauthorized. Reconnect to resume.");
         }
 
         // Step 3: Atomically claim the post
@@ -589,6 +611,9 @@ public class InstagramStoryPublisher : IStoryPublisher
 
     private PublishErrorType ClassifyError(int errorCode, int? subcode = null, string? fbTraceId = null, string? message = null)
     {
+        if (AuthErrorCodes.Contains(errorCode))
+            return PublishErrorType.Auth;
+
         if (PermanentErrorCodes.Contains(errorCode))
             return PublishErrorType.Permanent;
 
@@ -677,6 +702,17 @@ public class InstagramStoryPublisher : IStoryPublisher
         post.RetryCount++;
         post.ErrorMessage = result.ErrorMessage;
         post.UpdatedAt = DateTime.UtcNow;
+
+        if (result.ErrorType == PublishErrorType.Auth)
+        {
+            // Token invalid: fail the post (stays visible), flag ReauthRequired,
+            // never disconnect / release ownership / cancel posts.
+            post.Status = PostStatus.Failed;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await _providerConnections.MarkReauthRequiredAsync(
+                post.WorkspaceId, ProviderType.Meta, cancellationToken);
+            return result;
+        }
 
         if (result.ErrorType == PublishErrorType.Permanent || post.RetryCount >= post.MaxRetries)
         {

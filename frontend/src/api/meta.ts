@@ -109,7 +109,13 @@ export const metaApi = {
   },
 
   /**
-   * Save the final Meta connection with selected pages and Instagram accounts
+   * Save the final Meta connection with selected pages and Instagram accounts.
+   *
+   * On 409 the server returns { error, provider } when the account/page is owned
+   * by ANOTHER workspace ("This social account is already connected to another
+   * workspace. Disconnect it there before connecting it here.") or the workspace
+   * already has an active connection. Surface the exact message via MetaApiError
+   * so the UI doesn't show a generic failure.
    */
   async saveConnection(request: MetaSaveConnectionRequest): Promise<MetaSaveConnectionResponse> {
     const response = await fetch(`${API_URL}/meta/connection`, {
@@ -117,7 +123,14 @@ export const metaApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
     })
-    if (!response.ok) throw new Error('Failed to save Meta connection')
+    if (!response.ok) {
+      const errorBody = await readErrorBody(response)
+      console.error('Meta save connection failed:', response.status, errorBody)
+      throw new MetaApiError(
+        errorBody.error ?? `Failed to save Meta connection (${response.status})`,
+        response.status
+      )
+    }
     return response.json()
   },
 

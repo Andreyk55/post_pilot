@@ -392,7 +392,8 @@ public class UnlinkCancelTests : IDisposable
         }
         await _dbContext.SaveChangesAsync();
 
-        // Mirror PostPublishingWorker.ProcessDuePostsAsync verbatim
+        // Mirror PostPublishingWorker.ProcessDuePostsAsync verbatim (incl. the publish
+        // gate: asset AND parent connection must be IsConnected AND Status==Active).
         var now = DateTime.UtcNow;
         var due = await _dbContext.Posts
             .Where(p => p.Platform == Platform.Facebook || p.Platform == Platform.Instagram)
@@ -400,11 +401,17 @@ public class UnlinkCancelTests : IDisposable
                 (p.Platform == Platform.Facebook
                     && p.TargetPage != null
                     && p.TargetPage.IsConnected
-                    && (p.TargetPage.MetaConnection == null || p.TargetPage.MetaConnection.IsConnected))
+                    && p.TargetPage.Status == ConnectionStatus.Active
+                    && (p.TargetPage.MetaConnection == null
+                        || (p.TargetPage.MetaConnection.IsConnected
+                            && p.TargetPage.MetaConnection.Status == ConnectionStatus.Active)))
                 || (p.Platform == Platform.Instagram
                     && p.TargetInstagramAccount != null
                     && p.TargetInstagramAccount.IsConnected
-                    && (p.TargetInstagramAccount.MetaConnection == null || p.TargetInstagramAccount.MetaConnection.IsConnected)))
+                    && p.TargetInstagramAccount.Status == ConnectionStatus.Active
+                    && (p.TargetInstagramAccount.MetaConnection == null
+                        || (p.TargetInstagramAccount.MetaConnection.IsConnected
+                            && p.TargetInstagramAccount.MetaConnection.Status == ConnectionStatus.Active))))
             .Where(p =>
                 (p.Status == PostStatus.Scheduled && p.ScheduledAt <= now) ||
                 ((p.Status == PostStatus.RetryPending || p.Status == PostStatus.Processing)

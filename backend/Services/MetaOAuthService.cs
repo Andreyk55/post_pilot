@@ -289,12 +289,34 @@ public class MetaOAuthService : IMetaOAuthService
         var workspaceId = oauthState.WorkspaceId;
         _logger.LogInformation("Saving connection for workspace {WorkspaceId} (user {UserId})", workspaceId, userId);
 
-        // Reject second-account connect (product rule: at most one active Meta per workspace).
-        await _providerConnections.EnsureCanConnectAsync(workspaceId, ProviderType.Meta);
-
-        // Resolve the stable Meta identity. Used for the "reconnect same account ⇒
-        // resurface history" rule.
+        // Resolve the stable Meta identity FIRST. Used both for the cross-workspace
+        // ownership guard and the "reconnect same account ⇒ resurface history" rule.
         var (metaUserId, metaUserName) = await FetchMetaUserIdentityAsync(accessToken);
+
+        // Same-workspace reconnect rule: if THIS workspace already owns an active Meta
+        // connection for the SAME account (e.g. recovering from ReauthRequired, or a
+        // plain re-grant), allow it — we update the existing row in place rather than
+        // rejecting as a "second account". Only a connect attempt for a DIFFERENT
+        // account in a workspace that already owns one is rejected.
+        var existingActive = await _providerConnections.GetActiveConnectionAsync(workspaceId, ProviderType.Meta);
+        var sameAccountReconnect =
+            existingActive != null
+            && !string.IsNullOrEmpty(metaUserId)
+            && existingActive.ProviderAccountId == metaUserId;
+
+        if (!sameAccountReconnect)
+        {
+            // Reject second-account connect (product rule: at most one active Meta per workspace).
+            await _providerConnections.EnsureCanConnectAsync(workspaceId, ProviderType.Meta);
+        }
+
+        // Generic cross-workspace ownership guard at the ACCOUNT level: block if this
+        // Meta account is owned by a DIFFERENT workspace. Same-workspace reconnect
+        // passes. Page/IG asset-level ownership is enforced later in SaveConnectionAsync
+        // against the user's actual selection (we don't block on pages the user may
+        // never choose to connect here). Throws ProviderOwnedByAnotherWorkspaceException → 409.
+        await _providerConnections.EnsureNotOwnedByAnotherWorkspaceAsync(
+            workspaceId, ProviderType.Meta, metaUserId, Array.Empty<string>());
 
         var connection = await ResolveOrCreateMetaConnectionAsync(
             workspaceId,
@@ -335,6 +357,48 @@ public class MetaOAuthService : IMetaOAuthService
     {
         var now = DateTime.UtcNow;
 
+        // Same-workspace reconnect of an account that is STILL owned (IsConnected=true)
+        // — typically recovering from ReauthRequired. Reuse that exact row so we don't
+        // create a duplicate active connection (which the unique index would reject too).
+        if (!string.IsNullOrEmpty(providerAccountId))
+        {
+            var stillOwned = await _context.MetaConnections
+                .Include(c => c.Pages)
+                .Include(c => c.InstagramAccounts)
+                .FirstOrDefaultAsync(c =>
+                    c.WorkspaceId == workspaceId
+                    && c.Provider == ProviderType.Meta
+                    && c.ProviderAccountId == providerAccountId
+                    && c.IsConnected);
+            if (stillOwned != null)
+            {
+                stillOwned.AccessToken = accessToken;
+                stillOwned.TokenExpiresAt = now.AddSeconds(expiresIn);
+                stillOwned.UpdatedAt = now;
+                stillOwned.Status = ConnectionStatus.Active; // clears ReauthRequired
+                stillOwned.UserId = userId;
+                if (!string.IsNullOrEmpty(providerAccountName))
+                {
+                    stillOwned.ProviderAccountName = providerAccountName;
+                }
+                // Clear the reauth flag mirrored onto the owned asset rows too, so the
+                // publish gate (which checks asset Status) unblocks. This is the identity-
+                // level CompleteOAuth recovery path that does NOT run ReconcileSelectedAssets.
+                foreach (var p in stillOwned.Pages.Where(p => p.IsConnected))
+                {
+                    p.Status = ConnectionStatus.Active;
+                }
+                foreach (var ig in stillOwned.InstagramAccounts.Where(i => i.IsConnected))
+                {
+                    ig.Status = ConnectionStatus.Active;
+                }
+                _logger.LogInformation(
+                    "Refreshing already-owned Meta connection {ConnectionId} for provider account {ProviderAccountId} (reauth recovery)",
+                    stillOwned.Id, providerAccountId);
+                return stillOwned;
+            }
+        }
+
         // Find a previously-disconnected row to REACTIVATE rather than orphan.
         //
         // Reactivating (vs. inserting a fresh row) is what keeps historical Pages,
@@ -350,6 +414,8 @@ public class MetaOAuthService : IMetaOAuthService
             existing.TokenExpiresAt = now.AddSeconds(expiresIn);
             existing.UpdatedAt = now;
             existing.IsConnected = true;
+            // Reconnecting with a fresh token clears any prior reauth flag.
+            existing.Status = ConnectionStatus.Active;
             existing.DisconnectedAt = null;
             existing.ConnectedAt = now;
             existing.UserId = userId; // Latest user who initiated the reconnect.
@@ -610,13 +676,32 @@ public class MetaOAuthService : IMetaOAuthService
         var workspaceId = oauthState.WorkspaceId;
         var now = DateTime.UtcNow;
 
-        // Enforce the product rule before touching state: at most one active Meta
-        // connection per workspace. Throws ProviderAlreadyConnectedException → 409.
-        await _providerConnections.EnsureCanConnectAsync(workspaceId, ProviderType.Meta);
-
         // Resolve the stable Meta identity so we can resurface history if the SAME
         // account is reconnecting after a disconnect.
         var (metaUserId, metaUserName) = await FetchMetaUserIdentityAsync(oauthState.TempAccessToken);
+
+        // Same-workspace reconnect (incl. reauth recovery) is allowed; only a connect
+        // for a DIFFERENT account in a workspace that already owns one is rejected.
+        var existingActive = await _providerConnections.GetActiveConnectionAsync(workspaceId, ProviderType.Meta);
+        var sameAccountReconnect =
+            existingActive != null
+            && !string.IsNullOrEmpty(metaUserId)
+            && existingActive.ProviderAccountId == metaUserId;
+
+        if (!sameAccountReconnect)
+        {
+            // Enforce the product rule before touching state: at most one active Meta
+            // connection per workspace. Throws ProviderAlreadyConnectedException → 409.
+            await _providerConnections.EnsureCanConnectAsync(workspaceId, ProviderType.Meta);
+        }
+
+        // Cross-workspace ownership guard against the SELECTED account + pages + IGs.
+        // Throws ProviderOwnedByAnotherWorkspaceException → 409.
+        await _providerConnections.EnsureNotOwnedByAnotherWorkspaceAsync(
+            workspaceId,
+            ProviderType.Meta,
+            metaUserId,
+            selectedPageIds.Concat(selectedInstagramIds));
 
         var expiresIn = (int)Math.Max(0, (oauthState.TokenExpiresAt.Value - now).TotalSeconds);
         var connection = await ResolveOrCreateMetaConnectionAsync(
@@ -688,6 +773,8 @@ public class MetaOAuthService : IMetaOAuthService
                 existing.Category = src.Category;
                 existing.PictureUrl = src.PictureUrl;
                 existing.AccessToken = src.AccessToken ?? existing.AccessToken;
+                // Refreshing with a new token clears any reauth flag on this asset.
+                existing.Status = ConnectionStatus.Active;
                 if (!existing.IsConnected)
                 {
                     existing.IsConnected = true;
@@ -737,6 +824,8 @@ public class MetaOAuthService : IMetaOAuthService
                 existing.ProfilePictureUrl = src.ProfilePictureUrl;
                 existing.PageId = src.PageId;
                 existing.PageName = src.PageName;
+                // Refreshing with a new token clears any reauth flag on this asset.
+                existing.Status = ConnectionStatus.Active;
                 if (!existing.IsConnected)
                 {
                     existing.IsConnected = true;
@@ -1307,7 +1396,8 @@ public class MetaOAuthService : IMetaOAuthService
             connection.IsConnected,
             connection.DisconnectedAt,
             connection.ProviderAccountId,
-            connection.ProviderAccountName
+            connection.ProviderAccountName,
+            connection.Status.ToString()
         );
     }
 }

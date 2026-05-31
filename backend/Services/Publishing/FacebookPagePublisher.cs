@@ -23,6 +23,7 @@ public class FacebookPagePublisher : IPostPublisher
     private readonly FeatureSettings _featureSettings;
     private readonly HttpClient _httpClient;
     private readonly ILogger<FacebookPagePublisher> _logger;
+    private readonly Providers.IProviderConnectionService _providerConnections;
     private readonly string _graphApiBaseUrl;
     private readonly TimeSpan _metaDownloadUrlExpiration;
     private readonly TimeSpan _videoDownloadUrlExpiration;
@@ -39,22 +40,31 @@ public class FacebookPagePublisher : IPostPublisher
         506   // Duplicate post (can be transient in some cases)
     };
 
-    // Meta error codes - permanent (don't retry)
-    private static readonly HashSet<int> PermanentErrorCodes = new()
+    // Meta error codes - auth/token problems. These do NOT retry and additionally
+    // flag the workspace connection as ReauthRequired (without disconnecting or
+    // canceling posts). The user must reconnect in the same workspace.
+    private static readonly HashSet<int> AuthErrorCodes = new()
     {
         10,   // Permission denied
-        100,  // Invalid parameter
         102,  // Session invalidated
-        197,  // Empty post (missing message or media)
         190,  // Access token expired or invalid
         200,  // Permission error
-        210,  // User not visible
         220,  // Application does not have permission
         230,  // Incorrect permission
-        240,  // Desktop app cannot call this function
         250,  // Insufficient permission
-        260,  // Terms of service not accepted
         270,  // Permission revoked
+        463,  // Access token expired
+        467,  // Access token invalid
+    };
+
+    // Meta error codes - permanent (don't retry, not an auth problem)
+    private static readonly HashSet<int> PermanentErrorCodes = new()
+    {
+        100,  // Invalid parameter
+        197,  // Empty post (missing message or media)
+        210,  // User not visible
+        240,  // Desktop app cannot call this function
+        260,  // Terms of service not accepted
         294   // App not installed
     };
 
@@ -67,6 +77,7 @@ public class FacebookPagePublisher : IPostPublisher
         FeatureSettings featureSettings,
         HttpClient httpClient,
         ILogger<FacebookPagePublisher> logger,
+        Providers.IProviderConnectionService providerConnections,
         MetaApiOptions metaApiOptions,
         PublishingOptions publishingOptions)
     {
@@ -76,6 +87,7 @@ public class FacebookPagePublisher : IPostPublisher
         _featureSettings = featureSettings;
         _httpClient = httpClient;
         _logger = logger;
+        _providerConnections = providerConnections;
         _graphApiBaseUrl = metaApiOptions.GraphApiBaseUrl;
         _metaDownloadUrlExpiration = TimeSpan.FromMinutes(publishingOptions.MediaDownloadUrlExpirationMinutes);
         _videoDownloadUrlExpiration = TimeSpan.FromMinutes(publishingOptions.VideoDownloadUrlExpirationMinutes);
@@ -85,9 +97,10 @@ public class FacebookPagePublisher : IPostPublisher
     {
         _logger.LogInformation(PostPilotLogEvents.PublishStart, "FB_PUBLISH_START postId={PostId}", postId);
 
-        // Step 1: Load post with target page and media items
+        // Step 1: Load post with target page (+ its parent connection) and media items
         var post = await _dbContext.Posts
             .Include(p => p.TargetPage)
+                .ThenInclude(tp => tp!.MetaConnection)
             .Include(p => p.MediaItems)
             .FirstOrDefaultAsync(p => p.Id == postId, cancellationToken);
 
@@ -114,6 +127,21 @@ public class FacebookPagePublisher : IPostPublisher
             ["Platform"]  = "Facebook",
             ["AccountId"] = post.TargetPage?.PageId ?? string.Empty
         });
+
+        // Step 2.5: PUBLISH GATE — refuse to publish while the connection is
+        // ReauthRequired. Ownership is still held (IsConnected=true), but the token is
+        // invalid; publishing would just fail and re-flag. Checked BEFORE claiming so
+        // the post is left in its current state (not stranded in Publishing) and is
+        // NOT retried. The worker query already excludes these; this guards the manual
+        // publish-now path and any direct caller.
+        if (PublishGate.IsReauthRequired(post.TargetPage, post.TargetPage?.MetaConnection))
+        {
+            _logger.LogWarning(
+                "FB_PUBLISH_BLOCKED_REAUTH postId={PostId} — connection needs reauthorization; not publishing.",
+                postId);
+            return new PublishResult(false, ErrorType: PublishErrorType.Permanent,
+                ErrorMessage: "Publishing is paused because the Meta connection needs to be reauthorized. Reconnect to resume.");
+        }
 
         // Step 3: Atomically claim the post (prevent race conditions)
         var claimResult = await TryClaimPostAsync(post, cancellationToken);
@@ -661,6 +689,9 @@ public class FacebookPagePublisher : IPostPublisher
 
     private PublishErrorType ClassifyError(int errorCode, int? subcode = null, string? fbTraceId = null, string? message = null)
     {
+        if (AuthErrorCodes.Contains(errorCode))
+            return PublishErrorType.Auth;
+
         if (PermanentErrorCodes.Contains(errorCode))
             return PublishErrorType.Permanent;
 
@@ -671,6 +702,19 @@ public class FacebookPagePublisher : IPostPublisher
         _logger.LogWarning(
             "Unknown Meta API error code defaulting to Transient: Code={Code} Subcode={Subcode} FbTraceId={FbTraceId} Message={Message}",
             errorCode, subcode, fbTraceId, message);
+        return PublishErrorType.Transient;
+    }
+
+    /// <summary>
+    /// Test seam for the error-code → <see cref="PublishErrorType"/> classification
+    /// (no logging, no instance state). Mirrors <see cref="ClassifyError"/>: auth/token
+    /// codes drive the reauth flow, content codes are permanent, the rest transient.
+    /// </summary>
+    internal static PublishErrorType ClassifyErrorCodeForTest(int errorCode)
+    {
+        if (AuthErrorCodes.Contains(errorCode)) return PublishErrorType.Auth;
+        if (PermanentErrorCodes.Contains(errorCode)) return PublishErrorType.Permanent;
+        if (TransientErrorCodes.Contains(errorCode)) return PublishErrorType.Transient;
         return PublishErrorType.Transient;
     }
 
@@ -734,6 +778,25 @@ public class FacebookPagePublisher : IPostPublisher
         post.RetryCount++;
         post.ErrorMessage = result.ErrorMessage;
         post.UpdatedAt = DateTime.UtcNow;
+
+        if (result.ErrorType == PublishErrorType.Auth)
+        {
+            // Token invalid / session invalidated. The post FAILS (and stays visible
+            // in the same workspace so the user can retry after reconnecting), but we
+            // must NOT disconnect, release ownership, or cancel future posts — only
+            // flag the workspace connection as ReauthRequired.
+            post.Status = PostStatus.Failed;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            await _providerConnections.MarkReauthRequiredAsync(
+                post.WorkspaceId, ProviderType.Meta, cancellationToken);
+
+            _logger.LogWarning(PostPilotLogEvents.PublishFail,
+                "FB_PUBLISH_FAIL_AUTH postId={PostId} workspaceId={WorkspaceId} — marked ReauthRequired, ownership retained. error={Error}",
+                post.Id, post.WorkspaceId, result.ErrorMessage);
+
+            return result;
+        }
 
         if (result.ErrorType == PublishErrorType.Permanent || post.RetryCount >= post.MaxRetries)
         {

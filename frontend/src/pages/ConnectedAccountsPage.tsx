@@ -295,6 +295,25 @@ export function ConnectedAccountsPage() {
                 </span>
               )}
             </div>
+            {metaConnection?.status === 'ReauthRequired' && (
+              // Token went invalid: the account is still owned/connected and posts
+              // remain visible, but publishing will fail until the user reconnects
+              // in THIS workspace. Offer a reconnect action (re-runs OAuth for the
+              // same account, which clears the reauth flag and refreshes the token).
+              <div className="reauth-banner" role="alert">
+                <span>
+                  Your Meta connection needs to be reauthorized. Reconnect to keep
+                  publishing — your posts and history are safe.
+                </span>
+                <button
+                  className="connect-btn"
+                  onClick={() => handleConnect('meta')}
+                  disabled={connecting === 'meta'}
+                >
+                  {connecting === 'meta' ? 'Reconnecting...' : 'Reconnect'}
+                </button>
+              </div>
+            )}
             <button
               className="disconnect-btn"
               onClick={handleDisconnectMeta}

@@ -91,7 +91,11 @@ public record MetaConnectionDto(
     // legacy rows that pre-date the AddProviderIdentityAndCancellationMetadata
     // migration; populated for any new/reconnected row.
     string? ProviderAccountId = null,
-    string? ProviderAccountName = null
+    string? ProviderAccountName = null,
+    // Refines the owned state for the UI: "Active" or "ReauthRequired". When
+    // ReauthRequired the connection is still owned but the stored token is invalid;
+    // the UI should show a reconnect action. Posts remain visible/retryable.
+    string Status = "Active"
 );
 
 public record ConnectedPageDto(
