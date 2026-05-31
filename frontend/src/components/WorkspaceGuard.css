@@ -1,0 +1,65 @@
+/*
+ * Hard-block overlay shown when the signed-in user has no usable workspace.
+ *
+ * It is absolutely positioned so it fills the main content area only — NOT the
+ * sidebar. The sidebar workspace selector must stay reachable, since it is the
+ * only place the user can pick/create a workspace to clear this block.
+ *
+ * (Requires the containing .main-content to establish a positioning context;
+ * see App.css.)
+ */
+.ws-guard-block {
+  position: absolute;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(4px);
+  animation: ws-guard-fadeIn 0.15s ease-out;
+}
+
+@keyframes ws-guard-fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.ws-guard-block__panel {
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  background: #1a1a2e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 2rem 1.75rem;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.ws-guard-block__icon {
+  font-size: 2rem;
+  line-height: 1;
+  margin-bottom: 0.75rem;
+}
+
+.ws-guard-block__title {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.ws-guard-block__message {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #fcd34d;
+}
+
+.ws-guard-block__hint {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.6);
+}

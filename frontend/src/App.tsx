@@ -45,10 +45,13 @@ function MainApp() {
       <Sidebar currentPage={currentPage} onNavigate={setCurrentPage} />
       <main className="main-content">
         {renderPage()}
+        {/* App-wide handler for strict workspace resolution. Lives inside
+            main-content so its hard-block overlay covers the page but NOT the
+            sidebar — the sidebar workspace selector stays reachable so the user
+            can pick/create a workspace. Reacts to 409/403 from workspace-scoped
+            calls with a toast (never auto-opens a selector). */}
+        <WorkspaceGuard />
       </main>
-      {/* App-wide handler for strict workspace resolution (blocks actions when no
-          workspace is selected; reacts to 409/403 from workspace-scoped calls). */}
-      <WorkspaceGuard />
     </div>
   )
 }

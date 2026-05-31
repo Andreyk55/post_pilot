@@ -1,5 +1,4 @@
 import { useAuth } from '../hooks/useAuth'
-import { useWorkspaces } from '../hooks/useWorkspaces'
 import './WorkspaceContextBadge.css'
 
 interface WorkspaceContextBadgeProps {
@@ -8,28 +7,26 @@ interface WorkspaceContextBadgeProps {
 }
 
 /**
- * Inline badge that makes it visually unambiguous which workspace (and therefore
- * which connected account) an action will apply to. Shown next to create/upload/
- * schedule/publish/connect surfaces so a user with multiple workspaces can never
- * accidentally act in the wrong one. Clicking opens the workspace selector.
+ * Read-only inline indicator that makes it visually unambiguous which workspace
+ * (and therefore which connected account) an action will apply to. Shown next to
+ * create/upload/schedule/publish/connect surfaces so a user with multiple
+ * workspaces can see — at a glance — which one they're acting in.
+ *
+ * Workspace switching/creation is centralized in the sidebar workspace selector
+ * (<WorkspaceSwitcher>) ONLY. This badge is therefore a non-interactive label:
+ * it is a <span>, has no click handler, no "Switch" affordance, and never opens
+ * the workspace selector.
  */
 export function WorkspaceContextBadge({ action = 'Workspace' }: WorkspaceContextBadgeProps) {
   const { user } = useAuth()
-  const { openSelector } = useWorkspaces()
 
   const name = user?.workspaceName?.trim()
 
   return (
-    <button
-      type="button"
-      className={`ws-badge ${name ? '' : 'ws-badge--unset'}`}
-      onClick={openSelector}
-      title="Switch workspace"
-    >
+    <span className={`ws-badge ${name ? '' : 'ws-badge--unset'}`}>
       <span className="ws-badge__icon" aria-hidden>🗂️</span>
       <span className="ws-badge__label">{action}:</span>
       <span className="ws-badge__name">{name || 'No workspace selected'}</span>
-      <span className="ws-badge__switch">Switch</span>
-    </button>
+    </span>
   )
 }

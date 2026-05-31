@@ -577,7 +577,9 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
     <div className={`schedule-post ${!isComposerEnabled ? 'composer-disabled' : ''}`}>
       <div className="schedule-post__header">
         <h2>Schedule a Post</h2>
-        {/* Make it unambiguous which workspace/account this post will go to. */}
+        {/* Read-only context: makes it unambiguous which workspace/account this
+            post will go to. Workspace switching lives only in the sidebar
+            selector — the badge is a non-interactive label. */}
         <WorkspaceContextBadge action="Posting to" />
       </div>
 

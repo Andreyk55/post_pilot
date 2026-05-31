@@ -60,33 +60,37 @@ describe('WorkspaceGuardError', () => {
 describe('guardWorkspaceAction', () => {
   it('allows the action and stays silent when a workspace is selected', () => {
     const notify = vi.fn()
-    const openSelector = vi.fn()
 
-    const allowed = guardWorkspaceAction(true, { notify, openSelector })
+    const allowed = guardWorkspaceAction(true, { notify })
 
     expect(allowed).toBe(true)
     expect(notify).not.toHaveBeenCalled()
-    expect(openSelector).not.toHaveBeenCalled()
   })
 
-  it('blocks the action, notifies, and opens the selector when no workspace', () => {
+  it('blocks the action and notifies (steering to the sidebar) when no workspace', () => {
     const notify = vi.fn()
-    const openSelector = vi.fn()
 
-    const allowed = guardWorkspaceAction(false, { notify, openSelector })
+    const allowed = guardWorkspaceAction(false, { notify })
 
     expect(allowed).toBe(false)
     expect(notify).toHaveBeenCalledWith(NO_WORKSPACE_ACTION_MESSAGE)
-    expect(notify).toHaveBeenCalledWith('Select a workspace before continuing.')
-    expect(openSelector).toHaveBeenCalledTimes(1)
+    // The message must point the user at the sidebar selector — the only place
+    // workspace switching/creation lives.
+    expect(notify).toHaveBeenCalledWith('Select a workspace from the sidebar before continuing.')
+    expect(NO_WORKSPACE_ACTION_MESSAGE).toMatch(/sidebar/i)
   })
 
-  it('does not auto-select a workspace (only opens the selector for the user)', () => {
-    // There is no "switch"/"select" side effect available to the guard — it can
-    // only prompt. This pins the no-auto-select requirement.
-    const openSelector = vi.fn()
-    guardWorkspaceAction(false, { notify: vi.fn(), openSelector })
-    // openSelector merely shows the picker; it carries no target workspace id.
-    expect(openSelector).toHaveBeenCalledWith()
+  it('does not open the workspace selector for the user (no auto-open)', () => {
+    // The guard has no selector-opening side effect at all: switching/creation is
+    // the sidebar selector's job, and the blocking <WorkspaceGuard> modal already
+    // covers the genuinely-no-workspace case. The guard only notifies.
+    const notify = vi.fn()
+    const handlers = { notify }
+
+    guardWorkspaceAction(false, handlers)
+
+    // The handlers object carries no openSelector — there is nothing to call.
+    expect(handlers).not.toHaveProperty('openSelector')
+    expect(notify).toHaveBeenCalledTimes(1)
   })
 })

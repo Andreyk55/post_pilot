@@ -43,7 +43,7 @@ interface UseComposerEnabledOptions {
 
 /** Disabled reason / message used when no workspace is selected. */
 export const NO_WORKSPACE_DISABLED_REASON = 'no_workspace'
-export const NO_WORKSPACE_DISABLED_MESSAGE = 'Select a workspace before continuing.'
+export const NO_WORKSPACE_DISABLED_MESSAGE = 'Select a workspace from the sidebar before continuing.'
 
 /**
  * Hook to determine if the composer should be enabled based on platform and connection state.

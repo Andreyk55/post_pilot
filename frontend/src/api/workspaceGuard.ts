@@ -74,21 +74,28 @@ export function onWorkspaceGuard(handler: (detail: WorkspaceGuardDetail) => void
   return () => window.removeEventListener(WORKSPACE_GUARD_EVENT, listener)
 }
 
-/** User-facing message shown when a workspace-scoped action is attempted with no workspace. */
-export const NO_WORKSPACE_ACTION_MESSAGE = 'Select a workspace before continuing.'
+/**
+ * User-facing message shown when a workspace-scoped action is attempted with no
+ * workspace. Steers the user to the sidebar selector — the only place workspace
+ * switching/creation is allowed — rather than auto-opening a selector for them.
+ */
+export const NO_WORKSPACE_ACTION_MESSAGE = 'Select a workspace from the sidebar before continuing.'
 
 interface GuardWorkspaceActionHandlers {
   /** Show the user-facing "select a workspace" message (e.g. a toast). */
   notify: (message: string) => void
-  /** Open the workspace selector so the user can pick/create one. */
-  openSelector: () => void
 }
 
 /**
  * Pre-flight guard for a workspace-scoped UI action (e.g. connect/disconnect a
  * provider). Returns true when the action is allowed to proceed. When no workspace
- * is selected it notifies, opens the selector, and returns false — it never
- * auto-selects a workspace and never retries the action.
+ * is selected it notifies the user (steering them to the sidebar selector) and
+ * returns false — it never auto-selects a workspace, never opens the selector for
+ * the user, and never retries the action.
+ *
+ * Note: when the user genuinely has no workspace, <WorkspaceGuard> already shows a
+ * blocking selection modal at the app shell; this guard only needs to stop the
+ * in-page action and explain why.
  *
  * Extracted as a pure function so the gate is unit-testable without a DOM.
  */
@@ -98,6 +105,5 @@ export function guardWorkspaceAction(
 ): boolean {
   if (hasWorkspace) return true
   handlers.notify(NO_WORKSPACE_ACTION_MESSAGE)
-  handlers.openSelector()
   return false
 }

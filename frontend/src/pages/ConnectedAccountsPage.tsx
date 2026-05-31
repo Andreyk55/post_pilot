@@ -8,7 +8,6 @@ import { Toast } from '../components/Toast'
 import { buildProviderDisconnectMessage } from '../components/providerDisconnectMessage'
 import { WorkspaceContextBadge } from '../components/WorkspaceContextBadge'
 import { useAuth } from '../hooks/useAuth'
-import { useWorkspaces } from '../hooks/useWorkspaces'
 import { guardWorkspaceAction, NO_WORKSPACE_ACTION_MESSAGE } from '../api/workspaceGuard'
 
 interface ConnectedAccount {
@@ -75,7 +74,6 @@ const platforms = [
 
 export function ConnectedAccountsPage() {
   const { hasWorkspace } = useAuth()
-  const { openSelector } = useWorkspaces()
   const [accounts, setAccounts] = useState<ConnectedAccount[]>(mockAccounts)
   const [connecting, setConnecting] = useState<string | null>(null)
 
@@ -207,7 +205,7 @@ export function ConnectedAccountsPage() {
   const handleDisconnectMeta = () => {
     // Disconnect is workspace-scoped too; don't even open the confirm dialog
     // without a selected workspace.
-    if (!guardWorkspaceAction(hasWorkspace, { notify: showErrorToast, openSelector })) return
+    if (!guardWorkspaceAction(hasWorkspace, { notify: showErrorToast })) return
     setShowDisconnectDialog(true)
   }
 
@@ -232,7 +230,7 @@ export function ConnectedAccountsPage() {
     // Defense-in-depth: provider connections are workspace-scoped. Without a
     // selected workspace the backend would reject the OAuth save, so block here
     // and steer the user to pick a workspace first. (No auto-select.)
-    if (!guardWorkspaceAction(hasWorkspace, { notify: showErrorToast, openSelector })) return
+    if (!guardWorkspaceAction(hasWorkspace, { notify: showErrorToast })) return
 
     if (platformId === 'meta') {
       handleConnectMeta()

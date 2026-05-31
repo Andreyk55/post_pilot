@@ -38,7 +38,10 @@ describe('computeComposerEnabled — workspace gating', () => {
     expect(state.isEnabled).toBe(false)
     expect(state.disabledReason).toBe(NO_WORKSPACE_DISABLED_REASON)
     expect(state.disabledMessage).toBe(NO_WORKSPACE_DISABLED_MESSAGE)
-    expect(state.disabledMessage).toBe('Select a workspace before continuing.')
+    // The message must steer the user to the sidebar selector — the only place
+    // workspace switching is allowed.
+    expect(state.disabledMessage).toBe('Select a workspace from the sidebar before continuing.')
+    expect(state.disabledMessage).toMatch(/sidebar/i)
   })
 
   it('enables the composer normally when a workspace IS selected and target is valid', () => {

@@ -1,34 +1,13 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { workspacesApi, type WorkspaceSummary } from '../api/workspaces'
 import { useAuth } from './useAuth'
-
-interface WorkspacesContextValue {
-  workspaces: WorkspaceSummary[]
-  isLoading: boolean
-  error: string | null
-  refresh: () => Promise<void>
-  /** Switches and refreshes auth so the rest of the app sees the new workspace. */
-  switchTo: (workspaceId: string) => Promise<void>
-  create: (name: string) => Promise<WorkspaceSummary>
-  /** Whether the workspace selector modal is currently open. */
-  selectorOpen: boolean
-  /** Opens the workspace selector modal (e.g. after a WORKSPACE_NOT_SELECTED error). */
-  openSelector: () => void
-  /** Closes the workspace selector modal. */
-  closeSelector: () => void
-}
-
-const WorkspacesContext = createContext<WorkspacesContextValue | undefined>(undefined)
+import { WorkspacesContext, type WorkspacesContextValue } from './workspacesContext'
 
 export function WorkspacesProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated, refreshUser } = useAuth()
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [selectorOpen, setSelectorOpen] = useState(false)
-
-  const openSelector = useCallback(() => setSelectorOpen(true), [])
-  const closeSelector = useCallback(() => setSelectorOpen(false), [])
 
   const refresh = useCallback(async () => {
     if (!isAuthenticated) {
@@ -87,16 +66,7 @@ export function WorkspacesProvider({ children }: { children: ReactNode }) {
     refresh,
     switchTo,
     create,
-    selectorOpen,
-    openSelector,
-    closeSelector,
-  }), [workspaces, isLoading, error, refresh, switchTo, create, selectorOpen, openSelector, closeSelector])
+  }), [workspaces, isLoading, error, refresh, switchTo, create])
 
   return <WorkspacesContext.Provider value={value}>{children}</WorkspacesContext.Provider>
-}
-
-export function useWorkspaces(): WorkspacesContextValue {
-  const ctx = useContext(WorkspacesContext)
-  if (!ctx) throw new Error('useWorkspaces must be used inside <WorkspacesProvider>')
-  return ctx
 }

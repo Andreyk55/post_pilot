@@ -17,6 +17,9 @@
   min-width: 0;
   overflow-y: auto;
   width: 100%;
+  /* Positioning context for the WorkspaceGuard hard-block overlay, so it covers
+     the page content but leaves the sidebar workspace selector reachable. */
+  position: relative;
 }
 
 @media (max-width: 768px) {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useWorkspaces } from '../hooks/useWorkspaces'
+import { useWorkspaces } from '../hooks/workspacesContext'
 import { useAuth } from '../hooks/useAuth'
 import './WorkspaceSwitcher.css'
 
