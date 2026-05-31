@@ -12,6 +12,10 @@
 
 .connected-accounts-page .page-subtitle {
   color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 1rem;
+}
+
+.connected-accounts-workspace {
   margin-bottom: 2rem;
 }
 

@@ -102,9 +102,14 @@ public class MediaController : ControllerBase
 
         try
         {
-            var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(ct);
+            // GetCurrentWorkspaceAsync re-checks WorkspaceMember in the DB, so this both
+            // resolves the authenticated user id and verifies that user has access to the
+            // workspace before we mint an upload URL. The user id becomes the leading
+            // users/{userId} storage-key segment; the client never supplies it.
+            var current = await _currentWorkspace.GetCurrentWorkspaceAsync(ct);
             var result = await _uploadService.InitAsync(
-                workspaceId,
+                current.UserId,
+                current.WorkspaceId,
                 request.FileName,
                 request.ContentType,
                 request.SizeBytes,

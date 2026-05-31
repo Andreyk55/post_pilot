@@ -15,6 +15,10 @@ public interface IMediaUploadService
     /// <summary>
     /// Step 1 of the upload flow.
     /// </summary>
+    /// <param name="userId">Authoritative authenticated PostPilot user id from the session —
+    /// never trusted from the client. The caller MUST have verified this user has access to
+    /// <paramref name="workspaceId"/>. Used as the leading <c>users/{userId}</c> segment of the
+    /// storage key.</param>
     /// <param name="workspaceId">Authoritative workspace from the session — never trusted from the client.</param>
     /// <param name="fileName">Original file name from the client. Used for the storage key's basename
     /// and for audit; sanitized server-side, NEVER trusted as a path.</param>
@@ -24,6 +28,7 @@ public interface IMediaUploadService
     /// MVP assumption is one upload belongs to one platform only, so storage layout is
     /// partitioned by platform.</param>
     Task<InitUploadResult> InitAsync(
+        Guid userId,
         Guid workspaceId,
         string fileName,
         string contentType,

@@ -36,46 +36,47 @@ public class CurrentWorkspaceProvider : ICurrentWorkspaceProvider
         var user = await _db.AppUsers.FirstOrDefaultAsync(u => u.Id == userId, ct)
             ?? throw new UnauthorizedAccessException("User not found.");
 
-        // If CurrentWorkspaceId is set, verify it points to a workspace the user is a member of.
-        if (user.CurrentWorkspaceId.HasValue)
+        // No workspace selected. We deliberately do NOT pick one for the user: in the
+        // MVP each workspace can have its own connected provider account, so silently
+        // choosing a workspace could publish/upload into the wrong account. The client
+        // must select a workspace explicitly.
+        if (!user.CurrentWorkspaceId.HasValue)
         {
-            var verified = await (
-                from m in _db.WorkspaceMembers
-                join w in _db.Workspaces on m.WorkspaceId equals w.Id
-                where m.UserId == userId && m.WorkspaceId == user.CurrentWorkspaceId.Value
-                select new { w.Id, w.Name }
-            ).FirstOrDefaultAsync(ct);
+            _logger.LogWarning("User {UserId} has no CurrentWorkspaceId selected.", userId);
+            throw new WorkspaceNotSelectedException(
+                "No workspace is currently selected. Select a workspace and retry.");
+        }
 
-            if (verified is not null)
-            {
-                _cached = new CurrentWorkspaceInfo(userId, verified.Id, verified.Name);
-                return _cached;
-            }
+        var workspaceId = user.CurrentWorkspaceId.Value;
 
+        // Does the selected workspace still exist?
+        var workspace = await _db.Workspaces
+            .FirstOrDefaultAsync(w => w.Id == workspaceId, ct);
+        if (workspace is null)
+        {
+            // Stale: the workspace was deleted out from under the selection. Force the
+            // client to re-select rather than guessing a replacement.
             _logger.LogWarning(
-                "User {UserId} had stale CurrentWorkspaceId={Stale}; repairing.",
-                userId, user.CurrentWorkspaceId);
+                "User {UserId} has stale CurrentWorkspaceId={Stale} (workspace no longer exists).",
+                userId, workspaceId);
+            throw new WorkspaceNotSelectedException(
+                "The selected workspace no longer exists. Select a workspace and retry.");
         }
 
-        // Self-heal: pick the user's oldest membership.
-        var fallback = await (
-            from m in _db.WorkspaceMembers
-            join w in _db.Workspaces on m.WorkspaceId equals w.Id
-            where m.UserId == userId
-            orderby m.CreatedAt
-            select new { w.Id, w.Name }
-        ).FirstOrDefaultAsync(ct);
-
-        if (fallback is null)
+        // Is the user actually a member of the selected workspace? Always re-checked in
+        // the DB — never trusted from a claim or a frontend-supplied id.
+        var isMember = await _db.WorkspaceMembers
+            .AnyAsync(m => m.UserId == userId && m.WorkspaceId == workspaceId, ct);
+        if (!isMember)
         {
-            throw new UnauthorizedAccessException("User has no workspace memberships.");
+            _logger.LogWarning(
+                "User {UserId} is not a member of selected workspace {WorkspaceId}.",
+                userId, workspaceId);
+            throw new WorkspaceAccessDeniedException(
+                "You do not have access to the selected workspace.");
         }
 
-        user.CurrentWorkspaceId = fallback.Id;
-        user.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(ct);
-
-        _cached = new CurrentWorkspaceInfo(userId, fallback.Id, fallback.Name);
+        _cached = new CurrentWorkspaceInfo(userId, workspace.Id, workspace.Name);
         return _cached;
     }
 }

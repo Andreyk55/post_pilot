@@ -27,6 +27,7 @@ public class MediaUploadService : IMediaUploadService
     }
 
     public async Task<InitUploadResult> InitAsync(
+        Guid userId,
         Guid workspaceId,
         string fileName,
         string contentType,
@@ -52,7 +53,7 @@ public class MediaUploadService : IMediaUploadService
         // MediaService validates the platform value against the allow-list (Facebook/Instagram).
         var mediaId = Guid.NewGuid();
         var upload = await _mediaService.GenerateUploadUrlAsync(
-            workspaceId, platform, mediaId, fileName, contentType, cancellationToken);
+            userId, workspaceId, platform, mediaId, fileName, contentType, cancellationToken);
 
         var media = new Entities.Media
         {

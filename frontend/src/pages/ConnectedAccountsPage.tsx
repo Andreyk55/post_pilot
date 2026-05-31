@@ -6,6 +6,10 @@ import type { MetaConnection } from '../types/meta'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Toast } from '../components/Toast'
 import { buildProviderDisconnectMessage } from '../components/providerDisconnectMessage'
+import { WorkspaceContextBadge } from '../components/WorkspaceContextBadge'
+import { useAuth } from '../hooks/useAuth'
+import { useWorkspaces } from '../hooks/useWorkspaces'
+import { guardWorkspaceAction, NO_WORKSPACE_ACTION_MESSAGE } from '../api/workspaceGuard'
 
 interface ConnectedAccount {
   id: string
@@ -70,6 +74,8 @@ const platforms = [
 ]
 
 export function ConnectedAccountsPage() {
+  const { hasWorkspace } = useAuth()
+  const { openSelector } = useWorkspaces()
   const [accounts, setAccounts] = useState<ConnectedAccount[]>(mockAccounts)
   const [connecting, setConnecting] = useState<string | null>(null)
 
@@ -199,6 +205,9 @@ export function ConnectedAccountsPage() {
   }
 
   const handleDisconnectMeta = () => {
+    // Disconnect is workspace-scoped too; don't even open the confirm dialog
+    // without a selected workspace.
+    if (!guardWorkspaceAction(hasWorkspace, { notify: showErrorToast, openSelector })) return
     setShowDisconnectDialog(true)
   }
 
@@ -220,6 +229,11 @@ export function ConnectedAccountsPage() {
   }
 
   const handleConnect = async (platformId: string) => {
+    // Defense-in-depth: provider connections are workspace-scoped. Without a
+    // selected workspace the backend would reject the OAuth save, so block here
+    // and steer the user to pick a workspace first. (No auto-select.)
+    if (!guardWorkspaceAction(hasWorkspace, { notify: showErrorToast, openSelector })) return
+
     if (platformId === 'meta') {
       handleConnectMeta()
       return
@@ -318,7 +332,8 @@ export function ConnectedAccountsPage() {
                 <button
                   className="connect-btn"
                   onClick={() => handleConnect('meta')}
-                  disabled={connecting === 'meta'}
+                  disabled={connecting === 'meta' || !hasWorkspace}
+                  title={!hasWorkspace ? NO_WORKSPACE_ACTION_MESSAGE : undefined}
                 >
                   {connecting === 'meta' ? 'Reconnecting...' : 'Reconnect'}
                 </button>
@@ -327,7 +342,8 @@ export function ConnectedAccountsPage() {
             <button
               className="disconnect-btn"
               onClick={handleDisconnectMeta}
-              disabled={disconnecting}
+              disabled={disconnecting || !hasWorkspace}
+              title={!hasWorkspace ? NO_WORKSPACE_ACTION_MESSAGE : undefined}
             >
               {disconnecting ? (
                 <>
@@ -349,7 +365,8 @@ export function ConnectedAccountsPage() {
           <button
             className="connect-btn"
             onClick={() => handleConnect('meta')}
-            disabled={isConnecting || disconnecting}
+            disabled={isConnecting || disconnecting || !hasWorkspace}
+            title={!hasWorkspace ? NO_WORKSPACE_ACTION_MESSAGE : undefined}
           >
             {isConnecting ? (
               <>
@@ -420,7 +437,8 @@ export function ConnectedAccountsPage() {
           <button
             className={`connect-btn ${platform.comingSoon ? 'disabled' : ''}`}
             onClick={() => handleConnect(platform.id)}
-            disabled={!platform.available || isConnecting}
+            disabled={!platform.available || isConnecting || !hasWorkspace}
+            title={!hasWorkspace ? NO_WORKSPACE_ACTION_MESSAGE : undefined}
           >
             {isConnecting ? (
               <>
@@ -457,6 +475,11 @@ export function ConnectedAccountsPage() {
       <p className="page-subtitle">
         Connect your social media accounts to start scheduling posts
       </p>
+      {/* Connections belong to the current workspace — make that explicit, since a
+          different workspace can have a different connected account. */}
+      <div className="connected-accounts-workspace">
+        <WorkspaceContextBadge action="Connecting for" />
+      </div>
 
       <div className="platforms-grid">
         {renderMetaCard()}

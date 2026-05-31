@@ -14,6 +14,19 @@
   color: #ffffff;
 }
 
+.schedule-post__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+.schedule-post__header h2 {
+  margin-bottom: 0;
+}
+
 .form-group {
   margin-bottom: 1.5rem;
 }

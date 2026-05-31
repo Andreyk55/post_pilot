@@ -47,6 +47,7 @@ public class MediaServiceUploadTests
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             svc.GenerateUploadUrlAsync(
+                userId: Guid.NewGuid(),
                 workspaceId: Guid.NewGuid(),
                 platform: Platform.Facebook,
                 mediaId: Guid.NewGuid(),
@@ -77,6 +78,7 @@ public class MediaServiceUploadTests
         };
 
         var result = await svc.GenerateUploadUrlAsync(
+            userId: Guid.NewGuid(),
             workspaceId: Guid.NewGuid(),
             platform: Platform.Instagram,
             mediaId: Guid.NewGuid(),
@@ -84,21 +86,22 @@ public class MediaServiceUploadTests
             contentType: contentType);
 
         Assert.NotNull(result);
-        Assert.StartsWith("workspaces/", result.StorageKey);
+        Assert.StartsWith("users/", result.StorageKey);
     }
 
     [Fact]
     public async Task GenerateUploadUrlAsync_Facebook_UsesMetaFacebookSegment()
     {
         var (svc, _) = Build();
+        var userId = Guid.NewGuid();
         var workspaceId = Guid.NewGuid();
         var mediaId = Guid.NewGuid();
 
         var result = await svc.GenerateUploadUrlAsync(
-            workspaceId, Platform.Facebook, mediaId, "photo.png", "image/png");
+            userId, workspaceId, Platform.Facebook, mediaId, "photo.png", "image/png");
 
-        // Final shape: workspaces/{ws}/providers/meta-facebook/media/{mediaId}/{safe}.png
-        Assert.StartsWith($"workspaces/{workspaceId:D}/providers/meta-facebook/media/{mediaId:D}/", result.StorageKey);
+        // Final shape: users/{userId}/workspaces/{ws}/providers/meta-facebook/media/{mediaId}/{safe}.png
+        Assert.StartsWith($"users/{userId:D}/workspaces/{workspaceId:D}/providers/meta-facebook/media/{mediaId:D}/", result.StorageKey);
         Assert.EndsWith(".png", result.StorageKey);
         // Old shape from the previous iteration must NOT survive.
         Assert.DoesNotContain("/connections/", result.StorageKey);
@@ -109,13 +112,14 @@ public class MediaServiceUploadTests
     public async Task GenerateUploadUrlAsync_Instagram_UsesMetaInstagramSegment()
     {
         var (svc, _) = Build();
+        var userId = Guid.NewGuid();
         var workspaceId = Guid.NewGuid();
         var mediaId = Guid.NewGuid();
 
         var result = await svc.GenerateUploadUrlAsync(
-            workspaceId, Platform.Instagram, mediaId, "video.mp4", "video/mp4");
+            userId, workspaceId, Platform.Instagram, mediaId, "video.mp4", "video/mp4");
 
-        Assert.StartsWith($"workspaces/{workspaceId:D}/providers/meta-instagram/media/{mediaId:D}/", result.StorageKey);
+        Assert.StartsWith($"users/{userId:D}/workspaces/{workspaceId:D}/providers/meta-instagram/media/{mediaId:D}/", result.StorageKey);
         Assert.EndsWith(".mp4", result.StorageKey);
         Assert.DoesNotContain("/connections/", result.StorageKey);
         Assert.DoesNotContain("/providers/unassigned/", result.StorageKey);
@@ -132,7 +136,7 @@ public class MediaServiceUploadTests
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             svc.GenerateUploadUrlAsync(
-                Guid.NewGuid(), platform, Guid.NewGuid(), "photo.png", "image/png"));
+                Guid.NewGuid(), Guid.NewGuid(), platform, Guid.NewGuid(), "photo.png", "image/png"));
     }
 
     [Fact]
@@ -142,22 +146,24 @@ public class MediaServiceUploadTests
         // "../../../etc/passwd.png", the resulting storage key must stay
         // contained in this workspace/platform/media folder.
         var (svc, _) = Build();
+        var userId = Guid.NewGuid();
         var workspaceId = Guid.NewGuid();
         var mediaId = Guid.NewGuid();
 
         var result = await svc.GenerateUploadUrlAsync(
-            workspaceId, Platform.Facebook, mediaId, "../../../etc/passwd.png", "image/png");
+            userId, workspaceId, Platform.Facebook, mediaId, "../../../etc/passwd.png", "image/png");
 
         Assert.StartsWith(
-            $"workspaces/{workspaceId:D}/providers/meta-facebook/media/{mediaId:D}/",
+            $"users/{userId:D}/workspaces/{workspaceId:D}/providers/meta-facebook/media/{mediaId:D}/",
             result.StorageKey);
         Assert.DoesNotContain("..", result.StorageKey);
         Assert.DoesNotContain("/etc/", result.StorageKey);
 
-        // Exactly 7 segments: workspaces, {ws}, providers, meta-facebook, media, {id}, file.
-        // Splitting on '/' gives 7 parts (no leading slash on storage keys).
+        // Exactly 9 segments: users, {userId}, workspaces, {ws}, providers,
+        // meta-facebook, media, {id}, file. Splitting on '/' gives 9 parts
+        // (no leading slash on storage keys).
         var parts = result.StorageKey.Split('/');
-        Assert.Equal(7, parts.Length);
+        Assert.Equal(9, parts.Length);
     }
 
     [Fact]
@@ -166,7 +172,7 @@ public class MediaServiceUploadTests
         var (svc, _) = Build();
 
         var result = await svc.GenerateUploadUrlAsync(
-            Guid.NewGuid(), Platform.Instagram, Guid.NewGuid(), "My Cool 📷 Photo.PNG", "image/png");
+            Guid.NewGuid(), Guid.NewGuid(), Platform.Instagram, Guid.NewGuid(), "My Cool 📷 Photo.PNG", "image/png");
 
         // Last segment is the sanitized filename + extension.
         var fileName = result.StorageKey.Split('/').Last();
@@ -179,7 +185,7 @@ public class MediaServiceUploadTests
         var (svc, _) = Build();
 
         var result = await svc.GenerateUploadUrlAsync(
-            Guid.NewGuid(), Platform.Facebook, Guid.NewGuid(), "photo-no-ext", "image/png");
+            Guid.NewGuid(), Guid.NewGuid(), Platform.Facebook, Guid.NewGuid(), "photo-no-ext", "image/png");
 
         Assert.EndsWith(".png", result.StorageKey);
     }
@@ -228,13 +234,15 @@ public class MediaServiceUploadTests
     }
 
     [Fact]
-    public void IsStorageKey_AcceptsBothLegacyAndWorkspaceScoped()
+    public void IsStorageKey_AcceptsLegacyWorkspaceAndUserScoped()
     {
         var (svc, _) = Build();
 
         Assert.True(svc.IsStorageKey("media/abc.png"));
         Assert.True(svc.IsStorageKey(
             $"workspaces/{Guid.NewGuid():D}/providers/meta-facebook/media/{Guid.NewGuid():D}/x.png"));
+        Assert.True(svc.IsStorageKey(
+            $"users/{Guid.NewGuid():D}/workspaces/{Guid.NewGuid():D}/providers/meta-facebook/media/{Guid.NewGuid():D}/x.png"));
 
         // External URLs and null/empty must NOT be storage keys (they go
         // straight to Meta as-is).

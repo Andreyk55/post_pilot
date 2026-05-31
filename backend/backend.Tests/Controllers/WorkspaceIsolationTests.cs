@@ -394,27 +394,74 @@ public class WorkspaceIsolationTests : IDisposable
         Assert.Equal(1, count);
     }
 
-    // ── CurrentWorkspaceProvider: self-heal stale membership ─────────────────
+    // ── CurrentWorkspaceProvider: NO silent fallback ─────────────────────────
+    //
+    // In the MVP a user can have multiple workspaces, each with its own connected
+    // provider account. Silently switching to another workspace could land media/
+    // posts/provider actions in the wrong account, so the resolver must refuse to
+    // guess and instead force an explicit (re)selection.
+
+    private CurrentWorkspaceProvider RealProviderFor(Guid userId)
+    {
+        var realUser = new Mock<ICurrentUserProvider>();
+        realUser.Setup(u => u.GetCurrentUserId()).Returns(userId);
+        return new CurrentWorkspaceProvider(
+            _db, realUser.Object, NullLogger<CurrentWorkspaceProvider>.Instance);
+    }
 
     [Fact]
-    public async Task CurrentWorkspaceProvider_repairs_stale_CurrentWorkspaceId()
+    public async Task CurrentWorkspaceProvider_resolves_the_selected_workspace()
     {
-        // Make User A's CurrentWorkspaceId point at Workspace B, where A is NOT a member.
+        // Happy path: A's selection points at A's workspace.
+        var info = await RealProviderFor(UserAId).GetCurrentWorkspaceAsync();
+        Assert.Equal(WorkspaceAId, info.WorkspaceId);
+    }
+
+    [Fact]
+    public async Task CurrentWorkspaceProvider_does_not_fallback_when_membership_is_stale()
+    {
+        // A's CurrentWorkspaceId points at Workspace B, where A is NOT a member.
         var userA = _db.AppUsers.Single(u => u.Id == UserAId);
         userA.CurrentWorkspaceId = WorkspaceBId;
         _db.SaveChanges();
 
-        // Use the real provider here, not the mock — we're testing the provider itself.
-        var realUser = new Mock<ICurrentUserProvider>();
-        realUser.Setup(u => u.GetCurrentUserId()).Returns(UserAId);
+        var provider = RealProviderFor(UserAId);
 
-        var provider = new CurrentWorkspaceProvider(
-            _db, realUser.Object, NullLogger<CurrentWorkspaceProvider>.Instance);
+        // Must throw access-denied (403) — NOT silently fall back to Workspace A.
+        await Assert.ThrowsAsync<WorkspaceAccessDeniedException>(
+            () => provider.GetCurrentWorkspaceAsync());
 
-        var info = await provider.GetCurrentWorkspaceAsync();
+        // And it must NOT have rewritten the selection to some other workspace.
+        Assert.Equal(WorkspaceBId, _db.AppUsers.Single(u => u.Id == UserAId).CurrentWorkspaceId);
+    }
 
-        Assert.Equal(WorkspaceAId, info.WorkspaceId);
-        Assert.Equal(WorkspaceAId, _db.AppUsers.Single(u => u.Id == UserAId).CurrentWorkspaceId);
+    [Fact]
+    public async Task CurrentWorkspaceProvider_throws_NotSelected_when_CurrentWorkspaceId_is_null()
+    {
+        var userA = _db.AppUsers.Single(u => u.Id == UserAId);
+        userA.CurrentWorkspaceId = null;
+        _db.SaveChanges();
+
+        await Assert.ThrowsAsync<WorkspaceNotSelectedException>(
+            () => RealProviderFor(UserAId).GetCurrentWorkspaceAsync());
+
+        // Still null — no auto-selection happened even though A has a membership.
+        Assert.Null(_db.AppUsers.Single(u => u.Id == UserAId).CurrentWorkspaceId);
+    }
+
+    [Fact]
+    public async Task CurrentWorkspaceProvider_throws_NotSelected_when_workspace_was_deleted()
+    {
+        // Point A at a workspace id that does not exist (deleted out from under them).
+        var ghost = Guid.NewGuid();
+        var userA = _db.AppUsers.Single(u => u.Id == UserAId);
+        userA.CurrentWorkspaceId = ghost;
+        _db.SaveChanges();
+
+        await Assert.ThrowsAsync<WorkspaceNotSelectedException>(
+            () => RealProviderFor(UserAId).GetCurrentWorkspaceAsync());
+
+        Assert.Equal(ghost, _db.AppUsers.Single(u => u.Id == UserAId).CurrentWorkspaceId);
     }
 
     // ── Voice profiles ───────────────────────────────────────────────────────
@@ -549,6 +596,143 @@ public class WorkspaceIsolationTests : IDisposable
         Assert.False(removed);
     }
 
+    // ── Media upload init routes to the SELECTED workspace ─────────────────────
+    //
+    // A user with two workspaces (each potentially a different connected account)
+    // must have uploads land in whichever workspace is currently selected — never a
+    // different one. These wire the REAL CurrentWorkspaceProvider + real MediaService
+    // so the storage key is driven end-to-end by the selection, not a mock.
+
+    /// <summary>Grants <paramref name="userId"/> membership in <paramref name="workspaceId"/>.</summary>
+    private void AddMembership(Guid userId, Guid workspaceId)
+    {
+        _db.WorkspaceMembers.Add(new WorkspaceMember
+        {
+            Id = Guid.NewGuid(),
+            WorkspaceId = workspaceId,
+            UserId = userId,
+            Role = WorkspaceRole.Member,
+            CreatedAt = DateTime.UtcNow,
+        });
+        _db.SaveChanges();
+    }
+
+    /// <summary>
+    /// Builds a MediaController backed by the REAL workspace provider for <paramref name="userId"/>
+    /// and a real MediaService whose storage keys embed the resolved workspace id.
+    /// </summary>
+    private MediaController NewRealMediaControllerFor(Guid userId)
+    {
+        var fakeStorage = new FakeStorage();
+        var storageOpts = new PostPilot.Api.Settings.MediaStorageOptions { Provider = "local-disk" };
+        var mediaService = new PostPilot.Api.Services.Media.MediaService(
+            storage: fakeStorage,
+            storageOpts: storageOpts,
+            runMode: AppRunMode.Server,
+            logger: NullLogger<PostPilot.Api.Services.Media.MediaService>.Instance,
+            uploadUrlExpiration: TimeSpan.FromMinutes(15),
+            maxImageFileSizeBytes: 20 * 1024 * 1024,
+            maxVideoFileSizeBytes: 200 * 1024 * 1024,
+            publishingBaseUrl: "https://example.test");
+
+        var uploadSvc = new PostPilot.Api.Services.Media.MediaUploadService(
+            _db, mediaService, storageOpts,
+            NullLogger<PostPilot.Api.Services.Media.MediaUploadService>.Instance);
+
+        var realUser = new Mock<ICurrentUserProvider>();
+        realUser.Setup(u => u.GetCurrentUserId()).Returns(userId);
+        var realWorkspace = new CurrentWorkspaceProvider(
+            _db, realUser.Object, NullLogger<CurrentWorkspaceProvider>.Instance);
+
+        return new MediaController(
+            mediaService,
+            uploadSvc,
+            new Mock<PostPilot.Api.Services.Validation.IMediaValidationService>().Object,
+            realWorkspace,
+            _db,
+            NullLogger<MediaController>.Instance);
+    }
+
+    private void SelectWorkspace(Guid userId, Guid workspaceId)
+    {
+        var u = _db.AppUsers.Single(x => x.Id == userId);
+        u.CurrentWorkspaceId = workspaceId;
+        _db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task InitUpload_with_WorkspaceA_selected_puts_WorkspaceA_in_the_key()
+    {
+        // User A is a member of BOTH workspaces; A is the selected one.
+        AddMembership(UserAId, WorkspaceBId);
+        SelectWorkspace(UserAId, WorkspaceAId);
+
+        var result = await NewRealMediaControllerFor(UserAId).InitUpload(
+            new InitUploadRequest("photo.png", "image/png", 100, Platform.Facebook),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var resp = Assert.IsType<InitUploadResponse>(ok.Value);
+        Assert.Contains($"/workspaces/{WorkspaceAId:D}/", resp.StorageKey);
+        Assert.DoesNotContain($"/workspaces/{WorkspaceBId:D}/", resp.StorageKey);
+
+        // The persisted Media row is in the selected workspace, not the other one.
+        var row = await _db.Media.SingleAsync(m => m.Id == resp.MediaId);
+        Assert.Equal(WorkspaceAId, row.WorkspaceId);
+    }
+
+    [Fact]
+    public async Task InitUpload_with_WorkspaceB_selected_puts_WorkspaceB_in_the_key()
+    {
+        // Same user, now switched to Workspace B — the key must follow the selection.
+        AddMembership(UserAId, WorkspaceBId);
+        SelectWorkspace(UserAId, WorkspaceBId);
+
+        var result = await NewRealMediaControllerFor(UserAId).InitUpload(
+            new InitUploadRequest("photo.png", "image/png", 100, Platform.Facebook),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var resp = Assert.IsType<InitUploadResponse>(ok.Value);
+        Assert.Contains($"/workspaces/{WorkspaceBId:D}/", resp.StorageKey);
+        Assert.DoesNotContain($"/workspaces/{WorkspaceAId:D}/", resp.StorageKey);
+
+        var row = await _db.Media.SingleAsync(m => m.Id == resp.MediaId);
+        Assert.Equal(WorkspaceBId, row.WorkspaceId);
+    }
+
+    [Fact]
+    public async Task InitUpload_does_not_fallback_and_throws_when_selection_is_stale()
+    {
+        // A is selected into Workspace B but is NOT a member of B. The resolver must
+        // throw access-denied — NOT silently create the upload under Workspace A.
+        SelectWorkspace(UserAId, WorkspaceBId);
+
+        await Assert.ThrowsAsync<WorkspaceAccessDeniedException>(() =>
+            NewRealMediaControllerFor(UserAId).InitUpload(
+                new InitUploadRequest("photo.png", "image/png", 100, Platform.Facebook),
+                CancellationToken.None));
+
+        // Critically: no Media row was created under ANY workspace.
+        Assert.False(await _db.Media.AnyAsync());
+    }
+
+    private sealed class FakeStorage : PostPilot.Api.Services.Media.IMediaStorageProvider
+    {
+        public Task<string> CreateUploadUrlAsync(string storageKey, string contentType, TimeSpan expires, CancellationToken ct = default)
+            => Task.FromResult("https://upload.test/" + storageKey);
+        public Task<string> CreateDownloadUrlAsync(string storageKey, TimeSpan expires, CancellationToken ct = default)
+            => Task.FromResult("https://download.test/" + storageKey);
+        public Task<Stream?> OpenReadAsync(string storageKey, CancellationToken ct = default) => Task.FromResult<Stream?>(null);
+        public Task DeleteAsync(string storageKey, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<string?> GetLocalFilePathAsync(string storageKey, CancellationToken ct = default) => Task.FromResult<string?>(null);
+        public Task SaveAsync(string storageKey, Stream content, CancellationToken ct = default) => Task.CompletedTask;
+        public bool Exists(string storageKey) => false;
+        public Task<bool> ObjectExistsAsync(string storageKey, CancellationToken ct = default) => Task.FromResult(false);
+        public Task<PostPilot.Api.Services.Media.StoredObjectInfo?> GetObjectInfoAsync(string storageKey, CancellationToken ct = default)
+            => Task.FromResult<PostPilot.Api.Services.Media.StoredObjectInfo?>(null);
+    }
+
     // ── Group 1: Meta controller passes ONLY current workspace id to the service ─
     //
     // These tests pin the contract that MetaController gets its workspace id from
@@ -560,6 +744,50 @@ public class WorkspaceIsolationTests : IDisposable
         _userMock.Object,
         _workspaceMock.Object,
         NullLogger<MetaController>.Instance);
+
+    /// <summary>MetaController wired to the REAL workspace provider for <paramref name="userId"/>.</summary>
+    private MetaController NewRealMetaControllerFor(Guid userId, Mock<PostPilot.Api.Services.IMetaOAuthService> svc)
+    {
+        var realUser = new Mock<ICurrentUserProvider>();
+        realUser.Setup(u => u.GetCurrentUserId()).Returns(userId);
+        var realWorkspace = new CurrentWorkspaceProvider(
+            _db, realUser.Object, NullLogger<CurrentWorkspaceProvider>.Instance);
+        return new MetaController(
+            svc.Object, realUser.Object, realWorkspace, NullLogger<MetaController>.Instance);
+    }
+
+    [Fact]
+    public async Task Provider_GetConnection_does_not_fallback_and_surfaces_403_for_unauthorized_workspace()
+    {
+        // A is selected into Workspace B but is NOT a member. The broad catch in the
+        // controller must NOT flatten this into a 500 or run against another workspace —
+        // the access-denied exception propagates (middleware maps it to 403). Strict
+        // mock guarantees the service is never invoked with ANY workspace.
+        SelectWorkspace(UserAId, WorkspaceBId);
+        var svc = new Mock<PostPilot.Api.Services.IMetaOAuthService>(MockBehavior.Strict);
+
+        await Assert.ThrowsAsync<WorkspaceAccessDeniedException>(
+            () => NewRealMetaControllerFor(UserAId, svc).GetConnection());
+    }
+
+    [Fact]
+    public async Task Provider_Disconnect_does_not_fallback_and_surfaces_409_for_missing_selection()
+    {
+        // No workspace selected -> 409 (not-selected), and the service is never called,
+        // so a disconnect can never hit the wrong account.
+        SelectWorkspace_ToNull(UserAId);
+        var svc = new Mock<PostPilot.Api.Services.IMetaOAuthService>(MockBehavior.Strict);
+
+        await Assert.ThrowsAsync<WorkspaceNotSelectedException>(
+            () => NewRealMetaControllerFor(UserAId, svc).Disconnect());
+    }
+
+    private void SelectWorkspace_ToNull(Guid userId)
+    {
+        var u = _db.AppUsers.Single(x => x.Id == userId);
+        u.CurrentWorkspaceId = null;
+        _db.SaveChanges();
+    }
 
     [Fact]
     public async Task GetConnection_passes_only_current_workspace_to_service()

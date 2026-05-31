@@ -1,0 +1,223 @@
+.ws-select-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  animation: ws-fadeIn 0.15s ease-out;
+}
+
+@keyframes ws-fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.ws-select-modal {
+  background: #1a1a2e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 460px;
+  margin: 1rem;
+  padding: 1.5rem;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: ws-slideUp 0.2s ease-out;
+}
+
+@keyframes ws-slideUp {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.ws-select-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ws-select-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: white;
+}
+
+.ws-select-close {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+}
+
+.ws-select-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.ws-select-notice {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fcd34d;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.ws-select-subtitle {
+  margin: 0.75rem 0 1rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.ws-select-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.ws-select-loading,
+.ws-select-empty {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.875rem;
+  padding: 0.5rem 0;
+}
+
+.ws-select-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: white;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+}
+
+.ws-select-item:hover:not(:disabled):not(.is-current) {
+  background: rgba(102, 126, 234, 0.15);
+  border-color: rgba(102, 126, 234, 0.4);
+}
+
+.ws-select-item.is-current {
+  border-color: rgba(102, 126, 234, 0.5);
+  cursor: default;
+}
+
+.ws-select-item:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ws-select-item-name {
+  flex: 1;
+  font-weight: 500;
+}
+
+.ws-select-item-role {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.45);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ws-select-item-current {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #a5b4fc;
+  background: rgba(102, 126, 234, 0.2);
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+}
+
+.ws-select-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 1rem 0;
+}
+
+.ws-select-create-btn {
+  width: 100%;
+  padding: 0.75rem;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  color: white;
+  font-weight: 500;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.ws-select-create-btn:hover:not(:disabled) {
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.ws-select-create-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ws-select-create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ws-select-create-input {
+  padding: 0.625rem 0.75rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: white;
+  font-size: 0.875rem;
+}
+
+.ws-select-create-input:focus {
+  outline: none;
+  border-color: rgba(102, 126, 234, 0.6);
+}
+
+.ws-select-create-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.ws-select-create-actions button {
+  flex: 1;
+  padding: 0.5rem;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+}
+
+.ws-select-create-actions button[type='submit'] {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+}
+
+.ws-select-create-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ws-select-error {
+  margin-top: 0.75rem;
+  color: #fca5a5;
+  font-size: 0.8125rem;
+}

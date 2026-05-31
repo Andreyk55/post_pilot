@@ -69,7 +69,7 @@ public class MediaUploadServiceAuthorizationTests
             WorkspaceId = workspaceA,
             StorageProvider = "supabase",
             Bucket = "postpilot-media",
-            StorageKey = $"workspaces/{workspaceA:D}/providers/meta-facebook/media/{mediaId:D}/photo.png",
+            StorageKey = $"users/{Guid.NewGuid():D}/workspaces/{workspaceA:D}/providers/meta-facebook/media/{mediaId:D}/photo.png",
             OriginalFileName = "photo.png",
             ContentType = "image/png",
             Status = MediaUploadStatus.Uploaded,
@@ -101,6 +101,7 @@ public class MediaUploadServiceAuthorizationTests
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             svc.InitAsync(
+                userId: Guid.NewGuid(),
                 workspaceId: Guid.NewGuid(),
                 fileName: "huge.png",
                 contentType: "image/png",
@@ -117,6 +118,7 @@ public class MediaUploadServiceAuthorizationTests
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             svc.InitAsync(
+                userId: Guid.NewGuid(),
                 workspaceId: Guid.NewGuid(),
                 fileName: "doc.pdf",
                 contentType: "application/pdf",
@@ -133,6 +135,7 @@ public class MediaUploadServiceAuthorizationTests
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             svc.InitAsync(
+                userId: Guid.NewGuid(),
                 workspaceId: Guid.NewGuid(),
                 fileName: "photo.png",
                 contentType: "image/png",
@@ -149,16 +152,17 @@ public class MediaUploadServiceAuthorizationTests
         var db = NewDb();
         var media = NewMediaService(new RecordingStorage());
         var svc = new MediaUploadService(db, media, Opts(), NullLogger<MediaUploadService>.Instance);
+        var userId = Guid.NewGuid();
         var workspaceId = Guid.NewGuid();
 
         // Frontend hands us a traversal-style name AND tries to push a different
         // "platform" by spelling. The backend ignores anything except the typed
         // Platform enum value and the sanitized file name.
         var result = await svc.InitAsync(
-            workspaceId, "../../../etc/passwd.png", "image/png", 100, Platform.Facebook);
+            userId, workspaceId, "../../../etc/passwd.png", "image/png", 100, Platform.Facebook);
 
         Assert.StartsWith(
-            $"workspaces/{workspaceId:D}/providers/meta-facebook/media/{result.MediaId:D}/",
+            $"users/{userId:D}/workspaces/{workspaceId:D}/providers/meta-facebook/media/{result.MediaId:D}/",
             result.StorageKey);
         Assert.DoesNotContain("..", result.StorageKey);
         Assert.DoesNotContain("/etc/", result.StorageKey);
@@ -180,13 +184,14 @@ public class MediaUploadServiceAuthorizationTests
         var db = NewDb();
         var media = NewMediaService(new RecordingStorage());
         var svc = new MediaUploadService(db, media, Opts(), NullLogger<MediaUploadService>.Instance);
+        var userId = Guid.NewGuid();
         var workspaceId = Guid.NewGuid();
 
         var result = await svc.InitAsync(
-            workspaceId, "reel.mp4", "video/mp4", 100, Platform.Instagram);
+            userId, workspaceId, "reel.mp4", "video/mp4", 100, Platform.Instagram);
 
         Assert.StartsWith(
-            $"workspaces/{workspaceId:D}/providers/meta-instagram/media/{result.MediaId:D}/",
+            $"users/{userId:D}/workspaces/{workspaceId:D}/providers/meta-instagram/media/{result.MediaId:D}/",
             result.StorageKey);
         Assert.EndsWith(".mp4", result.StorageKey);
     }

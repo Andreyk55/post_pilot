@@ -32,9 +32,12 @@ public class MetaController : ControllerBase
     [HttpPost("oauth/start")]
     public async Task<ActionResult<MetaOAuthStartResponse>> StartOAuth()
     {
+        // Resolve the workspace OUTSIDE the try so workspace-resolution failures
+        // (stale/missing → 409, unauthorized → 403) propagate to the global
+        // middleware instead of being flattened into a 500 by the catch below.
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
         try
         {
-            var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
             var result = await _metaOAuthService.StartOAuthAsync(workspaceId);
             return Ok(result);
         }
@@ -103,9 +106,9 @@ public class MetaController : ControllerBase
     [HttpPost("instagram/discover")]
     public async Task<ActionResult<MetaDiscoverInstagramResponse>> DiscoverInstagram([FromBody] MetaDiscoverInstagramRequest request)
     {
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
         try
         {
-            var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
             var result = await _metaOAuthService.DiscoverInstagramAccountsAsync(request.TempToken, request.PageIds, workspaceId);
             return Ok(result);
         }
@@ -160,9 +163,9 @@ public class MetaController : ControllerBase
     [HttpGet("connection")]
     public async Task<ActionResult<MetaConnectionResponse>> GetConnection()
     {
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
         try
         {
-            var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
             var result = await _metaOAuthService.GetConnectionAsync(workspaceId);
             return Ok(result);
         }
@@ -176,9 +179,9 @@ public class MetaController : ControllerBase
     [HttpGet("pages")]
     public async Task<ActionResult<MetaAvailablePagesResponse>> GetAvailablePages()
     {
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
         try
         {
-            var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
             var result = await _metaOAuthService.GetAvailablePagesAsync(workspaceId);
             return Ok(result);
         }
@@ -197,9 +200,9 @@ public class MetaController : ControllerBase
     [HttpPut("connection")]
     public async Task<ActionResult<MetaSaveConnectionResponse>> UpdateConnection([FromBody] MetaUpdatePagesRequest request)
     {
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
         try
         {
-            var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
             var result = await _metaOAuthService.UpdateConnectionAsync(
                 workspaceId,
                 request.SelectedPageIds,
@@ -222,9 +225,9 @@ public class MetaController : ControllerBase
     [HttpDelete("connection")]
     public async Task<IActionResult> Disconnect()
     {
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
         try
         {
-            var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
             await _metaOAuthService.DisconnectAsync(workspaceId);
             return NoContent();
         }
@@ -238,9 +241,9 @@ public class MetaController : ControllerBase
     [HttpGet("instagram/eligibility")]
     public async Task<ActionResult<InstagramDiscoveryResponse>> GetInstagramEligibility()
     {
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
         try
         {
-            var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
             var result = await _metaOAuthService.DiscoverInstagramEligibilityAsync(workspaceId);
             return Ok(result);
         }
@@ -259,9 +262,9 @@ public class MetaController : ControllerBase
     [HttpGet("instagram/debug")]
     public async Task<ActionResult<object>> DebugInstagramDiscovery()
     {
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
         try
         {
-            var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
             var result = await _metaOAuthService.DebugInstagramDiscoveryAsync(workspaceId);
             return Ok(result);
         }

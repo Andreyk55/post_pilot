@@ -5,6 +5,12 @@ interface AuthContextValue {
   user: AuthUser | null
   isLoading: boolean
   isAuthenticated: boolean
+  /**
+   * True only when the user is authenticated AND has a valid selected workspace.
+   * Workspace-scoped actions (posting, uploading, provider connection) must be
+   * blocked unless this is true.
+   */
+  hasWorkspace: boolean
   /** Re-fetches /api/auth/me; call after the OAuth round-trip lands on /auth/callback. */
   refreshUser: () => Promise<AuthUser | null>
   /** Clears the session cookie and resets local auth state. */
@@ -53,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       isLoading,
       isAuthenticated: user !== null,
+      hasWorkspace: user !== null && user.currentWorkspaceId !== null,
       refreshUser,
       logout,
     }),

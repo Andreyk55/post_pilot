@@ -85,6 +85,7 @@ public class MediaService : IMediaService
     }
 
     public async Task<UploadUrlResult> GenerateUploadUrlAsync(
+        Guid userId,
         Guid workspaceId,
         Platform platform,
         Guid mediaId,
@@ -101,16 +102,20 @@ public class MediaService : IMediaService
         var extension = ExtensionFor(fileName, contentType, mediaType);
         var safeName = SanitizeFileName(fileName, extension);
 
-        // Workspace + platform scoped, server-chosen path. MVP assumption: each media
-        // upload belongs to one platform only — no cross-posting yet, so the path can
-        // carry a single deterministic platform segment.
-        var key = $"workspaces/{workspaceId:D}/providers/{providerPlatform}/media/{mediaId:D}/{safeName}";
+        // User + workspace + platform scoped, server-chosen path. The leading
+        // users/{userId} segment is the authenticated PostPilot app user id (never an
+        // email, Meta account id, page id, or provider user id). The caller is
+        // responsible for verifying that this user has access to the workspace before
+        // we mint an upload URL. MVP assumption: each media upload belongs to one
+        // platform only — no cross-posting yet, so the path can carry a single
+        // deterministic platform segment.
+        var key = $"users/{userId:D}/workspaces/{workspaceId:D}/providers/{providerPlatform}/media/{mediaId:D}/{safeName}";
 
         var uploadUrl = await _storage.CreateUploadUrlAsync(key, contentType, _uploadUrlExpiration, cancellationToken);
 
         _logger.LogInformation(
-            "Generated workspace-scoped upload URL for {MediaType} mediaId={MediaId} workspace={WorkspaceId} platform={Platform} key={Key} (mode={RunMode})",
-            mediaType, mediaId, workspaceId, providerPlatform, key, _runMode);
+            "Generated user/workspace-scoped upload URL for {MediaType} mediaId={MediaId} user={UserId} workspace={WorkspaceId} platform={Platform} key={Key} (mode={RunMode})",
+            mediaType, mediaId, userId, workspaceId, providerPlatform, key, _runMode);
 
         return new UploadUrlResult(uploadUrl, key, mediaType);
     }
@@ -183,10 +188,12 @@ public class MediaService : IMediaService
         if (string.IsNullOrEmpty(mediaUrl)) return false;
         if (mediaUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return false;
 
-        // Accept both the legacy "media/{guid}.{ext}" shape and the new
-        // "workspaces/{ws}/media/{id}/{name}" shape.
+        // Accept the legacy "media/{guid}.{ext}" shape, the workspace-scoped
+        // "workspaces/{ws}/..." shape, and the new user-scoped
+        // "users/{userId}/workspaces/{ws}/..." shape.
         return mediaUrl.StartsWith("media/", StringComparison.OrdinalIgnoreCase)
-            || mediaUrl.StartsWith("workspaces/", StringComparison.OrdinalIgnoreCase);
+            || mediaUrl.StartsWith("workspaces/", StringComparison.OrdinalIgnoreCase)
+            || mediaUrl.StartsWith("users/", StringComparison.OrdinalIgnoreCase);
     }
 
     public bool IsValidImageType(string contentType) => _allowedImageTypes.Contains(contentType);

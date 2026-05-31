@@ -142,16 +142,29 @@ public class AuthController : ControllerBase
             return Unauthorized();
         }
 
-        CurrentWorkspaceInfo info;
+        // /me intentionally tolerates an unresolved workspace: it's the endpoint the
+        // frontend uses to discover whether a workspace is selected. We report the user
+        // with a null currentWorkspaceId rather than failing the whole call or — as the
+        // old code did — silently auto-selecting one. Workspace-scoped endpoints still
+        // hard-fail (409/403) via the resolver; only this discovery endpoint is lenient.
+        CurrentWorkspaceInfo? info = null;
         try
         {
             info = await _currentWorkspace.GetCurrentWorkspaceAsync();
         }
         catch (UnauthorizedAccessException)
         {
-            // User has no workspace memberships — this shouldn't happen post-provisioning
-            // but keep the failure mode explicit rather than crashing.
+            // No authenticated user / user row gone — force re-login.
             return Unauthorized();
+        }
+        catch (WorkspaceNotSelectedException)
+        {
+            // No valid selected workspace yet; surface null so the client can prompt.
+        }
+        catch (WorkspaceAccessDeniedException)
+        {
+            // Selected workspace exists but the user lost access; surface null so the
+            // client can re-select rather than operating in the wrong account.
         }
 
         return Ok(new
@@ -160,8 +173,8 @@ public class AuthController : ControllerBase
             email = user.Email,
             displayName = user.DisplayName,
             avatarUrl = user.AvatarUrl,
-            currentWorkspaceId = info.WorkspaceId,
-            workspaceName = info.WorkspaceName,
+            currentWorkspaceId = info?.WorkspaceId,
+            workspaceName = info?.WorkspaceName,
         });
     }
 

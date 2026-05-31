@@ -13,6 +13,7 @@ import { PasswordGate } from './components/PasswordGate'
 import { LoginScreen } from './components/LoginScreen'
 import { AuthProvider, useAuth } from './hooks/useAuth'
 import { WorkspacesProvider } from './hooks/useWorkspaces'
+import { WorkspaceGuard } from './components/WorkspaceGuard'
 import './App.css'
 
 function MainApp() {
@@ -45,6 +46,9 @@ function MainApp() {
       <main className="main-content">
         {renderPage()}
       </main>
+      {/* App-wide handler for strict workspace resolution (blocks actions when no
+          workspace is selected; reacts to 409/403 from workspace-scoped calls). */}
+      <WorkspaceGuard />
     </div>
   )
 }

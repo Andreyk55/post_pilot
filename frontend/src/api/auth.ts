@@ -7,8 +7,14 @@ export interface AuthUser {
   email: string
   displayName: string
   avatarUrl: string | null
-  currentWorkspaceId: string
-  workspaceName: string
+  /**
+   * Null when the user has no valid selected workspace (none chosen, or the
+   * selected one was deleted / access revoked). The backend deliberately does
+   * NOT auto-pick one, so the UI must block workspace-scoped actions and prompt
+   * the user to select/create a workspace.
+   */
+  currentWorkspaceId: string | null
+  workspaceName: string | null
 }
 
 export const authApi = {

@@ -212,6 +212,10 @@ public class Startup
 
         // Correlation ID middleware: must run before routing so all logs include the id
         app.UseMiddleware<CorrelationIdMiddleware>();
+        // Maps workspace-resolution failures (stale/missing/unauthorized current
+        // workspace) to explicit 409/403 responses. Wraps the rest of the pipeline so
+        // it catches exceptions thrown from controllers/endpoints.
+        app.UseMiddleware<WorkspaceResolutionExceptionMiddleware>();
         app.UseCors("AllowFrontend");
         // Private-access gate. Runs after CORS so preflight responses still
         // carry the right headers; runs before routing/auth so blocked

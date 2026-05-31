@@ -19,6 +19,8 @@ import {
 } from '../constants/validationLimits'
 import { MAX_PLATFORMS_PER_POST } from '../constants/features'
 import { useComposerEnabled } from '../hooks/useComposerEnabled'
+import { useAuth } from '../hooks/useAuth'
+import { WorkspaceContextBadge } from './WorkspaceContextBadge'
 import './SchedulePost.css'
 
 interface SchedulePostProps {
@@ -79,6 +81,7 @@ function getAiPlatform(platformIds: string[]): AiPlatform | null {
 }
 
 export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceProfileModalOpen, onNavigate }: SchedulePostProps) {
+  const { hasWorkspace } = useAuth()
   const [content, setContent] = useState('')
   const [postType, setPostType] = useState<PostType>('Feed')
   const [scheduledDate, setScheduledDate] = useState('')
@@ -230,6 +233,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
 
   // Determine if composer should be enabled based on platform and connection state
   const composerState = useComposerEnabled({
+    hasWorkspace,
     selectedPlatforms,
     connectedPages,
     isAccountConnected,
@@ -320,6 +324,10 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Defense-in-depth: never schedule without a selected workspace, even if the
+    // button somehow fired. The WorkspaceGuard modal handles the user-facing flow.
+    if (!hasWorkspace) return
 
     const hasCarousel = !isStory && (isInstagramSelected || isFacebookSelected) && carouselItems.length >= 2
     const hasMedia = mediaUrl || hasCarousel
@@ -567,7 +575,11 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
 
   return (
     <div className={`schedule-post ${!isComposerEnabled ? 'composer-disabled' : ''}`}>
-      <h2>Schedule a Post</h2>
+      <div className="schedule-post__header">
+        <h2>Schedule a Post</h2>
+        {/* Make it unambiguous which workspace/account this post will go to. */}
+        <WorkspaceContextBadge action="Posting to" />
+      </div>
 
       {/* Disabled Composer Banner */}
       {!isComposerEnabled && disabledMessage && (
@@ -998,7 +1010,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
           <button
             type="submit"
             className="submit-btn"
-            disabled={!isFormValid}
+            disabled={!isComposerEnabled || !isFormValid}
           >
             {isStory ? 'Schedule Story' : 'Schedule Post'}
           </button>
@@ -1006,7 +1018,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
             <button
               type="button"
               className="publish-now-btn"
-              disabled={!isPublishNowValid || isPublishingNow}
+              disabled={!isComposerEnabled || !isPublishNowValid || isPublishingNow}
               onClick={handlePublishNow}
             >
               {isPublishingNow ? 'Publishing…' : (isStory ? 'Publish Story Now' : 'Publish Now')}

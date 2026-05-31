@@ -37,11 +37,20 @@ the GitHub Actions environment) and verify it does not appear in any
 The backend (never the frontend) builds object keys in this shape:
 
 ```
-workspaces/{workspaceId}/providers/{providerPlatform}/media/{mediaId}/{safeFileName}
+users/{userId}/workspaces/{workspaceId}/providers/{providerPlatform}/media/{mediaId}/{safeFileName}
 ```
+
+`{userId}` is the authenticated PostPilot app user id (never an email, display
+name, Meta account id, Facebook page id, or provider user id). Before minting an
+upload/read signed URL the backend verifies the authenticated user has access to
+`{workspaceId}` (membership re-checked in the DB), and the resolved user id — not
+anything the client supplies — is what fills the `users/{userId}` segment.
 
 MVP rule: each upload belongs to one publishing platform only — no cross-posting
 yet, so the path carries a single deterministic platform segment.
+
+Existing media uploaded under the older `workspaces/{workspaceId}/…` layout is
+not migrated; only new uploads use the `users/{userId}/…` prefix.
 
 `providerPlatform` allow-list (mapped server-side from the typed `Platform` enum
 the client sends in the init request):

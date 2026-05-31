@@ -10,6 +10,12 @@ interface WorkspacesContextValue {
   /** Switches and refreshes auth so the rest of the app sees the new workspace. */
   switchTo: (workspaceId: string) => Promise<void>
   create: (name: string) => Promise<WorkspaceSummary>
+  /** Whether the workspace selector modal is currently open. */
+  selectorOpen: boolean
+  /** Opens the workspace selector modal (e.g. after a WORKSPACE_NOT_SELECTED error). */
+  openSelector: () => void
+  /** Closes the workspace selector modal. */
+  closeSelector: () => void
 }
 
 const WorkspacesContext = createContext<WorkspacesContextValue | undefined>(undefined)
@@ -19,6 +25,10 @@ export function WorkspacesProvider({ children }: { children: ReactNode }) {
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [selectorOpen, setSelectorOpen] = useState(false)
+
+  const openSelector = useCallback(() => setSelectorOpen(true), [])
+  const closeSelector = useCallback(() => setSelectorOpen(false), [])
 
   const refresh = useCallback(async () => {
     if (!isAuthenticated) {
@@ -77,7 +87,10 @@ export function WorkspacesProvider({ children }: { children: ReactNode }) {
     refresh,
     switchTo,
     create,
-  }), [workspaces, isLoading, error, refresh, switchTo, create])
+    selectorOpen,
+    openSelector,
+    closeSelector,
+  }), [workspaces, isLoading, error, refresh, switchTo, create, selectorOpen, openSelector, closeSelector])
 
   return <WorkspacesContext.Provider value={value}>{children}</WorkspacesContext.Provider>
 }

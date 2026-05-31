@@ -25,14 +25,20 @@ public interface IMediaService
     Task<UploadUrlResult> GenerateUploadUrlAsync(string fileName, string contentType);
 
     /// <summary>
-    /// Workspace + platform scoped variant. Generates a storage key that embeds the
-    /// workspace, the target publishing platform, and the media id, so storage layout
-    /// alone enforces tenant separation and per-platform partitioning. Frontend never
-    /// picks the key — it provides the original file name and content type plus the
-    /// selected <see cref="Platform"/>; the backend composes the final path.
+    /// User + workspace + platform scoped variant. Generates a storage key that embeds
+    /// the authenticated user, the workspace, the target publishing platform, and the
+    /// media id, so storage layout alone enforces tenant separation and per-platform
+    /// partitioning. Frontend never picks the key — it provides the original file name
+    /// and content type plus the selected <see cref="Platform"/>; the backend composes
+    /// the final path, including the user and workspace segments.
+    ///
+    /// <para><paramref name="userId"/> MUST be the authenticated PostPilot app user id
+    /// (never an email, display name, Meta account id, Facebook page id, or provider
+    /// user id). The caller MUST verify this user has access to <paramref name="workspaceId"/>
+    /// before calling this method.</para>
     ///
     /// <para>Final key shape:
-    /// <c>workspaces/{workspaceId}/providers/{providerPlatform}/media/{mediaId}/{safeFileName}</c>
+    /// <c>users/{userId}/workspaces/{workspaceId}/providers/{providerPlatform}/media/{mediaId}/{safeFileName}</c>
     /// </para>
     ///
     /// <para>
@@ -43,6 +49,7 @@ public interface IMediaService
     /// </para>
     /// </summary>
     Task<UploadUrlResult> GenerateUploadUrlAsync(
+        Guid userId,
         Guid workspaceId,
         Platform platform,
         Guid mediaId,
