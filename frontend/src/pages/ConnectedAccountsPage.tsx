@@ -80,6 +80,13 @@ export function ConnectedAccountsPage() {
   const [showDisconnectDialog, setShowDisconnectDialog] = useState(false)
   const [showToast, setShowToast] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success')
+
+  const showErrorToast = (message: string) => {
+    setToastMessage(message)
+    setToastType('error')
+    setShowToast(true)
+  }
 
   // Load Meta connection status on mount
   useEffect(() => {
@@ -104,9 +111,9 @@ export function ConnectedAccountsPage() {
         const status = event.data?.status as number | undefined
         const message = event.data?.message as string | undefined
         if (status === 409 && message) {
-          alert(message)
+          showErrorToast(message)
         } else {
-          alert('Failed to connect to Meta. Please try again.')
+          showErrorToast('Failed to connect to Meta. Please try again.')
         }
       }
     }
@@ -187,7 +194,7 @@ export function ConnectedAccountsPage() {
     } catch (err) {
       console.error('Failed to start Meta OAuth:', err)
       setConnecting(null)
-      alert('Failed to start Meta connection. Please try again.')
+      showErrorToast('Failed to start Meta connection. Please try again.')
     }
   }
 
@@ -202,10 +209,11 @@ export function ConnectedAccountsPage() {
       setMetaConnection(null)
       setShowDisconnectDialog(false)
       setToastMessage('Meta disconnected successfully')
+      setToastType('success')
       setShowToast(true)
     } catch (err) {
       console.error('Failed to disconnect Meta:', err)
-      alert('Failed to disconnect Meta. Please try again.')
+      showErrorToast('Failed to disconnect Meta. Please try again.')
     } finally {
       setDisconnecting(false)
     }
@@ -221,7 +229,9 @@ export function ConnectedAccountsPage() {
     // For now, simulate a connection delay for other platforms
     setTimeout(() => {
       setConnecting(null)
-      alert(`OAuth flow for ${platformId} will be implemented soon!`)
+      setToastMessage(`OAuth flow for ${platformId} will be implemented soon!`)
+      setToastType('info')
+      setShowToast(true)
     }, 1000)
   }
 
@@ -467,7 +477,7 @@ export function ConnectedAccountsPage() {
 
       <Toast
         message={toastMessage}
-        type="success"
+        type={toastType}
         isVisible={showToast}
         onClose={() => setShowToast(false)}
       />
