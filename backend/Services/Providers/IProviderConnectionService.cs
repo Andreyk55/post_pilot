@@ -61,6 +61,29 @@ public interface IProviderConnectionService
         CancellationToken ct = default);
 
     /// <summary>
+    /// Enforces the PERMANENT workspace+provider→account binding. The first
+    /// external account a workspace connects for a provider becomes its permanent
+    /// identity; thereafter only that same <paramref name="incomingAccountId"/>
+    /// may be (re)connected for that provider in that workspace.
+    ///
+    /// Looks at EVERY row for (<paramref name="workspaceId"/>, <paramref name="provider"/>)
+    /// — connected AND disconnected — that carries a non-null ProviderAccountId.
+    /// If any such bound account differs from <paramref name="incomingAccountId"/>,
+    /// throws <see cref="ProviderAccountMismatchException"/>. No-op when the
+    /// workspace has no prior bound identity, or when the incoming id matches, or
+    /// when <paramref name="incomingAccountId"/> is null/empty (identity could not
+    /// be resolved — fall back to the looser active-connection guards).
+    ///
+    /// Provider OAuth services call this AFTER resolving the external account id
+    /// but BEFORE persisting any state. It never modifies any row.
+    /// </summary>
+    Task EnsureAccountMatchesWorkspaceBindingAsync(
+        Guid workspaceId,
+        ProviderType provider,
+        string? incomingAccountId,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Marks the workspace's owning connection (and its assets) as
     /// <see cref="Enums.ConnectionStatus.ReauthRequired"/> WITHOUT releasing
     /// ownership. Called when publishing fails because of an invalid/expired token

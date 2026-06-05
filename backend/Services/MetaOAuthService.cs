@@ -293,6 +293,12 @@ public class MetaOAuthService : IMetaOAuthService
         // ownership guard and the "reconnect same account ⇒ resurface history" rule.
         var (metaUserId, metaUserName) = await FetchMetaUserIdentityAsync(accessToken);
 
+        // Permanent binding: once this workspace has connected ANY Meta account, only
+        // that same account may ever (re)connect here — even across disconnects. A
+        // different account is rejected with 409 before we touch any state.
+        await _providerConnections.EnsureAccountMatchesWorkspaceBindingAsync(
+            workspaceId, ProviderType.Meta, metaUserId);
+
         // Same-workspace reconnect rule: if THIS workspace already owns an active Meta
         // connection for the SAME account (e.g. recovering from ReauthRequired, or a
         // plain re-grant), allow it — we update the existing row in place rather than
@@ -503,6 +509,25 @@ public class MetaOAuthService : IMetaOAuthService
 
         // 2. Identity-unknown fallback: a disconnected row that never recorded which
         // account it was. Pick the most recent so repeated cycles converge on one row.
+        //
+        // Guard the permanent-binding rule here too: if this workspace already carries
+        // a DIFFERENT non-null bound identity for Meta, do NOT adopt an identity-unknown
+        // row (that would silently rebind the workspace to a new account). The upstream
+        // EnsureAccountMatchesWorkspaceBindingAsync already rejects mismatches when we
+        // resolved an id; this covers the id-unresolved path defensively.
+        var hasOtherBoundIdentity =
+            !string.IsNullOrEmpty(providerAccountId)
+            && await _context.MetaConnections.AnyAsync(c =>
+                c.WorkspaceId == workspaceId
+                && c.Provider == ProviderType.Meta
+                && c.ProviderAccountId != null
+                && c.ProviderAccountId != ""
+                && c.ProviderAccountId != providerAccountId);
+        if (hasOtherBoundIdentity)
+        {
+            return null;
+        }
+
         return await _context.MetaConnections
             .Include(c => c.Pages)
             .Include(c => c.InstagramAccounts)
@@ -679,6 +704,11 @@ public class MetaOAuthService : IMetaOAuthService
         // Resolve the stable Meta identity so we can resurface history if the SAME
         // account is reconnecting after a disconnect.
         var (metaUserId, metaUserName) = await FetchMetaUserIdentityAsync(oauthState.TempAccessToken);
+
+        // Permanent binding: a different account than the one this workspace is bound
+        // to is rejected (409) before any state mutation. Same account passes.
+        await _providerConnections.EnsureAccountMatchesWorkspaceBindingAsync(
+            workspaceId, ProviderType.Meta, metaUserId);
 
         // Same-workspace reconnect (incl. reauth recovery) is allowed; only a connect
         // for a DIFFERENT account in a workspace that already owns one is rejected.

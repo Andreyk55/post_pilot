@@ -75,6 +75,32 @@ public class MetaProviderLifecycleHandler : IProviderLifecycleHandler
         await _context.SaveChangesAsync(ct);
     }
 
+    public async Task ClearStoredAssetCredentialsAsync(
+        Guid connectionId,
+        CancellationToken ct)
+    {
+        // Page-level access tokens are the only asset-level secret Meta stores that
+        // can independently publish. IG accounts publish via their linked Page token,
+        // so wiping page tokens covers both surfaces. We clear ALL pages for this
+        // connection (connected or already soft-disconnected) so no stale secret lingers.
+        // Identity columns (PageId, Name, …) are preserved.
+        var pages = await _context.ConnectedPages
+            .Where(p => p.MetaConnectionId == connectionId && p.AccessToken != null)
+            .ToListAsync(ct);
+
+        if (pages.Count == 0) return;
+
+        foreach (var p in pages)
+        {
+            p.AccessToken = null;
+        }
+        await _context.SaveChangesAsync(ct);
+
+        _logger.LogInformation(
+            "Cleared {Count} stored page access token(s) for connection {ConnectionId} on disconnect.",
+            pages.Count, connectionId);
+    }
+
     public async Task<IReadOnlyCollection<string>> FindAssetsOwnedByOtherWorkspaceAsync(
         Guid workspaceId,
         IEnumerable<string> candidateExternalAssetIds,

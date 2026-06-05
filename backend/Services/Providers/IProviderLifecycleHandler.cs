@@ -46,6 +46,19 @@ public interface IProviderLifecycleHandler
         CancellationToken ct);
 
     /// <summary>
+    /// Clear every stored provider credential that could still be used to publish
+    /// for <paramref name="connectionId"/> — e.g. per-page / per-asset access
+    /// tokens. Called during disconnect AFTER assets are soft-disconnected.
+    ///
+    /// Identity columns (external ids, names, status) are preserved; only secrets
+    /// are wiped. Implementations must NOT touch IsConnected/DisconnectedAt (the
+    /// orchestrator owns that). No-op if the provider stores no asset-level secrets.
+    /// </summary>
+    Task ClearStoredAssetCredentialsAsync(
+        Guid connectionId,
+        CancellationToken ct);
+
+    /// <summary>
     /// Mirror the connection's reauth state onto its asset rows: set every owned
     /// (IsConnected = true) asset belonging to <paramref name="connectionId"/> to
     /// the given <paramref name="status"/>. Used so the UI can flag a page/IG

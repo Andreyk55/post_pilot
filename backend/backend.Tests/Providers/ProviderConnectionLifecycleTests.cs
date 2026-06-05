@@ -323,6 +323,110 @@ public class ProviderConnectionLifecycleTests : IDisposable
             WorkspaceBId, ProviderType.Meta, MetaAccountAlpha, new[] { page.PageId, ig.IgBusinessId });
     }
 
+    // ── B2. Permanent workspace+provider→account binding (rule #3) ───────────
+    //
+    // The FIRST account a workspace connects for a provider pins it permanently.
+    // After disconnect, only that same account may reconnect; a different account
+    // is rejected — even though the prior row is disconnected (ownership released).
+
+    [Fact]
+    public async Task Connecting_different_account_after_disconnect_is_rejected()
+    {
+        // Workspace A connects account Alpha, then disconnects (releases ownership).
+        SeedMeta(WorkspaceAId, UserAId, MetaAccountAlpha);
+        await _providerService.DisconnectAsync(WorkspaceAId, ProviderType.Meta);
+
+        // The active-connection guard now PASSES (nothing active) ...
+        await _providerService.EnsureCanConnectAsync(WorkspaceAId, ProviderType.Meta);
+
+        // ... but the permanent binding rejects a DIFFERENT account.
+        var ex = await Assert.ThrowsAsync<ProviderAccountMismatchException>(
+            () => _providerService.EnsureAccountMatchesWorkspaceBindingAsync(
+                WorkspaceAId, ProviderType.Meta, MetaAccountBeta));
+        Assert.Equal(ProviderType.Meta, ex.Provider);
+        Assert.Equal(MetaAccountAlpha, ex.BoundAccountId);
+        Assert.Equal(MetaAccountBeta, ex.AttemptedAccountId);
+    }
+
+    [Fact]
+    public async Task Reconnecting_same_account_after_disconnect_is_allowed()
+    {
+        SeedMeta(WorkspaceAId, UserAId, MetaAccountAlpha);
+        await _providerService.DisconnectAsync(WorkspaceAId, ProviderType.Meta);
+
+        // The same account is permitted by the binding guard (no throw).
+        await _providerService.EnsureAccountMatchesWorkspaceBindingAsync(
+            WorkspaceAId, ProviderType.Meta, MetaAccountAlpha);
+    }
+
+    [Fact]
+    public async Task Binding_guard_is_noop_when_workspace_has_no_prior_identity()
+    {
+        // Fresh workspace, no rows yet — any account is allowed (first connect).
+        await _providerService.EnsureAccountMatchesWorkspaceBindingAsync(
+            WorkspaceAId, ProviderType.Meta, MetaAccountAlpha);
+    }
+
+    [Fact]
+    public async Task Binding_guard_is_noop_when_incoming_identity_is_unresolved()
+    {
+        // If Graph /me failed, incomingAccountId is null — we cannot enforce the
+        // binding and fall back to the looser guards. Must not throw.
+        SeedMeta(WorkspaceAId, UserAId, MetaAccountAlpha);
+        await _providerService.DisconnectAsync(WorkspaceAId, ProviderType.Meta);
+
+        await _providerService.EnsureAccountMatchesWorkspaceBindingAsync(
+            WorkspaceAId, ProviderType.Meta, null);
+        await _providerService.EnsureAccountMatchesWorkspaceBindingAsync(
+            WorkspaceAId, ProviderType.Meta, "");
+    }
+
+    [Fact]
+    public async Task Binding_is_per_workspace_a_different_workspace_can_bind_a_different_account()
+    {
+        // Workspace A is bound to Alpha (and disconnects). Workspace B has no prior
+        // identity, so it may bind Beta — the binding is per-workspace, not global.
+        SeedMeta(WorkspaceAId, UserAId, MetaAccountAlpha);
+        await _providerService.DisconnectAsync(WorkspaceAId, ProviderType.Meta);
+
+        await _providerService.EnsureAccountMatchesWorkspaceBindingAsync(
+            WorkspaceBId, ProviderType.Meta, MetaAccountBeta);
+    }
+
+    // ── B3. Disconnect clears stored credentials (rule #6) ───────────────────
+
+    [Fact]
+    public async Task Disconnect_clears_stored_connection_and_page_tokens_but_keeps_identity()
+    {
+        var (conn, page, ig) = SeedMeta(WorkspaceAId, UserAId, MetaAccountAlpha);
+        Assert.False(string.IsNullOrEmpty(conn.AccessToken));
+        Assert.False(string.IsNullOrEmpty(page.AccessToken));
+
+        await _providerService.DisconnectAsync(WorkspaceAId, ProviderType.Meta);
+        _db.ChangeTracker.Clear();
+
+        // Connection token cleared; identity retained.
+        var connAfter = await _db.MetaConnections.AsNoTracking().FirstAsync(c => c.Id == conn.Id);
+        Assert.Null(connAfter.AccessToken);
+        Assert.False(connAfter.IsConnected);
+        Assert.NotNull(connAfter.DisconnectedAt);
+        Assert.Equal(MetaAccountAlpha, connAfter.ProviderAccountId);
+        Assert.Equal(MetaAccountAlpha, connAfter.ProviderAccountName);
+        Assert.Equal(ProviderType.Meta, connAfter.Provider);
+        Assert.Equal(WorkspaceAId, connAfter.WorkspaceId);
+
+        // Page token cleared; page identity (external PageId) retained.
+        var pageAfter = await _db.ConnectedPages.AsNoTracking().FirstAsync(p => p.Id == page.Id);
+        Assert.Null(pageAfter.AccessToken);
+        Assert.False(pageAfter.IsConnected);
+        Assert.Equal(page.PageId, pageAfter.PageId);
+
+        // IG identity retained (it has no own token column).
+        var igAfter = await _db.ConnectedInstagramAccounts.AsNoTracking().FirstAsync(i => i.Id == ig.Id);
+        Assert.False(igAfter.IsConnected);
+        Assert.Equal(ig.IgBusinessId, igAfter.IgBusinessId);
+    }
+
     // ── C. Disconnect cancels non-executed posts; executed untouched ────────
 
     [Fact]

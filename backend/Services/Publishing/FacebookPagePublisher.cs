@@ -247,6 +247,19 @@ public class FacebookPagePublisher : IPostPublisher
         var pageId = post.TargetPage!.PageId;
         var accessToken = post.TargetPage.AccessToken;
 
+        // A cleared token means the connection/page was disconnected (disconnect wipes
+        // the stored credential). The publish gate should have excluded this post, so
+        // reaching here is unexpected — fail cleanly as Auth (needs reconnect) instead
+        // of NRE-ing inside the Graph call.
+        if (string.IsNullOrEmpty(accessToken))
+        {
+            _logger.LogWarning(
+                "FB publish for post {PostId} has no stored page access token (page disconnected). Blocking.",
+                post.Id);
+            return new PublishResult(false, ErrorType: PublishErrorType.Auth,
+                ErrorMessage: "The Facebook page must be reauthorized before publishing.");
+        }
+
         // Route to multi-photo flow if 2+ media items
         if (post.MediaItems?.Count >= 2)
         {

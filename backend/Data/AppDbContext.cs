@@ -110,7 +110,8 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => new { e.WorkspaceId, e.Provider, e.ProviderAccountId });
             entity.Property(e => e.Provider).HasConversion<int>();
             entity.Property(e => e.Status).HasConversion<int>();
-            entity.Property(e => e.AccessToken).IsRequired();
+            // AccessToken is nullable: disconnect clears the credential while keeping
+            // the identity row (see ProviderConnectionService.DisconnectAsync).
 
             // Workspace FK — RESTRICT.
             entity.HasOne<Workspace>()
@@ -159,7 +160,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.PageId).IsRequired();
             entity.Property(e => e.Name).IsRequired();
             entity.Property(e => e.Status).HasConversion<int>();
-            entity.Property(e => e.AccessToken).IsRequired();
+            // AccessToken is nullable: cleared on disconnect (see MetaProviderLifecycleHandler).
 
             // Workspace FK — RESTRICT.
             entity.HasOne<Workspace>()

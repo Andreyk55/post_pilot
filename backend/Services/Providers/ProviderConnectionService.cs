@@ -108,6 +108,41 @@ public class ProviderConnectionService : IProviderConnectionService
         }
     }
 
+    public async Task EnsureAccountMatchesWorkspaceBindingAsync(
+        Guid workspaceId,
+        ProviderType provider,
+        string? incomingAccountId,
+        CancellationToken ct = default)
+    {
+        // Identity unresolved this time — can't enforce the binding. The looser
+        // active-connection / cross-workspace guards still apply elsewhere.
+        if (string.IsNullOrEmpty(incomingAccountId))
+        {
+            return;
+        }
+
+        // The workspace's permanent identity for this provider = any row (connected
+        // OR disconnected) carrying a non-null ProviderAccountId. Once one exists,
+        // it pins the workspace to that account forever.
+        var boundAccountId = await _context.MetaConnections
+            .AsNoTracking()
+            .Where(c => c.WorkspaceId == workspaceId
+                     && c.Provider == provider
+                     && c.ProviderAccountId != null
+                     && c.ProviderAccountId != "")
+            .Select(c => c.ProviderAccountId)
+            .FirstOrDefaultAsync(ct);
+
+        if (!string.IsNullOrEmpty(boundAccountId) && boundAccountId != incomingAccountId)
+        {
+            _logger.LogWarning(
+                "Connect blocked: workspace {WorkspaceId} is permanently bound to {Provider} account {BoundAccountId} " +
+                "but attempted to connect a different account {AttemptedAccountId}.",
+                workspaceId, provider, boundAccountId, incomingAccountId);
+            throw new ProviderAccountMismatchException(provider, boundAccountId, incomingAccountId);
+        }
+    }
+
     public async Task MarkReauthRequiredAsync(
         Guid workspaceId,
         ProviderType provider,
@@ -178,6 +213,12 @@ public class ProviderConnectionService : IProviderConnectionService
                 active.Id,
                 active.ProviderAccountId,
                 ct);
+
+            // Wipe asset/page-level secrets (e.g. per-page access tokens) so a stale
+            // credential can never be used to publish after disconnect. Identity
+            // columns on the assets are preserved. No-op for providers without
+            // asset-level secrets.
+            await handler.ClearStoredAssetCredentialsAsync(active.Id, ct);
         }
 
         // Flip the connection row itself. The handler owns assets + posts;
@@ -193,6 +234,11 @@ public class ProviderConnectionService : IProviderConnectionService
             connection.Status = ConnectionStatus.Active;
             connection.DisconnectedAt = now;
             connection.UpdatedAt = now;
+            // Clear the stored credential. The identity (WorkspaceId, Provider,
+            // ProviderAccountId, ProviderAccountName) is kept so the same account can
+            // reconnect and resurface history; only the secret is wiped. A reconnect
+            // overwrites AccessToken with a fresh token.
+            connection.AccessToken = null;
             await _context.SaveChangesAsync(ct);
         }
     }

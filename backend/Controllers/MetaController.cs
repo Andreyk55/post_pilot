@@ -77,6 +77,13 @@ public class MetaController : ControllerBase
             var result = await _metaOAuthService.CompleteOAuthAsync(request.Code, request.State, userId);
             return Ok(result);
         }
+        catch (ProviderAccountMismatchException ex)
+        {
+            // Permanent binding rule: this workspace is linked to a different provider
+            // account. UI must tell the user to reconnect the original account.
+            _logger.LogWarning("OAuth complete rejected (account mismatch): {Message}", ex.Message);
+            return Conflict(new { error = ex.Message, provider = ex.Provider.ToString() });
+        }
         catch (ProviderOwnedByAnotherWorkspaceException ex)
         {
             // Generic ownership rule: the social account/page is owned by a DIFFERENT
@@ -137,6 +144,11 @@ public class MetaController : ControllerBase
                 userId
             );
             return Ok(result);
+        }
+        catch (ProviderAccountMismatchException ex)
+        {
+            _logger.LogWarning("Save connection rejected (account mismatch): {Message}", ex.Message);
+            return Conflict(new { error = ex.Message, provider = ex.Provider.ToString() });
         }
         catch (ProviderOwnedByAnotherWorkspaceException ex)
         {

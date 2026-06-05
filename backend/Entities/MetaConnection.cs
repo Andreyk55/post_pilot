@@ -40,7 +40,13 @@ public class MetaConnection
     /// Kept separate from the workspace-level provider identity.
     /// </summary>
     public Guid UserId { get; set; }
-    public required string AccessToken { get; set; }
+
+    /// <summary>
+    /// Stored user/connection access token. Nullable: a disconnect CLEARS this
+    /// credential (identity columns are kept) so a stale token can never publish
+    /// after disconnect. A reconnect repopulates it with a fresh token.
+    /// </summary>
+    public string? AccessToken { get; set; }
     public DateTime TokenExpiresAt { get; set; }
     public DateTime ConnectedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
@@ -96,7 +102,13 @@ public class ConnectedPage
     public required string Name { get; set; }
     public string? Category { get; set; }
     public string? PictureUrl { get; set; }
-    public required string AccessToken { get; set; } // Page-specific access token
+
+    /// <summary>
+    /// Page-specific access token. Nullable: cleared on disconnect alongside the
+    /// parent connection's token so a stale page token can never publish. A
+    /// reconnect (ReconcileSelectedAssets) repopulates it.
+    /// </summary>
+    public string? AccessToken { get; set; }
     public DateTime CreatedAt { get; set; }
 
     /// <summary>
