@@ -11,6 +11,45 @@ namespace PostPilot.Api.Services.Providers;
 ///   2. Disconnect cancels all non-executed posts and hides history.
 ///   3. Reconnect of the SAME provider account resurfaces history.
 ///
+/// PERMANENT GLOBAL OWNERSHIP (provider-agnostic):
+///   The identity (Provider + ProviderAccountId) is globally unique across ALL
+///   PostPilot users and ALL workspaces. The first workspace to connect a provider
+///   account owns it FOREVER — disconnecting NEVER releases it, and no other user
+///   in any other workspace may connect the same (Provider, ProviderAccountId).
+///   The owning workspace may reconnect its own account. This rule is keyed ONLY on
+///   the generic Provider + ProviderAccountId columns; it does NOT read UserId,
+///   IsConnected, or any provider-specific field (Facebook user id, PageId,
+///   IgBusinessId, …). It is enforced here plus by the DB unique index
+///   IX_MetaConnections_Provider_ProviderAccountId
+///   = unique(Provider, ProviderAccountId) WHERE ProviderAccountId IS NOT NULL.
+///
+/// ─────────────────────────────────────────────────────────────────────────────
+/// REQUIRED PATTERN FOR EVERY PROVIDER (Meta today; LinkedIn / X / TikTok / future)
+/// ─────────────────────────────────────────────────────────────────────────────
+/// A provider OAuth service MUST, in this exact order:
+///
+///   1. Exchange the OAuth code/token.
+///   2. Resolve the STABLE external ProviderAccountId (the account-level identity,
+///      NOT a page/asset id).
+///   3. IMMEDIATELY call <see cref="ValidateIncomingProviderAccountForWorkspaceAsync"/>
+///      — before fetching assets/pages, before creating temp/selection state, and
+///      before creating or updating any connection or asset rows.
+///   4. If it throws (→ 409 ProviderOwnedByAnotherWorkspaceException /
+///      ProviderAccountMismatchException) let it propagate so the controller returns
+///      409 with the generic UserMessage. Do NOT proceed.
+///   5. ONLY after validation passes:
+///        a. fetch provider assets/pages,
+///        b. create temp state,
+///        c. create/update the ProviderConnection via this service,
+///        d. create/update provider assets.
+///
+/// A provider MUST NOT implement its own ownership/uniqueness logic in
+/// provider-specific code. Connect / reconnect / disconnect all go through this
+/// service so every provider inherits the global+permanent guarantee automatically.
+/// See MetaOAuthService.HandleCallbackAsync / CompleteOAuthAsync / SaveConnectionAsync
+/// for the reference implementation, and GenericProviderOwnershipTests for the
+/// provider-agnostic contract proven against a non-Meta ProviderType.
+///
 /// What stays out of this interface:
 ///   - OAuth token exchange / refresh / scopes (provider-specific).
 ///   - Asset discovery (Facebook Pages, IG accounts, …) — handled by the
