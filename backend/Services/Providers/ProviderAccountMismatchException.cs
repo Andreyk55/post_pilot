@@ -19,6 +19,16 @@ namespace PostPilot.Api.Services.Providers;
 /// </summary>
 public class ProviderAccountMismatchException : InvalidOperationException
 {
+    /// <summary>
+    /// User-facing 409 copy. Generic ("provider account") and consistent with
+    /// <see cref="ProviderOwnedByAnotherWorkspaceException.UserMessage"/>. Must NOT
+    /// suggest that disconnecting elsewhere will allow the connection, and must NOT
+    /// expose any workspace name or account id.
+    /// </summary>
+    public const string UserMessage =
+        "This workspace is already linked to a different provider account. " +
+        "Reconnect the original account for this workspace, or use another workspace.";
+
     public ProviderType Provider { get; }
 
     /// <summary>The account this workspace is permanently bound to (for diagnostics/logging).</summary>
@@ -31,8 +41,7 @@ public class ProviderAccountMismatchException : InvalidOperationException
         ProviderType provider,
         string? boundAccountId,
         string? attemptedAccountId)
-        : base($"This workspace is already linked to a different {provider} account. " +
-               "Reconnect the original account, or use a different workspace.")
+        : base(UserMessage)
     {
         Provider = provider;
         BoundAccountId = boundAccountId;

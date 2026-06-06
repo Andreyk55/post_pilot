@@ -133,9 +133,9 @@ public class ProviderOwnershipTests : IDisposable
             () => _providerService.EnsureNotOwnedByAnotherWorkspaceAsync(
                 WorkspaceBId, ProviderType.Meta, MetaAccountAlpha, Array.Empty<string>()));
 
-        // Message must reflect the PERMANENT rule and must NOT suggest disconnecting
-        // from the other workspace will free the account.
-        Assert.Contains("permanently linked to another workspace", ex.Message);
+        // Message must reflect the cross-workspace ownership rule and must NOT suggest
+        // disconnecting from the other workspace will free the account.
+        Assert.Contains("already linked to another workspace", ex.Message);
         Assert.DoesNotContain("Disconnect", ex.Message);
     }
 

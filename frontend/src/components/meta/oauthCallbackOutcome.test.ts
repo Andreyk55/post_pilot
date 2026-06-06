@@ -6,9 +6,9 @@ import {
   resolveOAuthCallbackSuccess,
 } from './oauthCallbackOutcome'
 
-const PERMANENT_OWNERSHIP_MESSAGE =
-  'This provider account is already permanently linked to another workspace. ' +
-  'To use a different account, create or select another workspace.'
+const CROSS_WORKSPACE_OWNERSHIP_MESSAGE =
+  'This provider account is already linked to another workspace. ' +
+  'Select the original workspace for this account, or connect a different provider account.'
 
 describe('resolveOAuthCallbackSuccess', () => {
   it('opens page selection with the returned pages + temp token', () => {
@@ -29,14 +29,14 @@ describe('resolveOAuthCallbackSuccess', () => {
 
 describe('resolveOAuthCallbackError', () => {
   it('on a 409 ownership rejection, shows the EXACT server message and does NOT open page selection', () => {
-    const err = new MetaApiError(PERMANENT_OWNERSHIP_MESSAGE, 409)
+    const err = new MetaApiError(CROSS_WORKSPACE_OWNERSHIP_MESSAGE, 409)
 
     const outcome = resolveOAuthCallbackError(err)
 
     expect(outcome.kind).toBe('rejected')
     if (outcome.kind === 'rejected') {
-      // Server message surfaced verbatim — the user sees the permanent-ownership text.
-      expect(outcome.message).toBe(PERMANENT_OWNERSHIP_MESSAGE)
+      // Server message surfaced verbatim — the user sees the cross-workspace ownership text.
+      expect(outcome.message).toBe(CROSS_WORKSPACE_OWNERSHIP_MESSAGE)
       // It must never instruct the user to disconnect from the other workspace.
       expect(outcome.message).not.toContain('Disconnect')
     }

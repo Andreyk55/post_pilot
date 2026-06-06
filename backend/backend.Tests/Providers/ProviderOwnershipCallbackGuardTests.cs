@@ -120,11 +120,12 @@ public class ProviderOwnershipCallbackGuardTests : IDisposable
         var ex = await Assert.ThrowsAsync<ProviderOwnedByAnotherWorkspaceException>(
             () => _service.HandleCallbackAsync("code", state));
 
-        // The 409 message is the permanent-ownership message and never suggests
+        // The 409 message is the cross-workspace-ownership message and never suggests
         // disconnecting from the other workspace.
+        Assert.Equal(ProviderOwnedByAnotherWorkspaceException.UserMessage, ex.Message);
         Assert.Equal(
-            "This provider account is already permanently linked to another workspace. " +
-            "To use a different account, create or select another workspace.",
+            "This provider account is already linked to another workspace. " +
+            "Select the original workspace for this account, or connect a different provider account.",
             ex.Message);
         Assert.DoesNotContain("Disconnect", ex.Message);
 
@@ -152,7 +153,7 @@ public class ProviderOwnershipCallbackGuardTests : IDisposable
 
         var ex = await Assert.ThrowsAsync<ProviderOwnedByAnotherWorkspaceException>(
             () => _service.HandleCallbackAsync("code", state));
-        Assert.Contains("permanently linked to another workspace", ex.Message);
+        Assert.Contains("already linked to another workspace", ex.Message);
 
         Assert.False(_handler.PagesFetched, "Pages must not be fetched when ownership is rejected.");
         var stateRow = await _db.MetaOAuthStates.AsNoTracking().FirstAsync(s => s.State == state);

@@ -21,8 +21,8 @@ namespace PostPilot.Api.Services.Providers;
 public class ProviderOwnedByAnotherWorkspaceException : InvalidOperationException
 {
     public const string UserMessage =
-        "This provider account is already permanently linked to another workspace. " +
-        "To use a different account, create or select another workspace.";
+        "This provider account is already linked to another workspace. " +
+        "Select the original workspace for this account, or connect a different provider account.";
 
     public ProviderType Provider { get; }
 

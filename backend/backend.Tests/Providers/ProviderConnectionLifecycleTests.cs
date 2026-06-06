@@ -269,7 +269,7 @@ public class ProviderConnectionLifecycleTests : IDisposable
         var ex = await Assert.ThrowsAsync<ProviderOwnedByAnotherWorkspaceException>(
             () => _providerService.EnsureNotOwnedByAnotherWorkspaceAsync(
                 WorkspaceBId, ProviderType.Meta, MetaAccountAlpha, Array.Empty<string>()));
-        Assert.Contains("permanently linked to another workspace", ex.Message);
+        Assert.Contains("already linked to another workspace", ex.Message);
         // The message must NOT suggest disconnecting elsewhere will free the account.
         Assert.DoesNotContain("Disconnect", ex.Message);
     }
@@ -329,7 +329,7 @@ public class ProviderConnectionLifecycleTests : IDisposable
         var ex = await Assert.ThrowsAsync<ProviderOwnedByAnotherWorkspaceException>(
             () => _providerService.EnsureNotOwnedByAnotherWorkspaceAsync(
                 WorkspaceBId, ProviderType.Meta, MetaAccountAlpha, Array.Empty<string>()));
-        Assert.Contains("permanently linked to another workspace", ex.Message);
+        Assert.Contains("already linked to another workspace", ex.Message);
 
         // But B can connect a DIFFERENT account.
         await _providerService.EnsureNotOwnedByAnotherWorkspaceAsync(
@@ -359,6 +359,17 @@ public class ProviderConnectionLifecycleTests : IDisposable
         Assert.Equal(ProviderType.Meta, ex.Provider);
         Assert.Equal(MetaAccountAlpha, ex.BoundAccountId);
         Assert.Equal(MetaAccountBeta, ex.AttemptedAccountId);
+
+        // User-facing copy: generic, consistent, and safe.
+        Assert.Equal(ProviderAccountMismatchException.UserMessage, ex.Message);
+        Assert.Equal(
+            "This workspace is already linked to a different provider account. " +
+            "Reconnect the original account for this workspace, or use another workspace.",
+            ex.Message);
+        // Does not suggest disconnecting elsewhere, and never leaks account ids.
+        Assert.DoesNotContain("Disconnect", ex.Message);
+        Assert.DoesNotContain(MetaAccountAlpha, ex.Message);
+        Assert.DoesNotContain(MetaAccountBeta, ex.Message);
     }
 
     [Fact]
