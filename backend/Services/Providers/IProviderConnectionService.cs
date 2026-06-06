@@ -89,6 +89,32 @@ public interface IProviderConnectionService
         CancellationToken ct = default);
 
     /// <summary>
+    /// Single entry point that runs BOTH permanent-ownership guards for an incoming
+    /// provider identity, in the order an OAuth callback should enforce them:
+    ///
+    ///   1. <see cref="EnsureAccountMatchesWorkspaceBindingAsync"/> — this workspace
+    ///      is permanently bound to a DIFFERENT account for this provider.
+    ///   2. <see cref="EnsureNotOwnedByAnotherWorkspaceAsync"/> (account-level only) —
+    ///      this account is permanently owned by ANOTHER workspace (connected OR
+    ///      disconnected). Asset ids are intentionally NOT checked here: the caller may
+    ///      not know the selected pages/IGs yet, and the account binding already covers
+    ///      cross-workspace ownership.
+    ///
+    /// Provider OAuth services MUST call this immediately after resolving the stable
+    /// external account id (e.g. right after FetchMetaUserIdentityAsync) and BEFORE
+    /// fetching pages/assets, creating page-selection state, or persisting any
+    /// connection. Throws <see cref="ProviderAccountMismatchException"/> or
+    /// <see cref="ProviderOwnedByAnotherWorkspaceException"/> (both → 409) on rejection;
+    /// it never modifies any row. No-op when <paramref name="incomingProviderAccountId"/>
+    /// is null/empty (identity unresolved — the looser downstream guards still apply).
+    /// </summary>
+    Task ValidateIncomingProviderAccountForWorkspaceAsync(
+        Guid workspaceId,
+        ProviderType provider,
+        string? incomingProviderAccountId,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Marks the workspace's owning connection (and its assets) as
     /// <see cref="Enums.ConnectionStatus.ReauthRequired"/> WITHOUT releasing
     /// ownership. Called when publishing fails because of an invalid/expired token

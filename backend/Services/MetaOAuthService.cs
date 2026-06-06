@@ -202,7 +202,16 @@ public class MetaOAuthService : IMetaOAuthService
         var accessToken = longLivedData?.AccessToken ?? tokenData.AccessToken;
         var expiresIn = longLivedData?.ExpiresIn ?? tokenData.ExpiresIn ?? 3600;
 
-        // Store token temporarily in state record
+        // Resolve the stable Meta identity NOW and validate permanent ownership BEFORE
+        // doing anything else (fetching pages, storing temp state, showing the
+        // page-selection UI). If this Meta account is permanently bound elsewhere — to
+        // a different workspace, or this workspace is bound to a different account — we
+        // fail immediately with 409 and never reach page discovery or selection state.
+        var (metaUserId, _) = await FetchMetaUserIdentityAsync(accessToken);
+        await _providerConnections.ValidateIncomingProviderAccountForWorkspaceAsync(
+            oauthState.WorkspaceId, ProviderType.Meta, metaUserId);
+
+        // Store token temporarily in state record (only after ownership passed).
         oauthState.TempAccessToken = accessToken;
         oauthState.TokenExpiresAt = DateTime.UtcNow.AddSeconds(expiresIn);
         await _context.SaveChangesAsync();
@@ -289,14 +298,15 @@ public class MetaOAuthService : IMetaOAuthService
         var workspaceId = oauthState.WorkspaceId;
         _logger.LogInformation("Saving connection for workspace {WorkspaceId} (user {UserId})", workspaceId, userId);
 
-        // Resolve the stable Meta identity FIRST. Used both for the cross-workspace
-        // ownership guard and the "reconnect same account ⇒ resurface history" rule.
+        // Resolve the stable Meta identity FIRST. Used both for the permanent-ownership
+        // guards and the "reconnect same account ⇒ resurface history" rule.
         var (metaUserId, metaUserName) = await FetchMetaUserIdentityAsync(accessToken);
 
-        // Permanent binding: once this workspace has connected ANY Meta account, only
-        // that same account may ever (re)connect here — even across disconnects. A
-        // different account is rejected with 409 before we touch any state.
-        await _providerConnections.EnsureAccountMatchesWorkspaceBindingAsync(
+        // PERMANENT OWNERSHIP: validate the resolved identity the instant we know it and
+        // before persisting anything. Rejects (409) if this workspace is bound to a
+        // different account, or if this account belongs to another workspace (connected
+        // or disconnected). Throws ProviderAccountMismatchException / ProviderOwnedByAnotherWorkspaceException.
+        await _providerConnections.ValidateIncomingProviderAccountForWorkspaceAsync(
             workspaceId, ProviderType.Meta, metaUserId);
 
         // Same-workspace reconnect rule: if THIS workspace already owns an active Meta
@@ -315,14 +325,6 @@ public class MetaOAuthService : IMetaOAuthService
             // Reject second-account connect (product rule: at most one active Meta per workspace).
             await _providerConnections.EnsureCanConnectAsync(workspaceId, ProviderType.Meta);
         }
-
-        // Generic cross-workspace ownership guard at the ACCOUNT level: block if this
-        // Meta account is owned by a DIFFERENT workspace. Same-workspace reconnect
-        // passes. Page/IG asset-level ownership is enforced later in SaveConnectionAsync
-        // against the user's actual selection (we don't block on pages the user may
-        // never choose to connect here). Throws ProviderOwnedByAnotherWorkspaceException → 409.
-        await _providerConnections.EnsureNotOwnedByAnotherWorkspaceAsync(
-            workspaceId, ProviderType.Meta, metaUserId, Array.Empty<string>());
 
         var connection = await ResolveOrCreateMetaConnectionAsync(
             workspaceId,
@@ -705,9 +707,13 @@ public class MetaOAuthService : IMetaOAuthService
         // account is reconnecting after a disconnect.
         var (metaUserId, metaUserName) = await FetchMetaUserIdentityAsync(oauthState.TempAccessToken);
 
-        // Permanent binding: a different account than the one this workspace is bound
-        // to is rejected (409) before any state mutation. Same account passes.
-        await _providerConnections.EnsureAccountMatchesWorkspaceBindingAsync(
+        // PERMANENT OWNERSHIP: validate the resolved identity immediately — before
+        // fetching pages, reconciling assets, or creating/updating any connection.
+        // Rejects (409) if this workspace is bound to a different account or the account
+        // belongs to another workspace (connected or disconnected). The callback path
+        // (HandleCallbackAsync) already enforces this, but SaveConnection is also a
+        // direct write path, so it must validate independently.
+        await _providerConnections.ValidateIncomingProviderAccountForWorkspaceAsync(
             workspaceId, ProviderType.Meta, metaUserId);
 
         // Same-workspace reconnect (incl. reauth recovery) is allowed; only a connect
@@ -725,8 +731,8 @@ public class MetaOAuthService : IMetaOAuthService
             await _providerConnections.EnsureCanConnectAsync(workspaceId, ProviderType.Meta);
         }
 
-        // Cross-workspace ownership guard against the SELECTED account + pages + IGs.
-        // Throws ProviderOwnedByAnotherWorkspaceException → 409.
+        // Asset-level cross-workspace ownership guard against the SELECTED pages + IGs
+        // (the account-level guard already ran above). Throws ProviderOwnedByAnotherWorkspaceException → 409.
         await _providerConnections.EnsureNotOwnedByAnotherWorkspaceAsync(
             workspaceId,
             ProviderType.Meta,

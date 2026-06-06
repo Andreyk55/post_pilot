@@ -20,7 +20,7 @@ interface MetaConnectionWizardProps {
   isManageMode?: boolean
 }
 
-type WizardStep = 'pages' | 'instagram' | 'saving'
+type WizardStep = 'pages' | 'instagram' | 'saving' | 'rejected'
 
 export function MetaConnectionWizard({
   isOpen,
@@ -86,7 +86,22 @@ export function MetaConnectionWizard({
       setPages(response.pages)
       setStep('pages')
     } catch (err) {
-      setError('Failed to connect to Meta. Please try again.')
+      // 409 = permanent ownership: this Meta account belongs to another workspace,
+      // or this workspace is bound to a different account. The backend rejects BEFORE
+      // returning any pages, so we must NOT open page selection — show the exact
+      // server message and clear any pending selection state.
+      if (err instanceof MetaApiError && err.status === 409) {
+        setTempToken('')
+        setPages([])
+        setSelectedPageIds([])
+        setInstagramAccounts([])
+        setSelectedInstagramIds([])
+        setError(err.message)
+        setStep('rejected')
+      } else {
+        setError('Failed to connect to Meta. Please try again.')
+        setStep('rejected')
+      }
       console.error('OAuth callback error:', err)
     } finally {
       setLoading(false)
@@ -160,11 +175,13 @@ export function MetaConnectionWizard({
   }
 
   const handleClose = () => {
-    // Reset state on close
+    // Reset state on close, including any pending OAuth/page-selection state.
     setStep('pages')
     setSelectedPageIds(existingPageIds)
     setSelectedInstagramIds(existingInstagramIds)
     setInstagramAccounts([])
+    setPages([])
+    setTempToken('')
     setError(null)
     onClose()
   }
@@ -201,7 +218,14 @@ export function MetaConnectionWizard({
         )}
 
         <div className="wizard-content">
-          {loading && step === 'pages' && pages.length === 0 ? (
+          {step === 'rejected' ? (
+            <div className="wizard-rejected">
+              <p>{error ?? 'This account cannot be connected to this workspace.'}</p>
+              <button className="wizard-close-btn-secondary" onClick={handleClose}>
+                Close
+              </button>
+            </div>
+          ) : loading && step === 'pages' && pages.length === 0 ? (
             <div className="wizard-loading">
               <div className="spinner large" />
               <p>Loading your pages...</p>

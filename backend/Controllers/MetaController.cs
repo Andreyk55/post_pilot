@@ -56,6 +56,20 @@ public class MetaController : ControllerBase
             var result = await _metaOAuthService.HandleCallbackAsync(request.Code, request.State);
             return Ok(result);
         }
+        catch (ProviderAccountMismatchException ex)
+        {
+            // Permanent binding rule: this workspace is linked to a different provider
+            // account. Reject at callback time — UI must NOT open page selection.
+            _logger.LogWarning("OAuth callback rejected (account mismatch): {Message}", ex.Message);
+            return Conflict(new { error = ex.Message, provider = ex.Provider.ToString() });
+        }
+        catch (ProviderOwnedByAnotherWorkspaceException ex)
+        {
+            // Permanent ownership rule: this account belongs to a DIFFERENT workspace.
+            // Reject immediately, before fetching pages or returning the selection list.
+            _logger.LogWarning("OAuth callback rejected (owned elsewhere): {Message}", ex.Message);
+            return Conflict(new { error = ex.Message, provider = ex.Provider.ToString() });
+        }
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "OAuth callback failed: {Message}", ex.Message);

@@ -58,4 +58,38 @@ public class MetaControllerMismatchTests
         var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
         Assert.Equal(409, conflict.StatusCode);
     }
+
+    [Fact]
+    public async Task HandleCallback_returns_409_on_account_mismatch()
+    {
+        // The callback path must reject permanent-binding violations as 409 (not 400/500)
+        // so the wizard does not open page selection.
+        var meta = new Mock<IMetaOAuthService>();
+        meta.Setup(m => m.HandleCallbackAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ThrowsAsync(new ProviderAccountMismatchException(ProviderType.Meta, "alpha", "beta"));
+
+        var result = await NewController(meta)
+            .HandleCallback(new MetaOAuthCallbackRequest("code", "state"));
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(409, conflict.StatusCode);
+    }
+
+    [Fact]
+    public async Task HandleCallback_returns_409_when_account_owned_by_another_workspace()
+    {
+        var meta = new Mock<IMetaOAuthService>();
+        meta.Setup(m => m.HandleCallbackAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ThrowsAsync(new ProviderOwnedByAnotherWorkspaceException(ProviderType.Meta, "alpha"));
+
+        var result = await NewController(meta)
+            .HandleCallback(new MetaOAuthCallbackRequest("code", "state"));
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(409, conflict.StatusCode);
+        // The body carries the permanent-ownership message verbatim for the UI.
+        var body = conflict.Value!;
+        var errorProp = body.GetType().GetProperty("error")!.GetValue(body) as string;
+        Assert.Equal(ProviderOwnedByAnotherWorkspaceException.UserMessage, errorProp);
+    }
 }

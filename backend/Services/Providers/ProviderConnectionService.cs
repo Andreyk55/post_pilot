@@ -145,6 +145,27 @@ public class ProviderConnectionService : IProviderConnectionService
         }
     }
 
+    public async Task ValidateIncomingProviderAccountForWorkspaceAsync(
+        Guid workspaceId,
+        ProviderType provider,
+        string? incomingProviderAccountId,
+        CancellationToken ct = default)
+    {
+        // Run the two permanent-ownership guards in a single place so every OAuth
+        // callback/write path enforces them identically, the instant the provider
+        // account id is known and before any pages/assets are fetched or persisted.
+        //
+        // 1. This workspace must not already be bound to a DIFFERENT account.
+        await EnsureAccountMatchesWorkspaceBindingAsync(
+            workspaceId, provider, incomingProviderAccountId, ct);
+
+        // 2. This account must not be permanently owned by ANOTHER workspace. Asset
+        //    ids are not yet known at callback time, so we check the account only;
+        //    the binding above plus account ownership fully cover the permanent rule.
+        await EnsureNotOwnedByAnotherWorkspaceAsync(
+            workspaceId, provider, incomingProviderAccountId, Array.Empty<string>(), ct);
+    }
+
     public async Task MarkReauthRequiredAsync(
         Guid workspaceId,
         ProviderType provider,
