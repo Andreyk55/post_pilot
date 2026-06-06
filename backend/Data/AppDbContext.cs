@@ -94,17 +94,20 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => new { e.WorkspaceId, e.Provider })
                 .IsUnique()
                 .HasFilter("\"IsConnected\" = true");
-            // GENERIC OWNERSHIP RULE (cross-workspace): a provider account
-            // (Provider + ExternalAccountId) may be OWNED by only ONE workspace at a
-            // time. Ownership is held while IsConnected = true (covers both
-            // Status=Active and Status=ReauthRequired). A real Disconnect sets
-            // IsConnected=false and releases ownership so another workspace can connect.
-            // The partial filter is on IsConnected (not Status) precisely because
-            // ReauthRequired must keep blocking. ProviderAccountId NULLs are excluded
-            // so legacy rows that never resolved an identity don't collide.
+            // GENERIC OWNERSHIP RULE (cross-workspace), PERMANENT: a provider account
+            // identity (Provider + ExternalAccountId) belongs forever to the FIRST
+            // workspace that connects it. The unique filter is intentionally NOT scoped
+            // to IsConnected — a disconnected row still reserves the identity, so the
+            // account can never be connected to another workspace later. ProviderAccountId
+            // NULLs are excluded so legacy rows that never resolved an identity don't collide.
+            //
+            // NOTE: this means a single workspace holds at most ONE row per (Provider,
+            // ProviderAccountId). The disconnect/reconnect cycle reuses (flips IsConnected
+            // on) that same row rather than inserting a second one — see
+            // ProviderConnectionService.DisconnectAsync and the OAuth reconnect path.
             entity.HasIndex(e => new { e.Provider, e.ProviderAccountId })
                 .IsUnique()
-                .HasFilter("\"IsConnected\" = true AND \"ProviderAccountId\" IS NOT NULL");
+                .HasFilter("\"ProviderAccountId\" IS NOT NULL");
             // Helper index: lookup-by-stable-identity when reconnecting an
             // account ("did this workspace already have a row for Meta user X?").
             entity.HasIndex(e => new { e.WorkspaceId, e.Provider, e.ProviderAccountId });

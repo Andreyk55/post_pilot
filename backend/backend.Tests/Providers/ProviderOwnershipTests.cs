@@ -19,12 +19,12 @@ namespace PostPilot.Api.Tests.Providers;
 /// End-to-end tests for the generic provider/workspace OWNERSHIP rules and the
 /// content-isolation guarantees:
 ///
-///   - A provider account/page may be OWNED by only one workspace at a time.
+///   - ACCOUNT ownership (Provider + ProviderAccountId) is PERMANENT: the first
+///     workspace to connect an account owns it forever. Disconnecting does NOT
+///     release it, so another workspace can never connect the same account later.
 ///   - Ownership statuses Active and ReauthRequired both block other workspaces.
-///   - Only a real Disconnect releases ownership.
 ///   - Token invalid → ReauthRequired (keeps ownership, keeps the failed post visible).
-///   - Content (posts/media/history) NEVER moves between workspaces, even after
-///     provider ownership moves.
+///   - Content (posts/media/history) NEVER moves between workspaces.
 ///
 /// These exercise the real ProviderConnectionService + Meta lifecycle handler and
 /// the real FacebookPagePublisher Auth-error path against an in-memory DB.
@@ -37,7 +37,9 @@ public class ProviderOwnershipTests : IDisposable
     private static readonly Guid WorkspaceBId = Guid.Parse("00000000-0000-0000-0000-0000000000bb");
 
     private const string MetaAccountAlpha = "meta-user-alpha";
+    private const string MetaAccountBeta = "meta-user-beta";
     private const string SharedPageId = "fb-page-shared";
+    private const string OtherPageId = "fb-page-other";
 
     private readonly AppDbContext _db;
     private readonly Mock<IPostScheduler> _schedulerMock = new();
@@ -117,12 +119,66 @@ public class ProviderOwnershipTests : IDisposable
         return p;
     }
 
-    // ── Content isolation after provider ownership moves (spec §isolation) ─────
+    // ── Permanent account ownership across disconnect (the core bug) ───────────
 
     [Fact]
-    public async Task After_ws1_disconnects_and_ws2_connects_same_account_ws2_does_not_see_ws1_posts()
+    public async Task After_ws1_disconnects_ws2_cannot_connect_the_same_account()
     {
-        // Workspace 1 connects the account, creates posts, then disconnects.
+        // The exact reported bug: ws1 connects an account, disconnects, and ws2 must
+        // NOT be able to claim that same account afterwards.
+        SeedMeta(WorkspaceAId, UserAId, MetaAccountAlpha, SharedPageId);
+        await _providerService.DisconnectAsync(WorkspaceAId, ProviderType.Meta);
+
+        var ex = await Assert.ThrowsAsync<ProviderOwnedByAnotherWorkspaceException>(
+            () => _providerService.EnsureNotOwnedByAnotherWorkspaceAsync(
+                WorkspaceBId, ProviderType.Meta, MetaAccountAlpha, Array.Empty<string>()));
+
+        // Message must reflect the PERMANENT rule and must NOT suggest disconnecting
+        // from the other workspace will free the account.
+        Assert.Contains("permanently linked to another workspace", ex.Message);
+        Assert.DoesNotContain("Disconnect", ex.Message);
+    }
+
+    [Fact]
+    public async Task While_active_ws2_cannot_connect_the_same_account()
+    {
+        // ws1 still actively owns the account → ws2 blocked.
+        SeedMeta(WorkspaceAId, UserAId, MetaAccountAlpha, SharedPageId);
+
+        await Assert.ThrowsAsync<ProviderOwnedByAnotherWorkspaceException>(
+            () => _providerService.EnsureNotOwnedByAnotherWorkspaceAsync(
+                WorkspaceBId, ProviderType.Meta, MetaAccountAlpha, Array.Empty<string>()));
+    }
+
+    [Fact]
+    public async Task Ws1_can_reconnect_its_own_account_after_disconnect()
+    {
+        // The owning workspace is never blocked from reconnecting its own account.
+        SeedMeta(WorkspaceAId, UserAId, MetaAccountAlpha, SharedPageId);
+        await _providerService.DisconnectAsync(WorkspaceAId, ProviderType.Meta);
+
+        // No throw — same workspace, same account.
+        await _providerService.EnsureNotOwnedByAnotherWorkspaceAsync(
+            WorkspaceAId, ProviderType.Meta, MetaAccountAlpha, Array.Empty<string>());
+    }
+
+    [Fact]
+    public async Task Ws2_may_connect_a_different_account_after_ws1_disconnects()
+    {
+        // ws2 is only blocked from the SAME account; a different account is fine.
+        SeedMeta(WorkspaceAId, UserAId, MetaAccountAlpha, SharedPageId);
+        await _providerService.DisconnectAsync(WorkspaceAId, ProviderType.Meta);
+
+        await _providerService.EnsureNotOwnedByAnotherWorkspaceAsync(
+            WorkspaceBId, ProviderType.Meta, MetaAccountBeta, new[] { OtherPageId });
+    }
+
+    // ── Content isolation (content NEVER crosses workspaces) ───────────────────
+
+    [Fact]
+    public async Task Ws2_with_a_different_account_does_not_see_ws1_posts()
+    {
+        // Workspace 1 connects an account, creates posts, then disconnects.
         var (_, page1) = SeedMeta(WorkspaceAId, UserAId, MetaAccountAlpha, SharedPageId);
         var ws1Scheduled = SeedPost(WorkspaceAId, page1.Id, PostStatus.Scheduled);
         var ws1Published = SeedPost(WorkspaceAId, page1.Id, PostStatus.Published);
@@ -130,10 +186,10 @@ public class ProviderOwnershipTests : IDisposable
 
         await _providerService.DisconnectAsync(WorkspaceAId, ProviderType.Meta);
 
-        // Workspace 2 connects the SAME external account/page (now allowed).
+        // Workspace 2 connects a DIFFERENT account (the only valid way to coexist).
         await _providerService.EnsureNotOwnedByAnotherWorkspaceAsync(
-            WorkspaceBId, ProviderType.Meta, MetaAccountAlpha, new[] { SharedPageId });
-        var (_, page2) = SeedMeta(WorkspaceBId, UserBId, MetaAccountAlpha, SharedPageId);
+            WorkspaceBId, ProviderType.Meta, MetaAccountBeta, new[] { OtherPageId });
+        var (_, page2) = SeedMeta(WorkspaceBId, UserBId, MetaAccountBeta, OtherPageId);
         var ws2Post = SeedPost(WorkspaceBId, page2.Id, PostStatus.Scheduled);
 
         // Workspace 2's list shows ONLY its own post — never workspace 1's.
@@ -162,7 +218,7 @@ public class ProviderOwnershipTests : IDisposable
         var ws1Failed = SeedPost(WorkspaceAId, page1.Id, PostStatus.Failed);
 
         await _providerService.DisconnectAsync(WorkspaceAId, ProviderType.Meta);
-        SeedMeta(WorkspaceBId, UserBId, MetaAccountAlpha, SharedPageId);
+        SeedMeta(WorkspaceBId, UserBId, MetaAccountBeta, OtherPageId);
 
         ActAs(WorkspaceBId);
         var publisherResolver = new Mock<IPostPublisherResolver>().Object;
@@ -178,7 +234,7 @@ public class ProviderOwnershipTests : IDisposable
     }
 
     [Fact]
-    public async Task No_content_is_transferred_between_workspaces_on_ownership_move()
+    public async Task No_content_is_transferred_between_workspaces()
     {
         var (_, page1) = SeedMeta(WorkspaceAId, UserAId, MetaAccountAlpha, SharedPageId);
         SeedPost(WorkspaceAId, page1.Id, PostStatus.Scheduled);
@@ -195,7 +251,7 @@ public class ProviderOwnershipTests : IDisposable
         _db.SaveChanges();
 
         await _providerService.DisconnectAsync(WorkspaceAId, ProviderType.Meta);
-        SeedMeta(WorkspaceBId, UserBId, MetaAccountAlpha, SharedPageId);
+        SeedMeta(WorkspaceBId, UserBId, MetaAccountBeta, OtherPageId);
 
         // Every workspace-1 post + media still belongs to workspace 1.
         Assert.True(await _db.Posts.AsNoTracking().Where(p => p.WorkspaceId == WorkspaceAId).CountAsync() == 2);
@@ -298,11 +354,10 @@ public class ProviderOwnershipTests : IDisposable
     [Fact]
     public async Task Disconnect_in_ws1_cancels_only_ws1_posts_and_does_not_affect_ws2()
     {
-        // ws1 and ws2 each independently own the same external page (seeded directly —
-        // models the post-migration state where ws2 connected after ws1 released, but
-        // here both rows coexist to prove the disconnect filters by WorkspaceId).
+        // ws1 and ws2 own DISTINCT accounts + pages. Disconnect must scope strictly by
+        // WorkspaceId and never touch the other workspace's connection or posts.
         var (_, page1) = SeedMeta(WorkspaceAId, UserAId, MetaAccountAlpha, "page-ws1");
-        var (conn2, page2) = SeedMeta(WorkspaceBId, UserBId, "meta-user-beta", "page-ws2");
+        var (conn2, page2) = SeedMeta(WorkspaceBId, UserBId, MetaAccountBeta, "page-ws2");
 
         var ws1Scheduled = SeedPost(WorkspaceAId, page1.Id, PostStatus.Scheduled);
         var ws2Scheduled = SeedPost(WorkspaceBId, page2.Id, PostStatus.Scheduled);

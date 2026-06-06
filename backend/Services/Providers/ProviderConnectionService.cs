@@ -73,20 +73,22 @@ public class ProviderConnectionService : IProviderConnectionService
         IEnumerable<string> externalAssetIds,
         CancellationToken ct = default)
     {
-        // 1. Account-level ownership: same (Provider + ExternalAccountId) owned by a
-        //    DIFFERENT workspace in a non-disconnected state (Active or ReauthRequired).
+        // 1. Account-level ownership is PERMANENT: a provider account identity
+        //    (Provider + ExternalAccountId) belongs forever to the FIRST workspace
+        //    that connected it. We therefore check ALL rows in other workspaces —
+        //    connected AND disconnected. Disconnecting in the owning workspace does
+        //    NOT release the identity, so it can never be claimed by anyone else.
         if (!string.IsNullOrEmpty(externalAccountId))
         {
             var accountOwnedElsewhere = await _context.MetaConnections
                 .AnyAsync(c => c.WorkspaceId != workspaceId
                             && c.Provider == provider
-                            && c.IsConnected
                             && c.ProviderAccountId == externalAccountId, ct);
 
             if (accountOwnedElsewhere)
             {
                 _logger.LogWarning(
-                    "Connect blocked: provider {Provider} account {ExternalAccountId} is owned by another workspace (requesting workspace {WorkspaceId}).",
+                    "Connect blocked: provider {Provider} account {ExternalAccountId} is permanently owned by another workspace (requesting workspace {WorkspaceId}).",
                     provider, externalAccountId, workspaceId);
                 throw new ProviderOwnedByAnotherWorkspaceException(provider, externalAccountId);
             }

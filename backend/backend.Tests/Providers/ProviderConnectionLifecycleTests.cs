@@ -252,10 +252,13 @@ public class ProviderConnectionLifecycleTests : IDisposable
 
     // ── B. Cross-workspace exclusive ownership ───────────────────────────────
     //
-    // Product rule (supersedes the old "agency use case" that allowed the same
-    // account in two workspaces): a provider account/page/IG may be OWNED by only
-    // ONE workspace at a time. Ownership is held while IsConnected = true (Active
-    // OR ReauthRequired) and released only by a real Disconnect.
+    // Product rule: a provider account identity may be OWNED by only ONE workspace.
+    // ACCOUNT-level ownership (Provider + ProviderAccountId) is PERMANENT — the first
+    // workspace to connect an account owns it forever; disconnecting there does NOT
+    // release it to another workspace. ASSET-level ownership (page / IG) is held while
+    // IsConnected = true (Active OR ReauthRequired); a real Disconnect frees the asset,
+    // but the permanent account binding still prevents another workspace from bringing
+    // those assets back via the same account.
 
     [Fact]
     public async Task Different_workspace_connecting_same_account_is_blocked_while_owned()
@@ -266,7 +269,9 @@ public class ProviderConnectionLifecycleTests : IDisposable
         var ex = await Assert.ThrowsAsync<ProviderOwnedByAnotherWorkspaceException>(
             () => _providerService.EnsureNotOwnedByAnotherWorkspaceAsync(
                 WorkspaceBId, ProviderType.Meta, MetaAccountAlpha, Array.Empty<string>()));
-        Assert.Contains("already connected to another workspace", ex.Message);
+        Assert.Contains("permanently linked to another workspace", ex.Message);
+        // The message must NOT suggest disconnecting elsewhere will free the account.
+        Assert.DoesNotContain("Disconnect", ex.Message);
     }
 
     [Fact]
@@ -306,8 +311,10 @@ public class ProviderConnectionLifecycleTests : IDisposable
     }
 
     [Fact]
-    public async Task Disconnect_releases_ownership_so_another_workspace_can_connect()
+    public async Task Disconnect_does_NOT_release_account_ownership_to_another_workspace()
     {
+        // Account-level ownership is PERMANENT: disconnecting in the owning workspace
+        // must NOT let a different workspace claim the same provider account later.
         var (_, page, ig) = SeedMeta(WorkspaceAId, UserAId, MetaAccountAlpha);
 
         // While A owns it, B is blocked.
@@ -315,12 +322,18 @@ public class ProviderConnectionLifecycleTests : IDisposable
             () => _providerService.EnsureNotOwnedByAnotherWorkspaceAsync(
                 WorkspaceBId, ProviderType.Meta, MetaAccountAlpha, new[] { page.PageId, ig.IgBusinessId }));
 
-        // A disconnects (real user-initiated) → ownership released.
+        // A disconnects (real user-initiated). The identity row survives (disconnected).
         await _providerService.DisconnectAsync(WorkspaceAId, ProviderType.Meta);
 
-        // Now B can connect the same account/page/IG.
+        // B STILL cannot connect the same account — ownership is permanent.
+        var ex = await Assert.ThrowsAsync<ProviderOwnedByAnotherWorkspaceException>(
+            () => _providerService.EnsureNotOwnedByAnotherWorkspaceAsync(
+                WorkspaceBId, ProviderType.Meta, MetaAccountAlpha, Array.Empty<string>()));
+        Assert.Contains("permanently linked to another workspace", ex.Message);
+
+        // But B can connect a DIFFERENT account.
         await _providerService.EnsureNotOwnedByAnotherWorkspaceAsync(
-            WorkspaceBId, ProviderType.Meta, MetaAccountAlpha, new[] { page.PageId, ig.IgBusinessId });
+            WorkspaceBId, ProviderType.Meta, MetaAccountBeta, Array.Empty<string>());
     }
 
     // ── B2. Permanent workspace+provider→account binding (rule #3) ───────────
@@ -332,7 +345,7 @@ public class ProviderConnectionLifecycleTests : IDisposable
     [Fact]
     public async Task Connecting_different_account_after_disconnect_is_rejected()
     {
-        // Workspace A connects account Alpha, then disconnects (releases ownership).
+        // Workspace A connects account Alpha, then disconnects (frees the active slot).
         SeedMeta(WorkspaceAId, UserAId, MetaAccountAlpha);
         await _providerService.DisconnectAsync(WorkspaceAId, ProviderType.Meta);
 
@@ -562,8 +575,10 @@ public class ProviderConnectionLifecycleTests : IDisposable
     [Fact]
     public async Task Disconnect_in_workspace_A_does_not_touch_workspace_B_posts()
     {
+        // Each workspace owns a DISTINCT account (account ownership is exclusive +
+        // permanent, so the same account can never be active in two workspaces).
         var (_, aPage, _) = SeedMeta(WorkspaceAId, UserAId, MetaAccountAlpha);
-        var (_, bPage, _) = SeedMeta(WorkspaceBId, UserBId, MetaAccountAlpha);
+        var (_, bPage, _) = SeedMeta(WorkspaceBId, UserBId, MetaAccountBeta);
 
         var aScheduled = SeedPost(WorkspaceAId, aPage.Id, PostStatus.Scheduled);
         var bScheduled = SeedPost(WorkspaceBId, bPage.Id, PostStatus.Scheduled);

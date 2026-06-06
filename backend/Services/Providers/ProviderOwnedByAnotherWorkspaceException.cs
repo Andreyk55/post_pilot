@@ -4,23 +4,25 @@ namespace PostPilot.Api.Services.Providers;
 
 /// <summary>
 /// Thrown when a workspace tries to connect a provider account or asset
-/// (page / IG account / future LinkedIn page) that is currently OWNED by a
-/// DIFFERENT workspace — i.e. an active or reauth-required connection/asset
-/// with the same (Provider + ExternalAccountId) or (Provider + ExternalAssetId)
-/// already exists elsewhere.
+/// (page / IG account / future LinkedIn page) that is PERMANENTLY OWNED by a
+/// DIFFERENT workspace — i.e. a row with the same (Provider + ExternalAccountId)
+/// or (Provider + ExternalAssetId) already exists in another workspace.
 ///
-/// The controller layer maps this to a 409 with the spec-mandated message:
+/// Account-level ownership is PERMANENT: the first workspace to connect a
+/// provider account identity owns it forever. Disconnecting there does NOT
+/// release it, so the same external account can never be connected to another
+/// workspace later. (Asset-level ownership for pages / IG accounts is released
+/// on disconnect, but the permanent account binding makes that moot for cross-
+/// workspace claims.)
 ///
-///     "This social account is already connected to another workspace.
-///      Disconnect it there before connecting it here."
-///
+/// The controller layer maps this to a 409 with the spec-mandated message below.
 /// We never modify, disconnect, or move the owning workspace's data.
 /// </summary>
 public class ProviderOwnedByAnotherWorkspaceException : InvalidOperationException
 {
     public const string UserMessage =
-        "This social account is already connected to another workspace. " +
-        "Disconnect it there before connecting it here.";
+        "This provider account is already permanently linked to another workspace. " +
+        "To use a different account, create or select another workspace.";
 
     public ProviderType Provider { get; }
 

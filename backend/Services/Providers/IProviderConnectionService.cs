@@ -43,11 +43,16 @@ public interface IProviderConnectionService
     /// <see cref="ProviderOwnedByAnotherWorkspaceException"/> if the provider
     /// account (<paramref name="externalAccountId"/>) or any of the provider assets
     /// (<paramref name="externalAssetIds"/>, e.g. page ids / IG account ids) is
-    /// currently OWNED by a workspace OTHER than <paramref name="workspaceId"/>.
+    /// OWNED by a workspace OTHER than <paramref name="workspaceId"/>.
     ///
-    /// "Owned" means a non-disconnected row (IsConnected = true — covers both
-    /// Active and ReauthRequired). Same-workspace ownership is allowed (reconnect).
-    /// Disconnected rows in other workspaces do NOT block.
+    /// Account-level ownership is PERMANENT: ANY row (connected OR disconnected) in
+    /// another workspace with the same (Provider + ExternalAccountId) blocks. The
+    /// first workspace to connect an account owns its identity forever; disconnecting
+    /// there does not release it. Same-workspace rows are allowed (reconnect).
+    ///
+    /// Asset-level ownership (pages / IG accounts) is active-only: a disconnected
+    /// asset in another workspace does not block. The permanent account binding above
+    /// already prevents another workspace from ever bringing those assets back.
     ///
     /// Provider OAuth services call this AFTER resolving the external ids from the
     /// provider but BEFORE persisting any connection/asset state. It never modifies
