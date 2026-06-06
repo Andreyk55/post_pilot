@@ -199,6 +199,26 @@ public class ProviderOwnershipCallbackGuardTests : IDisposable
         Assert.False(string.IsNullOrEmpty(stateRow.TempAccessToken));
     }
 
+    [Fact]
+    public async Task Callback_allows_reconnect_in_original_workspace_after_disconnect()
+    {
+        // Workspace A owns Alpha, disconnects (ownership stays permanent for A), then
+        // reconnects the SAME account in the SAME workspace via OAuth → allowed, and
+        // pages are fetched only because ownership validation passed first.
+        SeedActiveMeta(WorkspaceAId, UserAId, MetaAccountAlpha);
+        await _service.DisconnectAsync(WorkspaceAId);
+        _handler.Reset();
+
+        var state = SeedOAuthState(WorkspaceAId);
+
+        var response = await _service.HandleCallbackAsync("code", state);
+
+        Assert.NotNull(response);
+        Assert.True(_handler.PagesFetched, "Pages should be fetched on a valid same-workspace reconnect.");
+        var stateRow = await _db.MetaOAuthStates.AsNoTracking().FirstAsync(s => s.State == state);
+        Assert.False(string.IsNullOrEmpty(stateRow.TempAccessToken));
+    }
+
     // ── Recording fake Graph handler ─────────────────────────────────────────────
 
     private sealed class RecordingHandler : HttpMessageHandler

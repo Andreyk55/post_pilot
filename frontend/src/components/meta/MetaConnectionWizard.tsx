@@ -7,6 +7,7 @@ import type {
 import { metaApi, MetaApiError } from '../../api/meta'
 import { PageSelectionStep } from './PageSelectionStep'
 import { InstagramSelectionStep } from './InstagramSelectionStep'
+import { resolveOAuthCallbackError, resolveOAuthCallbackSuccess } from './oauthCallbackOutcome'
 import './MetaConnectionWizard.css'
 
 interface MetaConnectionWizardProps {
@@ -82,26 +83,27 @@ export function MetaConnectionWizard({
       setLoading(true)
       setError(null)
       const response = await metaApi.handleCallback(code, state)
-      setTempToken(response.tempToken)
-      setPages(response.pages)
-      setStep('pages')
-    } catch (err) {
-      // 409 = permanent ownership: this Meta account belongs to another workspace,
-      // or this workspace is bound to a different account. The backend rejects BEFORE
-      // returning any pages, so we must NOT open page selection — show the exact
-      // server message and clear any pending selection state.
-      if (err instanceof MetaApiError && err.status === 409) {
-        setTempToken('')
-        setPages([])
-        setSelectedPageIds([])
-        setInstagramAccounts([])
-        setSelectedInstagramIds([])
-        setError(err.message)
-        setStep('rejected')
-      } else {
-        setError('Failed to connect to Meta. Please try again.')
-        setStep('rejected')
+      const outcome = resolveOAuthCallbackSuccess(response)
+      if (outcome.kind === 'pages') {
+        setTempToken(outcome.tempToken)
+        setPages(outcome.pages)
+        setStep('pages')
       }
+    } catch (err) {
+      // Permanent-ownership 409 (or any failure) → 'rejected': clear ALL pending
+      // selection/OAuth state so the page-selection wizard is never shown, and
+      // surface the exact server message.
+      const outcome = resolveOAuthCallbackError(err)
+      const message = outcome.kind === 'rejected'
+        ? outcome.message
+        : 'Failed to connect to Meta. Please try again.'
+      setTempToken('')
+      setPages([])
+      setSelectedPageIds([])
+      setInstagramAccounts([])
+      setSelectedInstagramIds([])
+      setError(message)
+      setStep('rejected')
       console.error('OAuth callback error:', err)
     } finally {
       setLoading(false)
