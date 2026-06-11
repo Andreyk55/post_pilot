@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
 import type { Post, PostStatus } from '../api/posts'
-import { getMediaUrl, getMediaTypeFromFile } from '../api/media'
-import { VideoThumbnail } from './VideoThumbnail'
+import { getMediaTypeFromFile } from '../api/media'
+import { MediaThumbnail } from './MediaThumbnail'
 import { ConfirmDialog } from './ConfirmDialog'
 import { Toast } from './Toast'
 import { getContentBadges, getMediaLabel } from '../utils/postBadges'
@@ -288,12 +288,12 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
                   </div>
                 )}
 
-                {/* Carousel preview (multiple images) */}
+                {/* Carousel preview (multiple images) — fail-safe cover image. */}
                 {post.mediaItems && post.mediaItems.length >= 2 && (
                   <div className="post-media-preview carousel-preview">
-                    <img
-                      src={getMediaUrl(post.mediaItems[0].mediaUrl) || ''}
-                      alt=""
+                    <MediaThumbnail
+                      storageKey={post.mediaItems[0].mediaUrl}
+                      mediaType="Image"
                       className="media-thumbnail"
                     />
                     <span className="media-indicator">
@@ -306,9 +306,9 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
                 {/* Single image preview (not carousel) */}
                 {!(post.mediaItems && post.mediaItems.length >= 2) && post.mediaUrl && mediaType === 'Image' && (
                   <div className="post-media-preview">
-                    <img
-                      src={getMediaUrl(post.mediaUrl) || ''}
-                      alt=""
+                    <MediaThumbnail
+                      storageKey={post.mediaUrl}
+                      mediaType="Image"
                       className="media-thumbnail"
                     />
                     <span className="media-indicator">
@@ -318,21 +318,15 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
                   </div>
                 )}
 
-                {/* Video preview */}
+                {/* Video preview — static placeholder; never loads the video file. */}
                 {!(post.mediaItems && post.mediaItems.length >= 2) && post.mediaUrl && mediaType === 'Video' && (
                   <div className="post-media-preview">
-                    {post.selectedThumbnailUrl ? (
-                      <img
-                        src={post.selectedThumbnailUrl}
-                        alt="Video thumbnail"
-                        className="media-thumbnail"
-                      />
-                    ) : (
-                      <VideoThumbnail
-                        videoUrl={getMediaUrl(post.mediaUrl) || ''}
-                        className="media-thumbnail"
-                      />
-                    )}
+                    <MediaThumbnail
+                      storageKey={post.mediaUrl}
+                      mediaType="Video"
+                      thumbnailUrl={post.selectedThumbnailUrl}
+                      className="media-thumbnail"
+                    />
                     <span className="media-indicator">
                       <VideoIcon />
                       {getMediaLabel(post)}

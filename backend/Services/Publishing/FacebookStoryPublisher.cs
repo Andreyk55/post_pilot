@@ -242,7 +242,7 @@ public class FacebookStoryPublisher : IStoryPublisher
             {
                 imageUrl = await _mediaService.GetPublishingUrlAsync(post.MediaUrl!, _mediaDownloadUrlExpiration, cancellationToken);
                 _logger.LogInformation("Generated publishing URL for storage key {StorageKey} for FB story {PostId}",
-                    post.MediaUrl, post.Id);
+                    RedactKey(post.MediaUrl), post.Id);
             }
             else
             {
@@ -284,7 +284,7 @@ public class FacebookStoryPublisher : IStoryPublisher
         {
             videoUrl = await _mediaService.GetPublishingUrlAsync(post.MediaUrl!, _videoDownloadUrlExpiration, cancellationToken);
             _logger.LogInformation("Generated publishing URL for video storage key {StorageKey} for FB story {PostId}",
-                post.MediaUrl, post.Id);
+                RedactKey(post.MediaUrl), post.Id);
         }
         else
         {
@@ -318,7 +318,7 @@ public class FacebookStoryPublisher : IStoryPublisher
 
             _logger.LogInformation(
                 "FB video story start phase complete: video={VideoId}, uploadUrl={UploadUrl} for post {PostId}",
-                videoId, uploadUrlStr, post.Id);
+                videoId, RedactUrl(uploadUrlStr), post.Id);
         }
         else
         {
@@ -466,7 +466,7 @@ public class FacebookStoryPublisher : IStoryPublisher
 
         _logger.LogInformation(
             "FB video story UPLOAD: POST {Url} file_size={FileSize}",
-            uploadUrl, videoBytes.Length);
+            RedactUrl(uploadUrl), videoBytes.Length);
 
         var response = await _httpClient.SendAsync(request, cancellationToken);
         var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -804,6 +804,52 @@ public class FacebookStoryPublisher : IStoryPublisher
             @"(access_token["":\s=]+)[^\s&""}\]]+",
             "$1[REDACTED]",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    }
+
+    /// <summary>
+    /// Redacts a media/publishing URL to scheme+host + a short tail of the PATH for
+    /// traceability. The query string is dropped FIRST, so a signed token (e.g. a
+    /// Supabase <c>?token=…</c>) can never survive into logs — not even when the token
+    /// sits at the very end of the URL. Kept in sync with
+    /// <c>FacebookPagePublisher.RedactUrl</c> / <c>InstagramPublisher.RedactUrl</c>.
+    /// </summary>
+    internal static string RedactUrl(string? url)
+    {
+        if (string.IsNullOrEmpty(url)) return "(empty)";
+
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            // Use the path only — never the query (that's where signed tokens live).
+            var path = uri.AbsolutePath;
+            var tail = path.Length > 12 ? path[^12..] : path;
+            return $"{uri.Scheme}://{uri.Host}/...{tail}";
+        }
+
+        // Not a valid absolute URL — show first 20 + last 12 chars only.
+        if (url.Length > 40)
+            return $"{url[..20]}...{url[^12..]}";
+        return url;
+    }
+
+    /// <summary>
+    /// Redacts a storage key for logging. Keys carry a high-entropy GUID mediaId (plus
+    /// user/workspace ids) that makes the unauthenticated fetch URL practically
+    /// unguessable, so we treat the key as a capability and never log it in full. We
+    /// keep just the leading scope segment (e.g. "users") and the last 12 chars
+    /// (filename tail) for debugging. External/public URLs are routed through
+    /// <see cref="RedactUrl"/> instead. Kept in sync with the feed publishers.
+    /// </summary>
+    internal static string RedactKey(string? key)
+    {
+        if (string.IsNullOrEmpty(key)) return "(empty)";
+
+        // If a full URL slipped in (legacy external media), redact it as a URL.
+        if (key.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            return RedactUrl(key);
+
+        var prefix = key.Split('/', 2)[0];
+        var tail = key.Length > 12 ? key[^12..] : key;
+        return $"{prefix}/...{tail}";
     }
 }
 

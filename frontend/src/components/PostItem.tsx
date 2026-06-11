@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { postsApi, type Post, type PostDetails, type PostStatus } from '../api/posts'
-import { getMediaUrl, getMediaTypeFromFile } from '../api/media'
-import { VideoThumbnail } from './VideoThumbnail'
+import { getMediaTypeFromFile } from '../api/media'
+import { MediaThumbnail } from './MediaThumbnail'
 import { getContentBadges, getMediaLabel } from '../utils/postBadges'
 import './PostItem.css'
 
@@ -204,12 +204,13 @@ export function PostItem({ post, cachedDetails, onDetailsFetched }: PostItemProp
         </div>
 
         <div className={`post-media ${post.mediaUrl ? '' : 'placeholder'}`}>
-          {/* Carousel preview */}
+          {/* Carousel preview — first item as the cover image (fail-safe). */}
           {post.mediaItems && post.mediaItems.length >= 2 && (
             <div className="post-carousel-thumbnail">
-              <img
-                src={getMediaUrl(post.mediaItems[0].mediaUrl) || ''}
-                alt="Carousel preview"
+              <MediaThumbnail
+                storageKey={post.mediaItems[0].mediaUrl}
+                mediaType="Image"
+                alt=""
               />
               <span className="video-badge">
                 {getMediaLabel(post)}
@@ -218,25 +219,22 @@ export function PostItem({ post, cachedDetails, onDetailsFetched }: PostItemProp
           )}
           {/* Single image */}
           {!(post.mediaItems && post.mediaItems.length >= 2) && post.mediaUrl && getEffectiveMediaType(post) === 'Image' && (
-            <img
-              src={getMediaUrl(post.mediaUrl) || ''}
-              alt="Post attachment"
+            <MediaThumbnail
+              storageKey={post.mediaUrl}
+              mediaType="Image"
+              alt=""
             />
           )}
-          {/* Video */}
+          {/* Video — static placeholder (or user-picked thumbnail); never loads the video file. */}
           {!(post.mediaItems && post.mediaItems.length >= 2) && post.mediaUrl && getEffectiveMediaType(post) === 'Video' && (
-            post.selectedThumbnailUrl ? (
-              <div className="post-video-thumbnail custom-thumbnail">
-                <img src={post.selectedThumbnailUrl} alt="Video thumbnail" />
-                <span className="video-badge">{getMediaLabel(post)}</span>
-              </div>
-            ) : (
-              <VideoThumbnail
-                videoUrl={getMediaUrl(post.mediaUrl) || ''}
-                className="post-video-thumbnail"
-                badgeLabel={getMediaLabel(post)}
+            <div className="post-video-thumbnail">
+              <MediaThumbnail
+                storageKey={post.mediaUrl}
+                mediaType="Video"
+                thumbnailUrl={post.selectedThumbnailUrl}
               />
-            )
+              <span className="video-badge">{getMediaLabel(post)}</span>
+            </div>
           )}
         </div>
 

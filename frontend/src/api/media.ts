@@ -7,16 +7,43 @@ export type MediaType = 'None' | 'Image' | 'Video'
 
 /**
  * Generates a URL for viewing/downloading media from its storage key.
- * Uses a relative URL so Vite proxies it to the API in dev (same-origin, no CORS).
- * The backend route is a catch-all that preserves the full key (including any "media/" prefix),
- * so we do NOT slice the prefix here.
+ *
+ * The backend route is a catch-all that preserves the full key (including any
+ * "media/" or "users/..." prefix), so we do NOT slice the prefix here — we only
+ * encode each segment.
+ *
+ * URL base resolution:
+ *  - When `apiBaseUrl` is an ABSOLUTE url (e.g. "https://post-pilot.cloud-ip.cc/api"
+ *    in production, where the SPA and API live on different origins), we anchor the
+ *    media URL to it → "https://post-pilot.cloud-ip.cc/api/media/files/{key}".
+ *    Without this, a relative "/api/..." resolves against the Vercel frontend origin
+ *    (which has no such route) and every thumbnail 404s.
+ *  - When `apiBaseUrl` is empty or relative (local/dev, where Vite proxies "/api"),
+ *    we keep the relative "/api/media/files/{key}" so same-origin/proxy still works.
+ *
+ * `apiBaseUrl` already ends in "/api" (e.g. ".../api"), so the media path is appended
+ * as "/media/files/..." — we must NOT prepend another "/api".
  */
 export function getMediaUrl(storageKey: string | null | undefined): string | null {
   if (!storageKey) return null
 
   // Preserve "/" between segments; encode each piece.
   const encoded = storageKey.split('/').map(encodeURIComponent).join('/')
+
+  const base = (API_URL ?? '').trim()
+  if (isAbsoluteUrl(base)) {
+    // Append to the configured API base (already includes "/api"). Trim a trailing
+    // slash so we don't produce a "//media" path.
+    return `${base.replace(/\/+$/, '')}/media/files/${encoded}`
+  }
+
+  // Local/dev: relative path proxied to the API by Vite.
   return `/api/media/files/${encoded}`
+}
+
+/** True for an http(s) absolute URL — i.e. a cross-origin API base we must anchor to. */
+function isAbsoluteUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value)
 }
 
 /**
