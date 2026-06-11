@@ -236,8 +236,9 @@ public class MediaController : ControllerBase
     }
 
     /// <summary>
-    /// Streams a stored file by its full storage key. Catch-all route so keys like
-    /// "media/{guid}.jpg" are preserved end-to-end without slicing on the client.
+    /// Streams a stored file by its full storage key. Catch-all route so multi-segment
+    /// keys like "users/{guid}/workspaces/{guid}/providers/meta-facebook/media/{guid}/photo.jpg"
+    /// are preserved end-to-end without slicing on the client.
     /// Route: GET /api/media/files/{*storageKey}
     ///
     /// PUBLIC BY DESIGN — DO NOT add [Authorize] here without a replacement plan.
@@ -246,12 +247,15 @@ public class MediaController : ControllerBase
     /// any auth, so the route MUST stay anonymous for publishing to work.
     ///
     /// Mitigations that make the unauth surface safe in practice:
-    ///   - Storage keys are "media/{guid}.{ext}", produced by IMediaService at upload
-    ///     time. The guid is server-generated and never exposed except to:
+    ///   - Storage keys are server-chosen and carry a high-entropy GUID mediaId
+    ///     (current shape: "users/{userId}/workspaces/{ws}/providers/{provider}/media/{mediaId}/{name}.{ext}";
+    ///     the legacy "media/{guid}.{ext}" shape is still served for old objects).
+    ///     The mediaId is server-generated and never exposed except to:
     ///       (a) the workspace member who uploaded it (via /uploads/init response),
     ///       (b) Meta during publishing.
     ///   - There is no enumeration endpoint that lists keys.
-    ///   - Keys are not logged in any user-visible surface.
+    ///   - Keys are not logged in full in any surface (publishers redact them; see
+    ///     FacebookPagePublisher.RedactKey / InstagramPublisher.RedactUrl).
     ///
     /// Future hardening (not yet implemented):
     ///   - Replace this with short-lived presigned URLs handed to Meta per publish.

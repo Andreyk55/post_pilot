@@ -282,15 +282,15 @@ public class FacebookPagePublisher : IPostPublisher
             {
                 imageUrl = await _mediaService.GetPublishingUrlAsync(post.MediaUrl, _metaDownloadUrlExpiration, cancellationToken);
                 _logger.LogInformation("Generated publishing URL for storage key {StorageKey} for post {PostId}",
-                    post.MediaUrl, post.Id);
+                    RedactKey(post.MediaUrl), post.Id);
             }
             else
             {
                 imageUrl = post.MediaUrl;
             }
 
-            _logger.LogInformation("FB_IMAGE_URL postId={PostId} storageKey={MediaUrl} resolvedUrl={ImageUrl}",
-                post.Id, post.MediaUrl, imageUrl);
+            _logger.LogInformation("FB_IMAGE_URL postId={PostId} storageKey={StorageKey} resolvedUrl={ImageUrl}",
+                post.Id, RedactKey(post.MediaUrl), RedactUrl(imageUrl));
 
             url = $"{_graphApiBaseUrl}/{pageId}/photos";
             content = new FormUrlEncodedContent(new Dictionary<string, string>
@@ -315,15 +315,15 @@ public class FacebookPagePublisher : IPostPublisher
             {
                 imageUrl = await _mediaService.GetPublishingUrlAsync(post.MediaUrl, _metaDownloadUrlExpiration, cancellationToken);
                 _logger.LogInformation("Generated publishing URL for storage key {StorageKey} for post {PostId}",
-                    post.MediaUrl, post.Id);
+                    RedactKey(post.MediaUrl), post.Id);
             }
             else
             {
                 imageUrl = post.MediaUrl;
             }
 
-            _logger.LogInformation("FB_IMAGE_URL postId={PostId} storageKey={MediaUrl} resolvedUrl={ImageUrl} (legacy branch)",
-                post.Id, post.MediaUrl, imageUrl);
+            _logger.LogInformation("FB_IMAGE_URL postId={PostId} storageKey={StorageKey} resolvedUrl={ImageUrl} (legacy branch)",
+                post.Id, RedactKey(post.MediaUrl), RedactUrl(imageUrl));
 
             url = $"{_graphApiBaseUrl}/{pageId}/photos";
             content = new FormUrlEncodedContent(new Dictionary<string, string>
@@ -563,7 +563,7 @@ public class FacebookPagePublisher : IPostPublisher
             // Use longer expiration for videos since processing takes time
             videoUrl = await _mediaService.GetPublishingUrlAsync(post.MediaUrl!, _videoDownloadUrlExpiration, cancellationToken);
             _logger.LogInformation("Generated publishing URL for video storage key {StorageKey} for post {PostId}",
-                post.MediaUrl, post.Id);
+                RedactKey(post.MediaUrl), post.Id);
         }
         else
         {
@@ -589,7 +589,7 @@ public class FacebookPagePublisher : IPostPublisher
             {
                 parameters["thumb"] = thumbnailUrl;
                 _logger.LogInformation("Including custom thumbnail URL for post {PostId}: {ThumbnailUrl}",
-                    post.Id, thumbnailUrl);
+                    post.Id, RedactUrl(thumbnailUrl));
             }
         }
         else if (!string.IsNullOrEmpty(post.SelectedThumbnailUrl))
@@ -601,7 +601,7 @@ public class FacebookPagePublisher : IPostPublisher
         var content = new FormUrlEncodedContent(parameters);
 
         _logger.LogInformation(PostPilotLogEvents.OutboundCall, "FB_VIDEO_OUTBOUND POST {Url} postId={PostId}", url, post.Id);
-        _logger.LogDebug("FB_VIDEO_URL postId={PostId} videoUrl={VideoUrl}", post.Id, videoUrl);
+        _logger.LogDebug("FB_VIDEO_URL postId={PostId} videoUrl={VideoUrl}", post.Id, RedactUrl(videoUrl));
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var response = await _httpClient.PostAsync(url, content, cancellationToken);
@@ -855,6 +855,53 @@ public class FacebookPagePublisher : IPostPublisher
             @"(access_token["":\s=]+)[^\s&""}\]]+",
             "$1[REDACTED]",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    }
+
+    /// <summary>
+    /// Redacts a media/publishing URL to scheme+host + a short tail of the PATH for
+    /// traceability. Unlike a raw-string tail, this explicitly drops the query string
+    /// first, so a signed token (e.g. Supabase <c>?token=…</c>) can never survive into
+    /// logs even when the token sits at the very end of the URL. Same overall shape as
+    /// <c>InstagramPublisher.RedactUrl</c> (scheme://host/...tail).
+    /// Example: "https://abc.supabase.co/object/sign/bucket/photo.png?token=SECRET"
+    ///       → "https://abc.supabase.co/...o/photo.png".
+    /// </summary>
+    internal static string RedactUrl(string? url)
+    {
+        if (string.IsNullOrEmpty(url)) return "(empty)";
+
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            // Use the path only — never the query (that's where signed tokens live).
+            var path = uri.AbsolutePath;
+            var tail = path.Length > 12 ? path[^12..] : path;
+            return $"{uri.Scheme}://{uri.Host}/...{tail}";
+        }
+
+        // Not a valid absolute URL — show first 20 + last 12 chars only.
+        if (url.Length > 40)
+            return $"{url[..20]}...{url[^12..]}";
+        return url;
+    }
+
+    /// <summary>
+    /// Redacts a storage key for logging. Keys carry a high-entropy GUID mediaId that
+    /// makes the unauthenticated fetch URL practically unguessable, so we treat the key
+    /// as a capability and never log it in full. We keep just the leading scope segment
+    /// (e.g. "users") and the last 12 chars (filename tail) for debugging.
+    /// External/public URLs are routed through <see cref="RedactUrl"/> instead.
+    /// </summary>
+    internal static string RedactKey(string? key)
+    {
+        if (string.IsNullOrEmpty(key)) return "(empty)";
+
+        // If a full URL slipped in (legacy external media), redact it as a URL.
+        if (key.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            return RedactUrl(key);
+
+        var prefix = key.Split('/', 2)[0];
+        var tail = key.Length > 12 ? key[^12..] : key;
+        return $"{prefix}/...{tail}";
     }
 }
 

@@ -7,22 +7,28 @@ what the risk surface is, and the path to a hardened replacement.
 ## What it does
 
 Streams a stored media file by its raw storage key. The route is a catch-all
-(`{*storageKey}`) so keys like `media/{guid}.jpg` survive intact end-to-end.
-The handler lives in [backend/Controllers/MediaController.cs](../backend/Controllers/MediaController.cs)
+(`{*storageKey}`) so multi-segment keys like
+`users/{guid}/workspaces/{guid}/providers/meta-facebook/media/{guid}/photo.jpg`
+survive intact end-to-end (the legacy `media/{guid}.jpg` shape is still served for
+older objects). The handler lives in
+[backend/Controllers/MediaController.cs](../backend/Controllers/MediaController.cs)
 under `GetFile`.
 
 ## Why it must stay public
 
-At publish time the API hands the URL of a media file to Meta:
+At publish time the API hands the URL of a media file to Meta. In **server
+(Supabase/S3) mode** that is a short-lived *signed* bucket URL and this proxy
+route is not involved. In **local-disk mode** (and as a signing fallback) the
+worker hands Meta this anonymous proxy route instead:
 
 ```
-{App.PublicUrl}/api/media/files/media/{guid}.jpg
+{App.PublicUrl}/api/media/files/users/{guid}/workspaces/{guid}/providers/meta-facebook/media/{guid}/photo.jpg
 ```
 
 Meta's Graph API fetchers (Facebook, Instagram) then `GET` that URL from
 their own infrastructure to ingest the image or video. Those fetchers do
 **not** present any auth — no cookie, no token, no header. If we add
-`[Authorize]` to this route, every Facebook/Instagram publish breaks.
+`[Authorize]` to this route, Facebook/Instagram publishing via the proxy breaks.
 
 The same key is also embedded in image/video previews in the SPA. The SPA
 **is** authenticated, but it requests the file via the same anonymous route
@@ -33,10 +39,16 @@ because that's where Meta will pull it from.
 What an attacker would need to access an arbitrary file:
 
 1. **Knowledge of the storage key.** Keys are produced server-side as
-   `media/{Guid.NewGuid():N}.{ext}`. A v4 GUID is 122 bits of entropy.
+   `users/{userId}/workspaces/{ws}/providers/{provider}/media/{mediaId}/{name}.{ext}`,
+   where `mediaId` is a `Guid.NewGuid()` (122 bits of entropy) — enough on its
+   own to make the key unguessable. (Older objects use the legacy
+   `media/{Guid.NewGuid():N}.{ext}` shape, also a 122-bit GUID.)
 2. **No enumeration endpoint exists.** The API never returns a list of keys.
-3. **Keys are not logged in user-facing surfaces.** They appear in publish-time
-   logs (server-only) and inside the publish payload sent to Meta.
+3. **Keys/URLs are not logged in full.** The publishers redact storage keys and
+   signed URLs before logging (`FacebookPagePublisher.RedactKey` /
+   `RedactUrl`, `InstagramPublisher.RedactUrl`) — only scheme+host and a short
+   tail survive, never the query string or signed token. The full key still
+   appears inside the publish payload sent to Meta.
 
 So in practice this is a "capability URL" — anyone holding the URL can fetch
 the bytes. The bytes are always media the user intended to publish to public

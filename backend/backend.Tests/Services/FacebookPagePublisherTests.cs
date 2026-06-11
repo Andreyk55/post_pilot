@@ -613,6 +613,78 @@ public class FacebookPagePublisherTests : IDisposable
         Assert.Single(handler.SentRequests);
         Assert.Contains("/feed", handler.SentRequests[0].RequestUri!.PathAndQuery);
     }
+
+    // ── Log hygiene: media URLs / storage keys must never be logged in full ─────
+    //
+    // FB publishing logs (FB_IMAGE_URL, FB_VIDEO_URL, thumbnail) used to emit the
+    // full resolved/signed publishing URL and the full storage key at Information
+    // level. These pin the redaction helpers so a signed token / unguessable key
+    // can never leak into logs. Mirrors InstagramPublisher.RedactUrl behaviour.
+
+    [Fact]
+    public void RedactUrl_dropsPathAndQuery_keepingSchemeHostAndShortTail()
+    {
+        // A realistic Supabase signed URL with a token in the query string.
+        var signed = "https://abc.supabase.co/storage/v1/object/sign/postpilot-media/" +
+                     "users/x/media/y/photo.png?token=eyJhbGciOiJIUzI1NiJ9.SECRETSIG";
+
+        var redacted = FacebookPagePublisher.RedactUrl(signed);
+
+        // Scheme + host survive for traceability...
+        Assert.StartsWith("https://abc.supabase.co/...", redacted);
+        // ...but the signed token and full path do NOT.
+        Assert.DoesNotContain("token=", redacted);
+        Assert.DoesNotContain("SECRETSIG", redacted);
+        Assert.DoesNotContain("postpilot-media", redacted);
+    }
+
+    [Fact]
+    public void RedactUrl_handlesNullAndEmpty()
+    {
+        Assert.Equal("(empty)", FacebookPagePublisher.RedactUrl(null));
+        Assert.Equal("(empty)", FacebookPagePublisher.RedactUrl(""));
+    }
+
+    [Fact]
+    public void RedactKey_keepsScopePrefixAndTail_notTheMediaId()
+    {
+        var userId = Guid.NewGuid();
+        var workspaceId = Guid.NewGuid();
+        var mediaId = Guid.NewGuid();
+        var key = $"users/{userId:D}/workspaces/{workspaceId:D}/providers/meta-facebook/media/{mediaId:D}/photo.png";
+
+        var redacted = FacebookPagePublisher.RedactKey(key);
+
+        // The leading scope segment is kept for debugging...
+        Assert.StartsWith("users/...", redacted);
+        // ...but the high-entropy mediaId (the part that makes the public URL
+        // unguessable) is NOT present in full.
+        Assert.DoesNotContain(mediaId.ToString(), redacted);
+        Assert.DoesNotContain(workspaceId.ToString(), redacted);
+    }
+
+    [Fact]
+    public void RedactKey_redactsLegacyKeyShape()
+    {
+        var key = $"media/{Guid.NewGuid():N}.jpg";
+
+        var redacted = FacebookPagePublisher.RedactKey(key);
+
+        Assert.StartsWith("media/...", redacted);
+        Assert.NotEqual(key, redacted);
+    }
+
+    [Fact]
+    public void RedactKey_treatsExternalUrlAsUrl()
+    {
+        // A non-storage-key external URL should still be redacted, not echoed whole.
+        var external = "https://cdn.example.com/path/to/asset.jpg?sig=abcdef123456";
+
+        var redacted = FacebookPagePublisher.RedactKey(external);
+
+        Assert.StartsWith("https://cdn.example.com/...", redacted);
+        Assert.DoesNotContain("sig=", redacted);
+    }
 }
 
 // ──────────────────────────────────────────────

@@ -1239,7 +1239,7 @@ public class InstagramPublisher : IPostPublisher
         {
             var url = await _mediaService.GetPublishingUrlAsync(post.MediaUrl!, _mediaDownloadUrlExpiration, cancellationToken);
             _logger.LogInformation("Generated publishing URL for storage key {StorageKey} for IG post {PostId}",
-                post.MediaUrl, post.Id);
+                RedactKey(post.MediaUrl), post.Id);
             return url;
         }
         return post.MediaUrl!;
@@ -1956,23 +1956,52 @@ public class InstagramPublisher : IPostPublisher
     }
 
     /// <summary>
-    /// Redacts a URL to scheme+host + last 12 chars of path for traceability.
-    /// Example: "https://storage.provider.example.com/...abc123def456"
+    /// Redacts a media/publishing URL to scheme+host + a short tail of the PATH for
+    /// traceability. The query string is dropped FIRST, so a signed token (e.g. a
+    /// Supabase <c>?token=…</c>) can never survive into logs — not even when the token
+    /// sits at the very end of the URL. Kept in sync with
+    /// <c>FacebookPagePublisher.RedactUrl</c> so both publishers log the same shape.
+    /// Example: "https://abc.supabase.co/object/sign/bucket/photo.png?token=SECRET"
+    ///       → "https://abc.supabase.co/...o/photo.png".
     /// </summary>
-    private static string RedactUrl(string? url)
+    internal static string RedactUrl(string? url)
     {
         if (string.IsNullOrEmpty(url)) return "(empty)";
 
         if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
         {
-            var tail = url.Length > 12 ? url[^12..] : url;
+            // Use the path only — never the query (that's where signed tokens live).
+            var path = uri.AbsolutePath;
+            var tail = path.Length > 12 ? path[^12..] : path;
             return $"{uri.Scheme}://{uri.Host}/...{tail}";
         }
 
-        // Not a valid URL — show first 20 + last 12 chars
+        // Not a valid absolute URL — show first 20 + last 12 chars only.
         if (url.Length > 40)
             return $"{url[..20]}...{url[^12..]}";
         return url;
+    }
+
+    /// <summary>
+    /// Redacts a storage key for logging. Keys carry a high-entropy GUID mediaId (plus
+    /// user/workspace ids) that makes the unauthenticated fetch URL practically
+    /// unguessable, so we treat the key as a capability and never log it in full. We
+    /// keep just the leading scope segment (e.g. "users") and the last 12 chars
+    /// (filename tail) for debugging. External/public URLs are routed through
+    /// <see cref="RedactUrl"/> instead. Kept in sync with
+    /// <c>FacebookPagePublisher.RedactKey</c>.
+    /// </summary>
+    internal static string RedactKey(string? key)
+    {
+        if (string.IsNullOrEmpty(key)) return "(empty)";
+
+        // If a full URL slipped in (legacy external media), redact it as a URL.
+        if (key.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            return RedactUrl(key);
+
+        var prefix = key.Split('/', 2)[0];
+        var tail = key.Length > 12 ? key[^12..] : key;
+        return $"{prefix}/...{tail}";
     }
 
     /// <summary>
