@@ -86,15 +86,25 @@ public class Startup
         var legacyAllowed = Configuration
             .GetSection("Cors:AllowedOrigins")
             .Get<string[]>() ?? Array.Empty<string>();
-        var allowedOrigins = authAllowed.Concat(legacyAllowed).Distinct().ToArray();
+        var allowedOrigins = authAllowed
+            .Concat(legacyAllowed)
+            .Concat(new[]
+            {
+                Configuration["Auth:FrontendUrl"],
+                Configuration["Frontend:BaseUrl"],
+            })
+            .Select(NormalizeOrigin)
+            .Where(origin => !string.IsNullOrEmpty(origin))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
         services.AddCors(options =>
         {
             options.AddPolicy("AllowFrontend", policy =>
             {
                 policy.SetIsOriginAllowed(origin =>
-                          origin.StartsWith("http://localhost:") ||
-                          Array.IndexOf(allowedOrigins, origin) >= 0)
+                          origin.StartsWith("http://localhost:", StringComparison.OrdinalIgnoreCase) ||
+                          allowedOrigins.Contains(NormalizeOrigin(origin), StringComparer.OrdinalIgnoreCase))
                       .AllowAnyHeader()
                       .AllowAnyMethod()
                       .AllowCredentials();
@@ -212,16 +222,16 @@ public class Startup
 
         // Correlation ID middleware: must run before routing so all logs include the id
         app.UseMiddleware<CorrelationIdMiddleware>();
+        app.UseRouting();
+        app.UseCors("AllowFrontend");
         // Maps workspace-resolution failures (stale/missing/unauthorized current
         // workspace) to explicit 409/403 responses. Wraps the rest of the pipeline so
         // it catches exceptions thrown from controllers/endpoints.
         app.UseMiddleware<WorkspaceResolutionExceptionMiddleware>();
-        app.UseCors("AllowFrontend");
         // Private-access gate. Runs after CORS so preflight responses still
         // carry the right headers; runs before routing/auth so blocked
         // requests never reach controllers or hit the DB.
         app.UseMiddleware<PrivateAccessMiddleware>();
-        app.UseRouting();
         // Authentication / authorization for real-user endpoints. Order:
         // routing → auth → endpoints, so [Authorize] controllers see the
         // resolved ClaimsPrincipal.
@@ -309,5 +319,17 @@ public class Startup
         services.AddSingleton<IVideoFrameExtractor, FFmpegVideoFrameExtractor>();
 
         services.AddScoped<IMediaAiService, MediaAiService>();
+    }
+
+    private static string? NormalizeOrigin(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var trimmed = value.Trim().TrimEnd('/');
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
+            return trimmed;
+
+        return uri.GetLeftPart(UriPartial.Authority);
     }
 }
