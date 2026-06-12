@@ -38,11 +38,24 @@ public class PostsController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// Backend statuses that the "In Progress" UI tab collapses into a single bucket.
+    /// These are all "the system is actively working on this" states — a user-facing
+    /// simplification only; the underlying <see cref="PostStatus"/> values are unchanged.
+    /// </summary>
+    private static readonly PostStatus[] InProgressStatuses =
+    {
+        PostStatus.Publishing,
+        PostStatus.Processing,
+        PostStatus.RetryPending,
+    };
+
     [HttpGet]
     public async Task<ActionResult<PaginatedResponse<PostDto>>> GetPosts(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
         [FromQuery] PostStatus? status = null,
+        [FromQuery] string? statusGroup = null,
         [FromQuery] PostType? postType = null)
     {
         // Ensure valid pagination parameters
@@ -52,7 +65,21 @@ public class PostsController : ControllerBase
         var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
         var query = _context.Posts.Where(p => p.WorkspaceId == workspaceId);
 
-        if (status.HasValue)
+        // statusGroup collapses several backend statuses into one UI filter (e.g.
+        // "inProgress" → Publishing/Processing/RetryPending). When provided it takes
+        // precedence over a single `status` value. Unknown group names match nothing.
+        if (!string.IsNullOrWhiteSpace(statusGroup))
+        {
+            if (string.Equals(statusGroup, "inProgress", StringComparison.OrdinalIgnoreCase))
+            {
+                query = query.Where(p => InProgressStatuses.Contains(p.Status));
+            }
+            else
+            {
+                query = query.Where(p => false);
+            }
+        }
+        else if (status.HasValue)
         {
             query = query.Where(p => p.Status == status.Value);
         }

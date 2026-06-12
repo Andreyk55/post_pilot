@@ -7,6 +7,9 @@ export type Platform = 'Twitter' | 'Instagram' | 'Facebook' | 'LinkedIn'
 
 export type PostStatus = 'Scheduled' | 'Publishing' | 'Published' | 'Failed' | 'RetryPending' | 'Canceled' | 'Processing'
 
+/** Server-side status group: collapses several backend statuses into one filter. */
+export type PostStatusGroup = 'inProgress'
+
 export type PostType = 'Feed' | 'Story'
 
 export interface PostMediaItem {
@@ -125,12 +128,21 @@ export const postsApi = {
     return data.items
   },
 
-  async getPaginated(page: number = 1, pageSize: number = 10, status?: PostStatus, postType?: PostType): Promise<PaginatedResponse<Post>> {
+  async getPaginated(
+    page: number = 1,
+    pageSize: number = 10,
+    status?: PostStatus,
+    postType?: PostType,
+    statusGroup?: PostStatusGroup,
+  ): Promise<PaginatedResponse<Post>> {
     const params = new URLSearchParams({
       page: page.toString(),
       pageSize: pageSize.toString(),
     })
-    if (status) {
+    // statusGroup takes precedence over a single status when both are provided.
+    if (statusGroup) {
+      params.append('statusGroup', statusGroup)
+    } else if (status) {
       params.append('status', status)
     }
     if (postType) {

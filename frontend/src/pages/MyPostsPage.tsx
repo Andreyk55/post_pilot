@@ -1,18 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { postsApi, type Post, type PostDetails, type PostStatus } from '../api/posts'
+import { postsApi, type Post, type PostDetails } from '../api/posts'
 import { PostItem } from '../components/PostItem'
+import { STATUS_TABS, resolveFilter, tabLabel } from './myPostsTabs'
 import './MyPostsPage.css'
-
-const STATUS_TABS: { label: string; value: PostStatus | 'all'; count?: number }[] = [
-  { label: 'All', value: 'all' },
-  { label: 'Scheduled', value: 'Scheduled' },
-  { label: 'Publishing', value: 'Publishing' },
-  { label: 'Published', value: 'Published' },
-  { label: 'Failed', value: 'Failed' },
-  { label: 'Retry Pending', value: 'RetryPending' },
-  { label: 'Processing', value: 'Processing' },
-  { label: 'Canceled', value: 'Canceled' },
-]
 
 const PAGE_SIZE = 20
 
@@ -24,17 +14,17 @@ export function MyPostsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
   const [totalCount, setTotalCount] = useState(0)
-  const [activeStatus, setActiveStatus] = useState<PostStatus | 'all'>('all')
+  const [activeTab, setActiveTab] = useState<string>('all')
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   // Cache for post details - persists across re-renders
   const [detailsCache, setDetailsCache] = useState<Map<string, PostDetails>>(new Map())
 
-  const loadPosts = async (status: PostStatus | 'all') => {
+  const loadPosts = async (tabValue: string) => {
     try {
       setLoading(true)
-      const statusFilter = status === 'all' ? undefined : status
-      const data = await postsApi.getPaginated(1, PAGE_SIZE, statusFilter)
+      const { status, statusGroup } = resolveFilter(tabValue)
+      const data = await postsApi.getPaginated(1, PAGE_SIZE, status, undefined, statusGroup)
       setPosts(data.items ?? [])
       setCurrentPage(1)
       setHasMore(data.hasNextPage)
@@ -49,8 +39,8 @@ export function MyPostsPage() {
   }
 
   useEffect(() => {
-    loadPosts(activeStatus)
-  }, [activeStatus])
+    loadPosts(activeTab)
+  }, [activeTab])
 
   const loadMorePosts = useCallback(async () => {
     if (loadingMore || !hasMore) return
@@ -58,8 +48,8 @@ export function MyPostsPage() {
     try {
       setLoadingMore(true)
       const nextPage = currentPage + 1
-      const statusFilter = activeStatus === 'all' ? undefined : activeStatus
-      const data = await postsApi.getPaginated(nextPage, PAGE_SIZE, statusFilter)
+      const { status, statusGroup } = resolveFilter(activeTab)
+      const data = await postsApi.getPaginated(nextPage, PAGE_SIZE, status, undefined, statusGroup)
       setPosts(prev => [...prev, ...(data.items ?? [])])
       setCurrentPage(nextPage)
       setHasMore(data.hasNextPage)
@@ -69,7 +59,7 @@ export function MyPostsPage() {
     } finally {
       setLoadingMore(false)
     }
-  }, [currentPage, loadingMore, hasMore, activeStatus])
+  }, [currentPage, loadingMore, hasMore, activeTab])
 
   const handleScroll = useCallback(() => {
     if (!scrollContainerRef.current || loadingMore || !hasMore) return
@@ -90,9 +80,11 @@ export function MyPostsPage() {
     return () => container.removeEventListener('scroll', handleScroll)
   }, [handleScroll])
 
-  const handleStatusChange = (status: PostStatus | 'all') => {
-    setActiveStatus(status)
+  const handleStatusChange = (tabValue: string) => {
+    setActiveTab(tabValue)
   }
+
+  const activeTabLabel = tabLabel(activeTab)
 
   const handleDetailsFetched = useCallback((id: string, details: PostDetails) => {
     setDetailsCache(prev => {
@@ -124,7 +116,7 @@ export function MyPostsPage() {
           {STATUS_TABS.map(tab => (
             <button
               key={tab.value}
-              className={`status-tab ${activeStatus === tab.value ? 'active' : ''}`}
+              className={`status-tab ${activeTab === tab.value ? 'active' : ''}`}
               onClick={() => handleStatusChange(tab.value)}
             >
               {tab.label}
@@ -144,7 +136,7 @@ export function MyPostsPage() {
       ) : posts.length === 0 ? (
         <div className="empty-state">
           <div className="empty-icon-wrapper">
-            {activeStatus === 'all' ? (
+            {activeTab === 'all' ? (
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M19 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2z"/>
                 <path d="M8 10h8M8 14h5"/>
@@ -156,9 +148,9 @@ export function MyPostsPage() {
               </svg>
             )}
           </div>
-          <h3>{activeStatus === 'all' ? 'No posts yet' : `No ${activeStatus.toLowerCase()} posts`}</h3>
+          <h3>{activeTab === 'all' ? 'No posts yet' : `No ${activeTabLabel.toLowerCase()} posts`}</h3>
           <p>
-            {activeStatus === 'all'
+            {activeTab === 'all'
               ? 'Create your first post to get started'
               : 'Try selecting a different filter'}
           </p>
