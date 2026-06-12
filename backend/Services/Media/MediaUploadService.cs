@@ -117,9 +117,9 @@ public class MediaUploadService : IMediaUploadService
         media.SizeBytes = info.SizeBytes;
         media.UploadedAt = DateTime.UtcNow;
 
-        // Phase 3: generate an Instagram-safe JPEG derivative for PNG uploads. The original
-        // is never touched (Facebook/preview keep using it); Instagram validation/publishing
-        // use the derivative. Done once here, not at schedule/publish time.
+        // Phase 3: generate an Instagram-safe JPEG derivative only for Instagram PNG uploads.
+        // The original is never touched; Facebook uploads and legacy/unknown platform keys
+        // do not get derivatives in this phase.
         await TryGenerateInstagramDerivativeAsync(media, cancellationToken);
 
         await _db.SaveChangesAsync(cancellationToken);
@@ -141,6 +141,8 @@ public class MediaUploadService : IMediaUploadService
     private async Task TryGenerateInstagramDerivativeAsync(Entities.Media media, CancellationToken cancellationToken)
     {
         if (_derivativeService == null)
+            return;
+        if (!IsInstagramUploadKey(media.StorageKey))
             return;
         if (!_derivativeService.ShouldGenerateForContentType(media.ContentType))
             return;
@@ -228,6 +230,21 @@ public class MediaUploadService : IMediaUploadService
     // Local redaction so derivative keys never appear raw in logs (mirrors the gate's RedactKey).
     private static string MediaValidationGateRedaction(string? key) =>
         Validation.MediaValidationGate.RedactKey(key);
+
+    private static bool IsInstagramUploadKey(string storageKey)
+    {
+        var segments = storageKey.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        for (var i = 0; i < segments.Length - 1; i++)
+        {
+            if (string.Equals(segments[i], "providers", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(segments[i + 1], "meta-instagram", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     public async Task<bool> DeleteAsync(Guid workspaceId, Guid mediaId, CancellationToken cancellationToken = default)
     {

@@ -81,7 +81,8 @@ public class MediaUploadServiceInstagramDerivativeTests : IDisposable
         var row = await db.Media.SingleAsync(m => m.Id == init.MediaId);
         Assert.Equal(init.StorageKey, row.StorageKey);
         Assert.Equal("image/jpeg", row.InstagramImageMimeType);
-        Assert.Equal($"{FolderOf(init.StorageKey)}/instagram.jpg", row.InstagramImageStorageKey);
+        Assert.Equal($"{FolderOf(init.StorageKey)}/photo.jpg", row.InstagramImageStorageKey);
+        Assert.False(row.InstagramImageStorageKey!.EndsWith("/instagram.jpg", StringComparison.Ordinal));
         Assert.Equal(1080, row.InstagramImageWidth);
         Assert.Equal(1080, row.InstagramImageHeight);
         Assert.True(row.InstagramImageSizeBytes > 0);
@@ -91,6 +92,30 @@ public class MediaUploadServiceInstagramDerivativeTests : IDisposable
         await using var derivativeBytes = new MemoryStream(storage.UploadedObjects[row.InstagramImageStorageKey!]);
         using var image = await Image.LoadAsync(derivativeBytes);
         Assert.Equal("JPEG", image.Metadata.DecodedImageFormat?.Name);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_FacebookPngUpload_DoesNotCreateDerivative()
+    {
+        await using var db = NewDb();
+        var storage = new RecordingStorage();
+        var svc = NewUploadService(db, storage);
+        var workspaceId = Guid.NewGuid();
+
+        var init = await svc.InitAsync(Guid.NewGuid(), workspaceId, "photo.png", "image/png", 1000, Platform.Facebook);
+        storage.SeedLocalFile(init.StorageKey, WriteImage("png", 1200, 630), "image/png");
+
+        await svc.CompleteAsync(workspaceId, init.MediaId);
+
+        var row = await db.Media.SingleAsync(m => m.Id == init.MediaId);
+        Assert.Equal(init.StorageKey, row.StorageKey);
+        Assert.Null(row.InstagramImageStorageKey);
+        Assert.Null(row.InstagramImageMimeType);
+        Assert.Null(row.InstagramImageSizeBytes);
+        Assert.Null(row.InstagramImageWidth);
+        Assert.Null(row.InstagramImageHeight);
+        Assert.Null(row.InstagramImageGeneratedAt);
+        Assert.Empty(storage.UploadedObjects);
     }
 
     [Fact]
@@ -109,6 +134,56 @@ public class MediaUploadServiceInstagramDerivativeTests : IDisposable
         var row = await db.Media.SingleAsync(m => m.Id == init.MediaId);
         Assert.Null(row.InstagramImageStorageKey);
         Assert.Empty(storage.UploadedObjects);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_JpgUpload_DoesNotCreateDerivative()
+    {
+        await using var db = NewDb();
+        var storage = new RecordingStorage();
+        var svc = NewUploadService(db, storage);
+        var workspaceId = Guid.NewGuid();
+
+        var init = await svc.InitAsync(Guid.NewGuid(), workspaceId, "photo.JPG", "image/jpg", 1000, Platform.Instagram);
+        storage.SeedLocalFile(init.StorageKey, WriteImage("jpeg", 1080, 1080), "image/jpg");
+
+        await svc.CompleteAsync(workspaceId, init.MediaId);
+
+        var row = await db.Media.SingleAsync(m => m.Id == init.MediaId);
+        Assert.Null(row.InstagramImageStorageKey);
+        Assert.Empty(storage.UploadedObjects);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_WebpUpload_DoesNotCreateDerivative()
+    {
+        await using var db = NewDb();
+        var storage = new RecordingStorage();
+        var svc = NewUploadService(db, storage);
+        var workspaceId = Guid.NewGuid();
+
+        var init = await svc.InitAsync(Guid.NewGuid(), workspaceId, "photo.webp", "image/webp", 1000, Platform.Instagram);
+        storage.SeedLocalFile(init.StorageKey, WriteImage("png", 1080, 1080), "image/webp");
+
+        await svc.CompleteAsync(workspaceId, init.MediaId);
+
+        var row = await db.Media.SingleAsync(m => m.Id == init.MediaId);
+        Assert.Null(row.InstagramImageStorageKey);
+        Assert.Empty(storage.UploadedObjects);
+    }
+
+    [Theory]
+    [InlineData("holiday.png", "holiday.jpg")]
+    [InlineData("test-image.PNG", "test-image.jpg")]
+    [InlineData("my.photo.v1.png", "my.photo.v1.jpg")]
+    public void BuildDerivativeKey_UsesOriginalBaseNameWithJpgExtension(string originalFileName, string expectedDerivativeFileName)
+    {
+        var service = new InstagramDerivativeService(NullLogger<InstagramDerivativeService>.Instance);
+        var key = $"users/u/workspaces/w/providers/meta-instagram/media/media-id/{originalFileName}";
+
+        var derivativeKey = service.BuildDerivativeKey(key);
+
+        Assert.Equal($"users/u/workspaces/w/providers/meta-instagram/media/media-id/{expectedDerivativeFileName}", derivativeKey);
     }
 
     [Fact]
@@ -145,7 +220,7 @@ public class MediaUploadServiceInstagramDerivativeTests : IDisposable
             svc.CompleteAsync(workspaceId, init.MediaId));
 
         Assert.Contains("Instagram-ready JPEG derivative", ex.Message);
-        var derivativeKey = $"{FolderOf(init.StorageKey)}/instagram.jpg";
+        var derivativeKey = $"{FolderOf(init.StorageKey)}/photo.jpg";
         Assert.Contains(derivativeKey, storage.DeletedKeys);
         Assert.False(storage.UploadedObjects.ContainsKey(derivativeKey));
 

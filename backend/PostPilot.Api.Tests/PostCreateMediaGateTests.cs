@@ -192,6 +192,21 @@ public class PostCreateMediaGateTests : IDisposable
     }
 
     [Fact]
+    public async Task CreatePost_InstagramPngWithValidDerivative_IsAccepted()
+    {
+        var igId = SeedInstagramAccount();
+        var key = SeedPngMediaWithDerivative("ig-png-ok", 2000, 2000);
+
+        var req = new CreatePostRequest(
+            Content: "hi", MediaUrl: key, MediaType: MediaType.Image, Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId);
+
+        var result = await _controller.CreatePost(req);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
+    [Fact]
     public async Task CreatePost_InstagramValidJpeg_IsAccepted()
     {
         var igId = SeedInstagramAccount();

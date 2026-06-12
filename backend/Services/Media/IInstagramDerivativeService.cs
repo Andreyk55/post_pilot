@@ -23,7 +23,8 @@ public interface IInstagramDerivativeService
 
     /// <summary>
     /// Computes the deterministic derivative storage key for an original key. The derivative
-    /// lives in the same media folder (e.g. <c>.../media/{mediaId}/instagram.jpg</c>).
+    /// lives in the same media folder and keeps the original base filename with a
+    /// <c>.jpg</c> extension (e.g. <c>.../media/{mediaId}/holiday.jpg</c>).
     /// </summary>
     string BuildDerivativeKey(string originalStorageKey);
 }

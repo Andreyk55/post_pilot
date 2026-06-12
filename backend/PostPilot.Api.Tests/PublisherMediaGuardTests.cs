@@ -150,13 +150,16 @@ public class PublisherMediaGuardTests : IDisposable
             BuildPublishingOptions(),
             gate);
 
-    private FacebookPagePublisher BuildFbPublisher(IMediaService mediaService, IMediaValidationGate gate)
+    private FacebookPagePublisher BuildFbPublisher(
+        IMediaService mediaService,
+        IMediaValidationGate gate,
+        HttpClient? httpClient = null)
         => new(
             _db,
             Mock.Of<IPostScheduler>(),
             mediaService,
             new FeatureSettings(),
-            ThrowingHttpClient(),
+            httpClient ?? ThrowingHttpClient(),
             NullLogger<FacebookPagePublisher>.Instance,
             BuildProviderConnections(),
             new MetaApiOptions(),
@@ -280,6 +283,49 @@ public class PublisherMediaGuardTests : IDisposable
     // ── Log hygiene: guard never logs raw keys ──────────────────────────────────
 
     [Fact]
+    public async Task FacebookPublisher_Png_UsesOriginalStorageKey()
+    {
+        var conn = new MetaConnection { Id = Guid.NewGuid(), WorkspaceId = Ws, Provider = ProviderType.Meta, IsConnected = true };
+        var page = new ConnectedPage
+        {
+            Id = Guid.NewGuid(), WorkspaceId = Ws, MetaConnectionId = conn.Id,
+            PageId = "PAGE_FB", Name = "FB Page", AccessToken = "PAGE_TOKEN", IsConnected = true,
+        };
+        _db.Add(conn); _db.Add(page); _db.SaveChanges();
+
+        var originalKey = SeedImageMedia("users/u/workspaces/w/providers/meta-facebook/media/mid/photo.png", "image/png", "png", 1200, 630);
+        var post = new Post
+        {
+            Id = Guid.NewGuid(), WorkspaceId = Ws, Content = "msg", Platform = Platform.Facebook,
+            MediaType = MediaType.Image, MediaUrl = originalKey, TargetPageId = page.Id,
+            Status = PostStatus.Scheduled, ScheduledAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+        };
+        _db.Posts.Add(post); _db.SaveChanges();
+
+        string? keyRequestedForPublishing = null;
+        var mediaService = new Mock<IMediaService>();
+        mediaService.Setup(m => m.IsStorageKey(It.IsAny<string?>()))
+            .Returns<string?>(s => s != null && !s.StartsWith("http"));
+        mediaService.Setup(m => m.GetLocalFilePathAsync(It.IsAny<string>()))
+            .Returns<string>(key => Task.FromResult<string?>(_keyToPath.TryGetValue(key, out var p) ? p : null));
+        mediaService.Setup(m => m.TryCleanupTempLocalPath(It.IsAny<string?>()));
+        mediaService.Setup(m => m.GetPublishingUrlAsync(It.IsAny<string>(), It.IsAny<TimeSpan?>(), It.IsAny<CancellationToken>()))
+            .Callback<string, TimeSpan?, CancellationToken>((key, _, _) => keyRequestedForPublishing = key)
+            .ReturnsAsync("https://signed.example/original-photo.png");
+
+        var publisher = BuildFbPublisher(
+            mediaService.Object,
+            BuildGate(mediaService.Object),
+            new HttpClient(new OkMetaHandler()));
+
+        var result = await publisher.CallMetaApiAsync(post, CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(originalKey, keyRequestedForPublishing);
+    }
+
+    [Fact]
     public async Task GuardBlocking_DoesNotLogRawStorageKeyOrSignedUrl()
     {
         var (_, _, ig) = SeedIgTarget();
@@ -315,6 +361,15 @@ public class PublisherMediaGuardTests : IDisposable
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             => throw new InvalidOperationException("Meta API must NOT be called when media fails the pre-publish guard.");
+    }
+
+    private sealed class OkMetaHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"id":"fb-post-id"}"""),
+            });
     }
 
     private sealed class CapturingLogger<T> : ILogger<T>

@@ -92,21 +92,25 @@ public class InstagramDerivativeService : IInstagramDerivativeService
     /// <summary>
     /// Deterministic derivative key in the SAME media folder as the original. The original
     /// key shape is left untouched (no migration); we only append a sibling object.
-    /// e.g. "users/.../media/{mediaId}/photo.png" -> "users/.../media/{mediaId}/instagram.jpg".
-    /// Legacy flat keys ("media/{guid}.png") get ".instagram.jpg" appended to the basename.
+    /// e.g. "users/.../media/{mediaId}/holiday.png" -> "users/.../media/{mediaId}/holiday.jpg".
+    /// The original file base name is kept; only the extension changes to ".jpg".
     /// </summary>
     public string BuildDerivativeKey(string originalStorageKey)
     {
         var lastSlash = originalStorageKey.LastIndexOf('/');
+        var fileName = lastSlash >= 0 ? originalStorageKey[(lastSlash + 1)..] : originalStorageKey;
+        var baseName = Path.GetFileNameWithoutExtension(fileName);
+        if (string.IsNullOrWhiteSpace(baseName))
+            baseName = "instagram";
+
+        var derivativeFileName = $"{baseName}.jpg";
+
         if (lastSlash >= 0)
         {
             var folder = originalStorageKey[..lastSlash];
-            return $"{folder}/instagram.jpg";
+            return $"{folder}/{derivativeFileName}";
         }
 
-        // No folder segment (legacy "media/{guid}.png" is handled by the branch above;
-        // this covers a bare filename). Append a deterministic suffix.
-        var withoutExt = Path.GetFileNameWithoutExtension(originalStorageKey);
-        return $"{withoutExt}.instagram.jpg";
+        return derivativeFileName;
     }
 }

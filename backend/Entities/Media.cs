@@ -53,7 +53,7 @@ public class Media
 
     /// <summary>
     /// Storage key of the generated Instagram JPEG derivative (e.g. the same media
-    /// folder as the original with a deterministic <c>instagram.jpg</c> name).
+    /// folder as the original with the original base filename and a <c>.jpg</c> extension).
     /// Null when no derivative was generated (JPEG original, video, or legacy row).
     /// </summary>
     public string? InstagramImageStorageKey { get; set; }
