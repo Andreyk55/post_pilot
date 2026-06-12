@@ -851,6 +851,22 @@ public class PostsController : ControllerBase
             }
         }
 
+        // AUTHORITATIVE MEDIA VALIDATION GATE (edit path).
+        // Mirrors the CreatePost gate so an edit cannot save media that creation would reject
+        // (e.g. swapping in a PNG for Instagram, or an out-of-aspect image). We resolve the
+        // effective media/target after the update and refuse to persist any change on a blocking
+        // error. Warnings do not block. The post's placement (Feed/Story) is immutable on update,
+        // so it is taken from the existing row rather than the request.
+        var updateItems = new List<MediaGateItem>();
+        if (!string.IsNullOrEmpty(request.MediaUrl))
+            updateItems.Add(new MediaGateItem(request.MediaUrl, request.MediaType ?? MediaType.None, 0));
+
+        var updatePlacement = post.PostType == PostType.Story ? Placement.Story : Placement.Feed;
+        var mediaGateProblem = await RunMediaGateAsync(
+            workspaceId, updateItems, new MediaGateTarget(request.Platform, updatePlacement), "update");
+        if (mediaGateProblem != null)
+            return BadRequest(mediaGateProblem);
+
         var scheduledAtChanged = post.ScheduledAt != request.ScheduledAt;
 
         post.Content = request.Content;
@@ -1111,13 +1127,26 @@ public class PostsController : ControllerBase
             items.Add(new MediaGateItem(request.MediaUrl, request.MediaType ?? MediaType.None, 0));
         }
 
+        var placement = request.PostType == PostType.Story ? Placement.Story : Placement.Feed;
+        return await RunMediaGateAsync(workspaceId, items, new MediaGateTarget(request.Platform, placement), "creation");
+    }
+
+    /// <summary>
+    /// Runs the authoritative media gate for a resolved (items, target) matrix and maps any
+    /// blocking failures into the same structured <see cref="ProblemDetails"/> shape used by
+    /// post creation. Returns null when there is nothing to validate (text-only) or everything
+    /// passes; warnings never block. Shared by <see cref="CreatePost"/> and <see cref="UpdatePost"/>
+    /// so an edit cannot save media that creation would have rejected.
+    /// </summary>
+    private async Task<ProblemDetails?> RunMediaGateAsync(
+        Guid workspaceId, IReadOnlyList<MediaGateItem> items, MediaGateTarget target, string context)
+    {
         // Nothing to validate (text-only). The platform-specific "media required" checks
-        // above already cover cases where media is mandatory.
+        // already cover cases where media is mandatory.
         if (items.Count == 0)
             return null;
 
-        var placement = request.PostType == PostType.Story ? Placement.Story : Placement.Feed;
-        var targets = new List<MediaGateTarget> { new(request.Platform, placement) };
+        var targets = new List<MediaGateTarget> { target };
 
         var result = await _mediaGate.ValidateAsync(workspaceId, items, targets);
         if (result.IsValid)
@@ -1141,8 +1170,8 @@ public class PostsController : ControllerBase
         var affectedPlatforms = result.Errors.Select(e => e.Platform.ToString()).Distinct().ToArray();
 
         _logger.LogWarning(
-            "Media gate blocked post creation in workspace {WorkspaceId}: {ErrorCount} error(s) across platforms {Platforms}",
-            workspaceId, result.Errors.Count, string.Join(", ", affectedPlatforms));
+            "Media gate blocked post {Context} in workspace {WorkspaceId}: {ErrorCount} error(s) across platforms {Platforms}",
+            context, workspaceId, result.Errors.Count, string.Join(", ", affectedPlatforms));
 
         return new ProblemDetails
         {
