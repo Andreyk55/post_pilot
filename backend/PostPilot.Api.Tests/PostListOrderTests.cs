@@ -34,7 +34,7 @@ public class PostListOrderTests : IDisposable
         var workspaceMock = new Mock<ICurrentWorkspaceProvider>();
         workspaceMock.Setup(x => x.GetCurrentWorkspaceIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync(TestWorkspaceId);
 
-        _controller = new PostsController(_dbContext, schedulerMock.Object, insightsMock.Object, workspaceMock.Object, loggerMock.Object);
+        _controller = new PostsController(_dbContext, schedulerMock.Object, insightsMock.Object, workspaceMock.Object, new PassThroughMediaGate(), loggerMock.Object);
     }
 
     public void Dispose()

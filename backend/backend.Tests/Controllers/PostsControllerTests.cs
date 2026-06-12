@@ -52,6 +52,7 @@ public class PostsControllerTests : IDisposable
             _schedulerMock.Object,
             _insightsMock.Object,
             _workspaceMock.Object,
+            new PassThroughMediaGate(),
             NullLogger<PostsController>.Instance);
     }
 

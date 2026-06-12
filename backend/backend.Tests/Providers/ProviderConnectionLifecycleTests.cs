@@ -91,6 +91,7 @@ public class ProviderConnectionLifecycleTests : IDisposable
         Mock.Of<IPostScheduler>(),
         _insightsMock.Object,
         _workspaceMock.Object,
+        new PassThroughMediaGate(),
         NullLogger<PostsController>.Instance);
 
     private void SeedTwoWorkspaces()

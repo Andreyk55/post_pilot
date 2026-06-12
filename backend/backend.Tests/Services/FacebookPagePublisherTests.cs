@@ -11,6 +11,7 @@ using PostPilot.Api.Services.Media;
 using PostPilot.Api.Services.Providers;
 using PostPilot.Api.Services.Publishing;
 using PostPilot.Api.Services.Scheduling;
+using PostPilot.Api.Services.Validation;
 using PostPilot.Api.Settings;
 using Xunit;
 
@@ -78,6 +79,17 @@ public class FacebookPagePublisherTests : IDisposable
             _dbContext, new[] { (IProviderLifecycleHandler)metaHandler },
             NullLogger<ProviderConnectionService>.Instance);
 
+        // Pass-through media gate: these tests exercise publish behavior, not the media
+        // guard. The dedicated guard tests use a real gate. (PublishGate.IsReauthRequired
+        // etc. are unrelated to this validation gate.)
+        var gateMock = new Mock<IMediaValidationGate>();
+        gateMock.Setup(g => g.ValidateAsync(
+                It.IsAny<Guid>(),
+                It.IsAny<IReadOnlyList<MediaGateItem>>(),
+                It.IsAny<IReadOnlyList<MediaGateTarget>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(MediaGateResult.Valid);
+
         return new FacebookPagePublisher(
             _dbContext,
             _schedulerMock.Object,
@@ -87,7 +99,8 @@ public class FacebookPagePublisherTests : IDisposable
             _loggerMock.Object,
             providerConnections,
             _metaApiOptions,
-            _publishingOptions);
+            _publishingOptions,
+            gateMock.Object);
     }
 
     private Post CreateMultiPhotoPost(int imageCount, string content = "Hello FB!")

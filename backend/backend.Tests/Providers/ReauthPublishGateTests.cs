@@ -8,6 +8,7 @@ using PostPilot.Api.Services.Media;
 using PostPilot.Api.Services.Providers;
 using PostPilot.Api.Services.Publishing;
 using PostPilot.Api.Services.Scheduling;
+using PostPilot.Api.Services.Validation;
 using PostPilot.Api.Settings;
 using Xunit;
 
@@ -125,11 +126,21 @@ public class ReauthPublishGateTests : IDisposable
             _db, new[] { (IProviderLifecycleHandler)handler }, NullLogger<ProviderConnectionService>.Instance);
         // HttpClient that throws if ever called — proves the gate blocks BEFORE any Meta call.
         var httpClient = new HttpClient(new ThrowingHandler());
+        // Pass-through media gate: these tests assert the REAUTH publish gate, not the media
+        // guard, so the guard must never be the thing that blocks here.
+        var gateMock = new Mock<IMediaValidationGate>();
+        gateMock.Setup(g => g.ValidateAsync(
+                It.IsAny<Guid>(),
+                It.IsAny<IReadOnlyList<MediaGateItem>>(),
+                It.IsAny<IReadOnlyList<MediaGateTarget>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(MediaGateResult.Valid);
         return new FacebookPagePublisher(
             _db, _schedulerMock.Object, mediaMock.Object, new FeatureSettings(),
             httpClient, NullLogger<FacebookPagePublisher>.Instance, providerConnections,
             new MetaApiOptions(),
-            new PublishingOptions { MediaDownloadUrlExpirationMinutes = 60, VideoDownloadUrlExpirationMinutes = 120, OAuthStateExpirationMinutes = 10 });
+            new PublishingOptions { MediaDownloadUrlExpirationMinutes = 60, VideoDownloadUrlExpirationMinutes = 120, OAuthStateExpirationMinutes = 10 },
+            gateMock.Object);
     }
 
     // ── 1. ReauthRequired blocks publishing (scheduled) ────────────────────────

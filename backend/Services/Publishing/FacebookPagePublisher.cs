@@ -24,6 +24,7 @@ public class FacebookPagePublisher : IPostPublisher
     private readonly HttpClient _httpClient;
     private readonly ILogger<FacebookPagePublisher> _logger;
     private readonly Providers.IProviderConnectionService _providerConnections;
+    private readonly Validation.IMediaValidationGate _mediaGate;
     private readonly string _graphApiBaseUrl;
     private readonly TimeSpan _metaDownloadUrlExpiration;
     private readonly TimeSpan _videoDownloadUrlExpiration;
@@ -79,7 +80,8 @@ public class FacebookPagePublisher : IPostPublisher
         ILogger<FacebookPagePublisher> logger,
         Providers.IProviderConnectionService providerConnections,
         MetaApiOptions metaApiOptions,
-        PublishingOptions publishingOptions)
+        PublishingOptions publishingOptions,
+        Validation.IMediaValidationGate mediaGate)
     {
         _dbContext = dbContext;
         _scheduler = scheduler;
@@ -88,6 +90,7 @@ public class FacebookPagePublisher : IPostPublisher
         _httpClient = httpClient;
         _logger = logger;
         _providerConnections = providerConnections;
+        _mediaGate = mediaGate;
         _graphApiBaseUrl = metaApiOptions.GraphApiBaseUrl;
         _metaDownloadUrlExpiration = TimeSpan.FromMinutes(publishingOptions.MediaDownloadUrlExpirationMinutes);
         _videoDownloadUrlExpiration = TimeSpan.FromMinutes(publishingOptions.VideoDownloadUrlExpirationMinutes);
@@ -258,6 +261,17 @@ public class FacebookPagePublisher : IPostPublisher
                 post.Id);
             return new PublishResult(false, ErrorType: PublishErrorType.Auth,
                 ErrorMessage: "The Facebook page must be reauthorized before publishing.");
+        }
+
+        // DEFENSE-IN-DEPTH MEDIA GUARD. PostsController already gates media at create time,
+        // but this catches posts scheduled before the gate existed, the manual publish-now
+        // path, and any future caller that bypasses the controller. Cheap re-check against
+        // Facebook/Feed rules; warnings are ignored. On a blocking error we do NOT call Meta.
+        var guardError = await GuardMediaAsync(post, Enums.Placement.Feed, cancellationToken);
+        if (guardError != null)
+        {
+            return new PublishResult(false, ErrorType: PublishErrorType.Permanent,
+                ErrorMessage: $"Media failed validation before publishing: {guardError}");
         }
 
         // Route to multi-photo flow if 2+ media items
@@ -539,6 +553,40 @@ public class FacebookPagePublisher : IPostPublisher
         _logger.LogDebug("FB_MULTIPHOTO_RESPONSE_BODY body={Body}", redactedBody);
 
         return ParseMetaResponse(Guid.Empty, response, responseBody);
+    }
+
+    /// <summary>
+    /// Final pre-publish media guard. Validates every attached IMAGE against the given
+    /// placement using the shared <see cref="Validation.IMediaValidationGate"/>. Returns the
+    /// first blocking error message, or null when publishable. Images only (videos pass
+    /// through in this phase). Never logs raw storage keys or signed URLs — the gate redacts
+    /// keys and this method only surfaces the human-readable validation message.
+    /// Internal so tests can exercise the guard directly (mirrors CallMetaApiAsync, which is
+    /// also internal to dodge ExecuteUpdateAsync under the EF InMemory test provider).
+    /// </summary>
+    internal async Task<string?> GuardMediaAsync(Post post, Enums.Placement placement, CancellationToken cancellationToken)
+    {
+        var items = new List<Validation.MediaGateItem>();
+        if (post.MediaItems is { Count: > 0 })
+        {
+            foreach (var m in post.MediaItems.OrderBy(m => m.Order))
+            {
+                if (!string.IsNullOrEmpty(m.MediaUrl))
+                    items.Add(new Validation.MediaGateItem(m.MediaUrl, m.MediaType, m.Order));
+            }
+        }
+        else if (!string.IsNullOrEmpty(post.MediaUrl))
+        {
+            items.Add(new Validation.MediaGateItem(post.MediaUrl, post.MediaType, 0));
+        }
+
+        if (items.Count == 0)
+            return null;
+
+        var result = await _mediaGate.ValidateAsync(
+            post.WorkspaceId, items, new[] { new Validation.MediaGateTarget(Platform.Facebook, placement) }, cancellationToken);
+
+        return result.IsValid ? null : result.Errors[0].Message;
     }
 
     /// <summary>

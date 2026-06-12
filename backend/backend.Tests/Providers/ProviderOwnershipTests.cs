@@ -78,7 +78,7 @@ public class ProviderOwnershipTests : IDisposable
 
     private PostsController NewPostsController() => new(
         _db, _schedulerMock.Object, _insightsMock.Object, _workspaceMock.Object,
-        NullLogger<PostsController>.Instance);
+        new PassThroughMediaGate(), NullLogger<PostsController>.Instance);
 
     /// <summary>Seed an active Meta connection + one page in the given workspace, using <paramref name="pageId"/> as the external Facebook page id.</summary>
     private (MetaConnection conn, ConnectedPage page) SeedMeta(

@@ -193,6 +193,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IImageMetadataExtractor, ImageMetadataExtractor>();
         services.AddSingleton<IVideoMetadataExtractor, FfprobeVideoMetadataExtractor>();
         services.AddScoped<IMediaValidationService, MediaValidationService>();
+        // Authoritative server-side gate used by post-create and publisher guards.
+        services.AddScoped<IMediaValidationGate, MediaValidationGate>();
     }
 
     private static void ConfigureInsightsService(IServiceCollection services, FeatureSettings featureSettings)

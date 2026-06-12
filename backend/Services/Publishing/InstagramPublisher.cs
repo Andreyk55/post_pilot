@@ -40,6 +40,7 @@ public class InstagramPublisher : IPostPublisher
     private readonly HttpClient _httpClient;
     private readonly ILogger<InstagramPublisher> _logger;
     private readonly Providers.IProviderConnectionService _providerConnections;
+    private readonly Validation.IMediaValidationGate _mediaGate;
     private readonly string _graphApiBaseUrl;
     private readonly TimeSpan _mediaDownloadUrlExpiration;
     private readonly TimeSpan _videoDownloadUrlExpiration;
@@ -107,7 +108,8 @@ public class InstagramPublisher : IPostPublisher
         ILogger<InstagramPublisher> logger,
         Providers.IProviderConnectionService providerConnections,
         MetaApiOptions metaApiOptions,
-        PublishingOptions publishingOptions)
+        PublishingOptions publishingOptions,
+        Validation.IMediaValidationGate mediaGate)
     {
         _dbContext = dbContext;
         _scheduler = scheduler;
@@ -115,6 +117,7 @@ public class InstagramPublisher : IPostPublisher
         _httpClient = httpClient;
         _logger = logger;
         _providerConnections = providerConnections;
+        _mediaGate = mediaGate;
         _graphApiBaseUrl = metaApiOptions.GraphApiBaseUrl;
         _mediaDownloadUrlExpiration = TimeSpan.FromMinutes(publishingOptions.MediaDownloadUrlExpirationMinutes);
         _videoDownloadUrlExpiration = TimeSpan.FromMinutes(publishingOptions.VideoDownloadUrlExpirationMinutes);
@@ -206,6 +209,18 @@ public class InstagramPublisher : IPostPublisher
             _logger.LogInformation("Post {PostId} was canceled before Meta API call, aborting publish", postId);
             return new PublishResult(false, ErrorType: PublishErrorType.Permanent,
                 ErrorMessage: "Post was canceled");
+        }
+
+        // DEFENSE-IN-DEPTH MEDIA GUARD. PostsController gates media at create time; this
+        // guards already-scheduled posts, manual publish-now, and any future bypass. Cheap
+        // re-check against Instagram/Feed rules (JPEG-only, dims, aspect). Warnings ignored.
+        // On a blocking error we do NOT call Meta. Images only — videos pass through.
+        var guardError = await GuardMediaAsync(post, Enums.Placement.Feed, cancellationToken);
+        if (guardError != null)
+        {
+            await MarkFailedAsync(post, $"Media failed validation before publishing: {guardError}", cancellationToken);
+            return new PublishResult(false, ErrorType: PublishErrorType.Permanent,
+                ErrorMessage: $"Media failed validation before publishing: {guardError}");
         }
 
         // Step 6: Route to image, video, carousel (images), carousel (videos), or mixed carousel flow
@@ -1173,6 +1188,39 @@ public class InstagramPublisher : IPostPublisher
             return await _mediaService.GetPublishingUrlAsync(item.MediaUrl, expiration ?? _mediaDownloadUrlExpiration, cancellationToken);
         }
         return item.MediaUrl;
+    }
+
+    /// <summary>
+    /// Final pre-publish media guard. Validates every attached IMAGE against the given
+    /// placement using the shared <see cref="Validation.IMediaValidationGate"/>. Returns the
+    /// first blocking error message, or null when publishable. Images only (videos pass
+    /// through in this phase). Never logs raw storage keys or signed URLs.
+    /// Internal for direct unit testing (the full PublishAsync path uses ExecuteUpdateAsync,
+    /// which the EF InMemory test provider does not support).
+    /// </summary>
+    internal async Task<string?> GuardMediaAsync(Post post, Enums.Placement placement, CancellationToken cancellationToken)
+    {
+        var items = new List<Validation.MediaGateItem>();
+        if (post.MediaItems is { Count: > 0 })
+        {
+            foreach (var m in post.MediaItems.OrderBy(m => m.Order))
+            {
+                if (!string.IsNullOrEmpty(m.MediaUrl))
+                    items.Add(new Validation.MediaGateItem(m.MediaUrl, m.MediaType, m.Order));
+            }
+        }
+        else if (!string.IsNullOrEmpty(post.MediaUrl))
+        {
+            items.Add(new Validation.MediaGateItem(post.MediaUrl, post.MediaType, 0));
+        }
+
+        if (items.Count == 0)
+            return null;
+
+        var result = await _mediaGate.ValidateAsync(
+            post.WorkspaceId, items, new[] { new Validation.MediaGateTarget(Platform.Instagram, placement) }, cancellationToken);
+
+        return result.IsValid ? null : result.Errors[0].Message;
     }
 
     private static List<string> DeserializeChildIds(string? json)

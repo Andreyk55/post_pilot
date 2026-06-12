@@ -81,6 +81,7 @@ public class WorkspaceIsolationTests : IDisposable
         _schedulerMock.Object,
         _insightsMock.Object,
         _workspaceMock.Object,
+        new PassThroughMediaGate(),
         NullLogger<PostsController>.Instance);
 
     private WorkspacesController NewWorkspacesController() => new(

@@ -51,7 +51,7 @@ public class UnlinkCancelTests : IDisposable
         var insightsMock = new Mock<IFacebookInsightsService>();
         var workspaceMock = new Mock<ICurrentWorkspaceProvider>();
         workspaceMock.Setup(x => x.GetCurrentWorkspaceIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync(WorkspaceId);
-        return new PostsController(_dbContext, _schedulerMock.Object, insightsMock.Object, workspaceMock.Object, loggerMock.Object);
+        return new PostsController(_dbContext, _schedulerMock.Object, insightsMock.Object, workspaceMock.Object, new PassThroughMediaGate(), loggerMock.Object);
     }
 
     private MetaOAuthService MakeOAuthService()

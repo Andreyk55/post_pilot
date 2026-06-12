@@ -36,6 +36,7 @@ public class InstagramStoryPublisher : IStoryPublisher
     private readonly HttpClient _httpClient;
     private readonly ILogger<InstagramStoryPublisher> _logger;
     private readonly Providers.IProviderConnectionService _providerConnections;
+    private readonly Validation.IMediaValidationGate _mediaGate;
     private readonly string _graphApiBaseUrl;
     private readonly TimeSpan _mediaDownloadUrlExpiration;
     private readonly int _maxImagePollAttempts;
@@ -101,7 +102,8 @@ public class InstagramStoryPublisher : IStoryPublisher
         ILogger<InstagramStoryPublisher> logger,
         Providers.IProviderConnectionService providerConnections,
         MetaApiOptions metaApiOptions,
-        PublishingOptions publishingOptions)
+        PublishingOptions publishingOptions,
+        Validation.IMediaValidationGate mediaGate)
     {
         _dbContext = dbContext;
         _scheduler = scheduler;
@@ -109,6 +111,7 @@ public class InstagramStoryPublisher : IStoryPublisher
         _httpClient = httpClient;
         _logger = logger;
         _providerConnections = providerConnections;
+        _mediaGate = mediaGate;
         _graphApiBaseUrl = metaApiOptions.GraphApiBaseUrl;
         _mediaDownloadUrlExpiration = TimeSpan.FromMinutes(publishingOptions.MediaDownloadUrlExpirationMinutes);
         _maxImagePollAttempts = publishingOptions.ImagePollMaxAttempts;
@@ -260,6 +263,17 @@ public class InstagramStoryPublisher : IStoryPublisher
         Post post, string accessToken, CancellationToken cancellationToken)
     {
         var igUserId = post.TargetInstagramAccount!.IgBusinessId;
+
+        // DEFENSE-IN-DEPTH MEDIA GUARD (image stories). Validates the story image against
+        // Instagram/Story rules before any Meta call. Warnings ignored; on a blocking error
+        // we do not call Meta. Never logs raw keys/URLs.
+        var guardError = await GuardImageMediaAsync(post, cancellationToken);
+        if (guardError != null)
+        {
+            return new PublishResult(false, ErrorType: PublishErrorType.Permanent,
+                ErrorMessage: $"Media failed validation before publishing: {guardError}");
+        }
+
         var mediaUrl = await ResolveMediaUrlAsync(post, cancellationToken);
 
         // Create story container with media_type=STORIES
@@ -552,6 +566,25 @@ public class InstagramStoryPublisher : IStoryPublisher
             return url;
         }
         return post.MediaUrl!;
+    }
+
+    /// <summary>
+    /// Final pre-publish guard for the single story image. Validates against Instagram/Story
+    /// rules via the shared <see cref="Validation.IMediaValidationGate"/>; returns the first
+    /// blocking error or null. Never logs raw storage keys or signed URLs.
+    /// </summary>
+    private async Task<string?> GuardImageMediaAsync(Post post, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(post.MediaUrl))
+            return null;
+
+        var result = await _mediaGate.ValidateAsync(
+            post.WorkspaceId,
+            new[] { new Validation.MediaGateItem(post.MediaUrl, MediaType.Image, 0) },
+            new[] { new Validation.MediaGateTarget(Platform.Instagram, Placement.Story) },
+            cancellationToken);
+
+        return result.IsValid ? null : result.Errors[0].Message;
     }
 
     /// <summary>

@@ -46,6 +46,7 @@ public class PostsStatusFilterTests : IDisposable
             schedulerMock.Object,
             insightsMock.Object,
             workspaceMock.Object,
+            new PassThroughMediaGate(),
             NullLogger<PostsController>.Instance);
     }
 

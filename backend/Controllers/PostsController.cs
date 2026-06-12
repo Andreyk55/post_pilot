@@ -10,6 +10,7 @@ using PostPilot.Api.Enums;
 using PostPilot.Api.Services.Auth;
 using PostPilot.Api.Services.Publishing;
 using PostPilot.Api.Services.Scheduling;
+using PostPilot.Api.Services.Validation;
 
 namespace PostPilot.Api.Controllers;
 
@@ -22,6 +23,7 @@ public class PostsController : ControllerBase
     private readonly IPostScheduler _scheduler;
     private readonly IFacebookInsightsService _facebookInsights;
     private readonly ICurrentWorkspaceProvider _currentWorkspace;
+    private readonly IMediaValidationGate _mediaGate;
     private readonly ILogger<PostsController> _logger;
 
     public PostsController(
@@ -29,12 +31,14 @@ public class PostsController : ControllerBase
         IPostScheduler scheduler,
         IFacebookInsightsService facebookInsights,
         ICurrentWorkspaceProvider currentWorkspace,
+        IMediaValidationGate mediaGate,
         ILogger<PostsController> logger)
     {
         _context = context;
         _scheduler = scheduler;
         _facebookInsights = facebookInsights;
         _currentWorkspace = currentWorkspace;
+        _mediaGate = mediaGate;
         _logger = logger;
     }
 
@@ -682,8 +686,15 @@ public class PostsController : ControllerBase
             }
         }
 
-        // Note: Media validation is done client-side via POST /api/media/validate before submission.
-        // The frontend blocks submission if media is invalid.
+        // AUTHORITATIVE MEDIA VALIDATION GATE.
+        // The SPA pre-validates media for UX, but that is advisory: a crafted or replayed
+        // request could otherwise schedule media that Meta will reject (e.g. a PNG for
+        // Instagram, or an out-of-aspect image). We re-validate every attached image against
+        // every selected target here, server-side, and refuse to create the post on any
+        // blocking error. Warnings do not block. (Phase 2: images only; videos pass through.)
+        var mediaGateProblem = await ValidateMediaForTargetsAsync(workspaceId, request);
+        if (mediaGateProblem != null)
+            return BadRequest(mediaGateProblem);
 
         var post = new Post
         {
@@ -1069,6 +1080,84 @@ public class PostsController : ControllerBase
                     Status = StatusCodes.Status409Conflict,
                 });
         }
+    }
+
+    /// <summary>
+    /// Builds the (item, target) matrix for a create request and runs the authoritative
+    /// media gate. Returns a structured <see cref="ProblemDetails"/> when any selected
+    /// target has invalid media, or null when everything passes (warnings are non-blocking).
+    ///
+    /// <para>Target model for this phase: a post has exactly one platform
+    /// (<see cref="CreatePostRequest.Platform"/>) and one placement derived from
+    /// <see cref="CreatePostRequest.PostType"/> (Feed→Feed, Story→Story). The matrix is
+    /// "every attached image × that single target". The per-target shape is intentionally
+    /// general so multi-target cross-posting can populate more than one target later.</para>
+    /// </summary>
+    private async Task<ProblemDetails?> ValidateMediaForTargetsAsync(
+        Guid workspaceId, CreatePostRequest request)
+    {
+        // Resolve attached media items: carousel/multi via MediaItems, else the single MediaUrl.
+        var items = new List<MediaGateItem>();
+        if (request.MediaItems is { Count: > 0 })
+        {
+            foreach (var m in request.MediaItems.OrderBy(m => m.Order).Select((m, i) => (m, i)))
+            {
+                if (!string.IsNullOrEmpty(m.m.MediaUrl))
+                    items.Add(new MediaGateItem(m.m.MediaUrl, m.m.MediaType, m.i));
+            }
+        }
+        else if (!string.IsNullOrEmpty(request.MediaUrl))
+        {
+            items.Add(new MediaGateItem(request.MediaUrl, request.MediaType ?? MediaType.None, 0));
+        }
+
+        // Nothing to validate (text-only). The platform-specific "media required" checks
+        // above already cover cases where media is mandatory.
+        if (items.Count == 0)
+            return null;
+
+        var placement = request.PostType == PostType.Story ? Placement.Story : Placement.Feed;
+        var targets = new List<MediaGateTarget> { new(request.Platform, placement) };
+
+        var result = await _mediaGate.ValidateAsync(workspaceId, items, targets);
+        if (result.IsValid)
+            return null;
+
+        // Structured, machine-readable error payload. Each entry names the failing media
+        // item (order), the target (platform + placement), and the validation code so the
+        // frontend can later highlight exactly which image failed for which platform.
+        var mediaErrors = result.Errors
+            .Select(e => new Dictionary<string, object?>
+            {
+                ["order"] = e.Order,
+                ["platform"] = e.Platform.ToString(),
+                ["placement"] = e.Placement.ToString(),
+                ["code"] = e.Code,
+                ["field"] = e.Field,
+                ["message"] = e.Message,
+            })
+            .ToList();
+
+        var affectedPlatforms = result.Errors.Select(e => e.Platform.ToString()).Distinct().ToArray();
+
+        _logger.LogWarning(
+            "Media gate blocked post creation in workspace {WorkspaceId}: {ErrorCount} error(s) across platforms {Platforms}",
+            workspaceId, result.Errors.Count, string.Join(", ", affectedPlatforms));
+
+        return new ProblemDetails
+        {
+            Title = "Invalid media",
+            Detail = result.Errors.Count == 1
+                ? result.Errors[0].Message
+                : $"{result.Errors.Count} media validation error(s) for {string.Join(", ", affectedPlatforms)}.",
+            Status = StatusCodes.Status400BadRequest,
+            Extensions =
+            {
+                ["code"] = "MEDIA_VALIDATION_FAILED",
+                ["platforms"] = affectedPlatforms,
+                ["mediaErrors"] = mediaErrors,
+            }
+        };
     }
 
     private static Dictionary<string, string[]> ValidateCreatePostRequest(CreatePostRequest request)

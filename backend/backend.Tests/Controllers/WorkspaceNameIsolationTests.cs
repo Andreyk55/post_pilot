@@ -230,7 +230,7 @@ public class WorkspaceNameIsolationTests : IDisposable
         workspaceMock.Setup(w => w.GetCurrentWorkspaceIdAsync(It.IsAny<CancellationToken>())).ReturnsAsync(ws2Id);
         var posts = new PostsController(
             _db, new Mock<IPostScheduler>().Object, new Mock<IFacebookInsightsService>().Object,
-            workspaceMock.Object, NullLogger<PostsController>.Instance);
+            workspaceMock.Object, new PassThroughMediaGate(), NullLogger<PostsController>.Instance);
 
         var result = await posts.GetPost(ws1Post.Id);
         Assert.IsType<NotFoundResult>(result.Result);
