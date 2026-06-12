@@ -644,7 +644,7 @@ public class InstagramPublisher : IPostPublisher
             for (int i = childIds.Count; i < mediaItems.Count; i++)
             {
                 var item = mediaItems[i];
-                var imageUrl = await ResolveMediaUrlForItemAsync(item, cancellationToken);
+                var imageUrl = await ResolveMediaUrlForItemAsync(post.WorkspaceId, item, cancellationToken);
                 perItemTags.TryGetValue(item.Order, out var itemTagsJson);
 
                 var childResult = await CreateCarouselChildContainerAsync(
@@ -768,7 +768,7 @@ public class InstagramPublisher : IPostPublisher
             for (int i = childIds.Count; i < mediaItems.Count; i++)
             {
                 var item = mediaItems[i];
-                var videoUrl = await ResolveMediaUrlForItemAsync(item, cancellationToken, _videoDownloadUrlExpiration);
+                var videoUrl = await ResolveMediaUrlForItemAsync(post.WorkspaceId, item, cancellationToken, _videoDownloadUrlExpiration);
                 perItemTags.TryGetValue(item.Order, out var itemTagsJson);
 
                 var childResult = await CreateCarouselVideoChildContainerAsync(
@@ -939,13 +939,13 @@ public class InstagramPublisher : IPostPublisher
 
                 if (item.MediaType == Enums.MediaType.Video)
                 {
-                    var videoUrl = await ResolveMediaUrlForItemAsync(item, cancellationToken, _videoDownloadUrlExpiration);
+                    var videoUrl = await ResolveMediaUrlForItemAsync(post.WorkspaceId, item, cancellationToken, _videoDownloadUrlExpiration);
                     childResult = await CreateCarouselVideoChildContainerAsync(
                         igUserId, videoUrl, accessToken, cancellationToken, itemTagsJson);
                 }
                 else
                 {
-                    var imageUrl = await ResolveMediaUrlForItemAsync(item, cancellationToken);
+                    var imageUrl = await ResolveMediaUrlForItemAsync(post.WorkspaceId, item, cancellationToken);
                     childResult = await CreateCarouselChildContainerAsync(
                         igUserId, imageUrl, accessToken, cancellationToken, itemTagsJson);
                 }
@@ -1181,11 +1181,18 @@ public class InstagramPublisher : IPostPublisher
     /// <summary>
     /// Resolves a public URL for a PostMediaItem (generates a fresh signed download URL if storage key).
     /// </summary>
-    private async Task<string> ResolveMediaUrlForItemAsync(PostMediaItem item, CancellationToken cancellationToken, TimeSpan? expiration = null)
+    private async Task<string> ResolveMediaUrlForItemAsync(Guid workspaceId, PostMediaItem item, CancellationToken cancellationToken, TimeSpan? expiration = null)
     {
         if (_mediaService.IsStorageKey(item.MediaUrl))
         {
-            return await _mediaService.GetPublishingUrlAsync(item.MediaUrl, expiration ?? _mediaDownloadUrlExpiration, cancellationToken);
+            // Phase 3: a PNG carousel image publishes its Instagram JPEG derivative. Video
+            // children resolve as-is.
+            var keyToPublish = item.MediaType == MediaType.Image
+                ? await InstagramMediaKeyResolver.ResolveAsync(
+                    _dbContext, _mediaService, workspaceId, item.MediaUrl, cancellationToken)
+                : item.MediaUrl;
+
+            return await _mediaService.GetPublishingUrlAsync(keyToPublish, expiration ?? _mediaDownloadUrlExpiration, cancellationToken);
         }
         return item.MediaUrl;
     }
@@ -1285,9 +1292,16 @@ public class InstagramPublisher : IPostPublisher
     {
         if (_mediaService.IsStorageKey(post.MediaUrl!))
         {
-            var url = await _mediaService.GetPublishingUrlAsync(post.MediaUrl!, _mediaDownloadUrlExpiration, cancellationToken);
+            // Phase 3: a PNG original publishes its Instagram JPEG derivative, never the raw
+            // PNG. Images only — videos resolve as-is.
+            var keyToPublish = post.MediaType == MediaType.Image
+                ? await InstagramMediaKeyResolver.ResolveAsync(
+                    _dbContext, _mediaService, post.WorkspaceId, post.MediaUrl!, cancellationToken)
+                : post.MediaUrl!;
+
+            var url = await _mediaService.GetPublishingUrlAsync(keyToPublish, _mediaDownloadUrlExpiration, cancellationToken);
             _logger.LogInformation("Generated publishing URL for storage key {StorageKey} for IG post {PostId}",
-                RedactKey(post.MediaUrl), post.Id);
+                RedactKey(keyToPublish), post.Id);
             return url;
         }
         return post.MediaUrl!;

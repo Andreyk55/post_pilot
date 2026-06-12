@@ -728,6 +728,7 @@ public class WorkspaceIsolationTests : IDisposable
         public Task DeleteAsync(string storageKey, CancellationToken ct = default) => Task.CompletedTask;
         public Task<string?> GetLocalFilePathAsync(string storageKey, CancellationToken ct = default) => Task.FromResult<string?>(null);
         public Task SaveAsync(string storageKey, Stream content, CancellationToken ct = default) => Task.CompletedTask;
+        public Task UploadObjectAsync(string storageKey, Stream content, string contentType, CancellationToken ct = default) => Task.CompletedTask;
         public bool Exists(string storageKey) => false;
         public Task<bool> ObjectExistsAsync(string storageKey, CancellationToken ct = default) => Task.FromResult(false);
         public Task<PostPilot.Api.Services.Media.StoredObjectInfo?> GetObjectInfoAsync(string storageKey, CancellationToken ct = default)

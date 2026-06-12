@@ -243,6 +243,10 @@ public class AppDbContext : DbContext
             entity.Property(e => e.OriginalFileName).HasMaxLength(500);
             entity.Property(e => e.ContentType).HasMaxLength(100);
 
+            // Phase 3: Instagram JPEG derivative metadata (nullable — only set for PNG uploads).
+            entity.Property(e => e.InstagramImageStorageKey).HasMaxLength(500);
+            entity.Property(e => e.InstagramImageMimeType).HasMaxLength(100);
+
             // Workspace FK — RESTRICT.
             entity.HasOne<Workspace>()
                 .WithMany()

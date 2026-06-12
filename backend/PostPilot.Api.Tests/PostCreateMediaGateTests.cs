@@ -93,6 +93,32 @@ public class PostCreateMediaGateTests : IDisposable
         return storageKey;
     }
 
+    /// <summary>
+    /// Seeds a PNG original WITH a stored Instagram JPEG derivative, mirroring what the
+    /// upload-complete flow produces. Both keys resolve to real image files.
+    /// </summary>
+    private string SeedPngMediaWithDerivative(string originalKey, int width, int height, int derivW = 1080, int derivH = 1080)
+    {
+        SeedMedia(originalKey, "image/png", "png", width, height);
+        var derivKey = originalKey + ".ig.jpg";
+        var derivPath = Path.Combine(Path.GetTempPath(), $"createderiv_{Guid.NewGuid():N}.jpg");
+        using (var img = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(derivW, derivH))
+        using (var fs = File.Create(derivPath))
+            img.Save(fs, new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder());
+        _tempFiles.Add(derivPath);
+        _keyToPath[derivKey] = derivPath;
+
+        var media = _db.Media.First(m => m.StorageKey == originalKey);
+        media.InstagramImageStorageKey = derivKey;
+        media.InstagramImageMimeType = "image/jpeg";
+        media.InstagramImageSizeBytes = new FileInfo(derivPath).Length;
+        media.InstagramImageWidth = derivW;
+        media.InstagramImageHeight = derivH;
+        media.InstagramImageGeneratedAt = DateTime.UtcNow;
+        _db.SaveChanges();
+        return originalKey;
+    }
+
     private Guid SeedFacebookPage()
     {
         var conn = new MetaConnection { Id = Guid.NewGuid(), WorkspaceId = Ws, Provider = ProviderType.Meta, IsConnected = true };
@@ -156,8 +182,10 @@ public class PostCreateMediaGateTests : IDisposable
         Assert.Equal("MEDIA_VALIDATION_FAILED", pd.Extensions["code"]);
         var errors = ExtractMediaErrors(pd);
         Assert.NotNull(errors);
+        // Phase 3: a PNG without an Instagram JPEG derivative is blocked with the
+        // derivative-missing code (a derivative is normally generated at upload-complete).
         Assert.Contains(errors!, e => (string?)e["platform"] == "Instagram"
-                                   && (string?)e["code"] == DTOs.MediaValidationErrorCodes.UnsupportedMimeType);
+                                   && (string?)e["code"] == DTOs.MediaValidationErrorCodes.InstagramDerivativeMissing);
 
         // No post row created.
         Assert.Empty(await _db.Posts.ToListAsync());

@@ -8,9 +8,10 @@
  * - Carousel (videos): 2–10 videos only (MP4)
  * - Carousel (mixed): 2–10 items mixing images + videos (IG only)
  *
- * NOTE: Meta accepts JPEG ONLY for Instagram images — PNG/WebP are rejected at
- * publish time. (A later phase will auto-convert PNG/WebP to JPEG; until then we
- * reject them up front so the user isn't blocked at scheduling.)
+ * NOTE: Meta accepts JPEG ONLY for Instagram images. As of Phase 3 the backend
+ * auto-converts PNG uploads to an Instagram-safe JPEG derivative at upload time, so
+ * PNG is allowed here. WebP is still NOT supported for Instagram and is rejected up
+ * front. (Original PNG is preserved for Facebook/preview; Instagram uses the JPEG.)
  */
 
 export interface MediaFileInfo {
@@ -25,9 +26,17 @@ export interface InstagramSelectionResult {
   nextFiles: MediaFileInfo[]
 }
 
-// JPEG only for Instagram — PNG/WebP are rejected by Meta at publish time.
-const IMAGE_TYPES = ['image/jpeg']
+// JPEG and PNG are accepted for Instagram. PNG is auto-converted to an
+// Instagram-safe JPEG by the backend at upload time. WebP remains unsupported.
+const IMAGE_TYPES = ['image/jpeg', 'image/png']
 const VIDEO_TYPES = ['video/mp4']
+
+/**
+ * User-facing copy explaining Instagram image handling. Shown as a hint near the
+ * uploader so users know PNG is converted and WebP is not yet supported.
+ */
+export const INSTAGRAM_IMAGE_FORMAT_HINT =
+  'Instagram requires JPEG. PNG images will be converted automatically. WebP is not supported yet.'
 
 export function isImageFile(file: MediaFileInfo): boolean {
   return IMAGE_TYPES.includes(file.type.toLowerCase())
@@ -57,12 +66,12 @@ export function validateInstagramSelection(
   if (unsupported.length > 0) {
     return {
       ok: false,
-      errorMessage: `Unsupported file type: ${unsupported[0].name}. Instagram accepts JPG or MP4 (PNG is not supported).`,
+      errorMessage: `Unsupported file type: ${unsupported[0].name}. Instagram accepts JPG, PNG (auto-converted to JPEG), or MP4. WebP is not supported yet.`,
       nextFiles: [...existingFiles],
     }
   }
 
-  // Mixed media is now allowed for Instagram carousels — just enforce max 10 total
+  // Mixed media is now allowed for Instagram carousels; just enforce max 10 total
   const totalCount = existingFiles.length + newFiles.length
   if (totalCount > 10) {
     const remaining = 10 - existingFiles.length
@@ -115,12 +124,13 @@ export function getInstagramUploaderLabel(mode: InstagramMediaMode, count: numbe
 
 /** Dynamic format hint text */
 export function getInstagramFormatHint(mode: InstagramMediaMode): string {
+  // PNG is auto-converted to JPEG by the backend; WebP is not supported yet.
   switch (mode) {
-    case 'empty': return 'Photos (JPG) or Reel (MP4)'
-    case 'single_video': return 'Reel (MP4) — add more for carousel'
-    case 'single_image': return 'Photo (JPG) — add more for carousel'
-    case 'carousel': return 'Carousel photos (JPG) — videos also accepted'
-    case 'carousel_videos': return 'Carousel videos (MP4) — photos also accepted'
-    case 'carousel_mixed': return 'Mixed carousel (photos + videos)'
+    case 'empty': return 'Photos (JPG/PNG) or Reel (MP4). PNG is converted to JPEG; WebP not supported yet.'
+    case 'single_video': return 'Reel (MP4) - add more for carousel'
+    case 'single_image': return 'Photo (JPG/PNG, PNG auto-converted) - add more for carousel'
+    case 'carousel': return 'Carousel photos (JPG/PNG, PNG auto-converted) - videos also accepted'
+    case 'carousel_videos': return 'Carousel videos (MP4) - photos also accepted'
+    case 'carousel_mixed': return 'Mixed carousel (photos + videos). PNG photos auto-converted to JPEG.'
   }
 }

@@ -185,6 +185,9 @@ public static class ServiceCollectionExtensions
                 defaultPublishingUrlExpiration: defaultPublishExpiry);
         });
 
+        // Phase 3: PNG → Instagram-safe JPEG derivative generation, invoked at upload-complete.
+        services.AddSingleton<IInstagramDerivativeService, InstagramDerivativeService>();
+
         services.AddScoped<IMediaUploadService, MediaUploadService>();
     }
 

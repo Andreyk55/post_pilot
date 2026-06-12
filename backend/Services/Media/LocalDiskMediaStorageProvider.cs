@@ -80,6 +80,13 @@ public class LocalDiskMediaStorageProvider : IMediaStorageProvider
         _logger.LogInformation("Saved file to local path: {LocalPath}", localPath);
     }
 
+    public async Task UploadObjectAsync(string storageKey, Stream content, string contentType, CancellationToken cancellationToken = default)
+    {
+        // Local disk infers content type from the file extension on read, so the
+        // explicit contentType is only advisory here. Reuse the same write path.
+        await SaveAsync(storageKey, content, cancellationToken);
+    }
+
     public bool Exists(string storageKey)
     {
         return File.Exists(GetLocalPath(storageKey));

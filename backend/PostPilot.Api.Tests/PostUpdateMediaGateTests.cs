@@ -94,6 +94,33 @@ public class PostUpdateMediaGateTests : IDisposable
         return storageKey;
     }
 
+    /// <summary>
+    /// Seeds a PNG original WITH a stored Instagram JPEG derivative (both keys map to real
+    /// image files), mirroring what the upload-complete flow produces. The derivative is a
+    /// valid 1080x1080 JPEG unless overridden.
+    /// </summary>
+    private string SeedPngMediaWithDerivative(string originalKey, int width, int height, int derivW = 1080, int derivH = 1080)
+    {
+        SeedMedia(originalKey, "image/png", "png", width, height);
+        var derivKey = originalKey + ".ig.jpg";
+        var derivPath = Path.Combine(Path.GetTempPath(), $"updatederiv_{Guid.NewGuid():N}.jpg");
+        using (var img = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(derivW, derivH))
+        using (var fs = File.Create(derivPath))
+            img.Save(fs, new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder());
+        _tempFiles.Add(derivPath);
+        _keyToPath[derivKey] = derivPath;
+
+        var media = _db.Media.First(m => m.StorageKey == originalKey);
+        media.InstagramImageStorageKey = derivKey;
+        media.InstagramImageMimeType = "image/jpeg";
+        media.InstagramImageSizeBytes = new FileInfo(derivPath).Length;
+        media.InstagramImageWidth = derivW;
+        media.InstagramImageHeight = derivH;
+        media.InstagramImageGeneratedAt = DateTime.UtcNow;
+        _db.SaveChanges();
+        return originalKey;
+    }
+
     private Guid SeedFacebookPage()
     {
         var conn = new MetaConnection { Id = Guid.NewGuid(), WorkspaceId = Ws, Provider = ProviderType.Meta, IsConnected = true };
@@ -151,8 +178,10 @@ public class PostUpdateMediaGateTests : IDisposable
     // ── Instagram blocks PNG on edit ────────────────────────────────────────────
 
     [Fact]
-    public async Task UpdatePost_InstagramPng_IsRejected()
+    public async Task UpdatePost_InstagramPngWithoutDerivative_IsRejected()
     {
+        // Phase 3: a PNG with no Instagram JPEG derivative is rejected on edit with the
+        // derivative-missing code.
         var igId = SeedInstagramAccount();
         var goodKey = SeedMedia("u-ig-good", "image/jpeg", "jpeg", 1080, 1080);
         var pngKey = SeedMedia("u-ig-png", "image/png", "png", 1080, 1080);
@@ -170,7 +199,25 @@ public class PostUpdateMediaGateTests : IDisposable
         var errors = ExtractMediaErrors(pd);
         Assert.NotNull(errors);
         Assert.Contains(errors!, e => (string?)e["platform"] == "Instagram"
-                                   && (string?)e["code"] == DTOs.MediaValidationErrorCodes.UnsupportedMimeType);
+                                   && (string?)e["code"] == DTOs.MediaValidationErrorCodes.InstagramDerivativeMissing);
+    }
+
+    [Fact]
+    public async Task UpdatePost_InstagramPngWithValidDerivative_IsAccepted()
+    {
+        // Phase 3: a PNG WITH a valid Instagram JPEG derivative is accepted on edit.
+        var igId = SeedInstagramAccount();
+        var startKey = SeedMedia("u-ig-start2", "image/jpeg", "jpeg", 1080, 1080);
+        var pngKey = SeedPngMediaWithDerivative("u-ig-png-ok", 2000, 2000);
+        var post = SeedScheduledPost(Platform.Instagram, startKey, targetPageId: null, targetIgId: igId);
+
+        var req = new UpdatePostRequest(
+            Content: "edited", MediaUrl: pngKey, MediaType: MediaType.Image, Platform: Platform.Instagram,
+            ScheduledAt: post.ScheduledAt, TargetInstagramAccountId: igId);
+
+        var result = await _controller.UpdatePost(post.Id, req);
+
+        Assert.IsType<NoContentResult>(result);
     }
 
     // ── Facebook accepts PNG on edit ────────────────────────────────────────────

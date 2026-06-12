@@ -560,9 +560,16 @@ public class InstagramStoryPublisher : IStoryPublisher
     {
         if (_mediaService.IsStorageKey(post.MediaUrl!))
         {
-            var url = await _mediaService.GetPublishingUrlAsync(post.MediaUrl!, _mediaDownloadUrlExpiration, cancellationToken);
+            // Phase 3: a PNG story image publishes its Instagram JPEG derivative, never the
+            // raw PNG. Images only — videos resolve as-is.
+            var keyToPublish = post.MediaType == MediaType.Image
+                ? await InstagramMediaKeyResolver.ResolveAsync(
+                    _dbContext, _mediaService, post.WorkspaceId, post.MediaUrl!, cancellationToken)
+                : post.MediaUrl!;
+
+            var url = await _mediaService.GetPublishingUrlAsync(keyToPublish, _mediaDownloadUrlExpiration, cancellationToken);
             _logger.LogInformation("Generated publishing URL for storage key {StorageKey} for IG story {PostId}",
-                RedactKey(post.MediaUrl), post.Id);
+                RedactKey(keyToPublish), post.Id);
             return url;
         }
         return post.MediaUrl!;

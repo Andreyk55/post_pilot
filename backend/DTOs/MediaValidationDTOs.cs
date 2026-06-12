@@ -68,6 +68,13 @@ public static class MediaValidationErrorCodes
     public const string UnsupportedAudioCodec = "UNSUPPORTED_AUDIO_CODEC";
     public const string MetadataExtractionFailed = "METADATA_EXTRACTION_FAILED";
     public const string NoRulesForCombination = "NO_RULES_FOR_COMBINATION";
+
+    /// <summary>
+    /// A PNG image was selected for Instagram but no Instagram-safe JPEG derivative
+    /// exists for it (generation failed or never ran). Instagram needs JPEG, so the
+    /// post is blocked until a JPEG-backed image is provided. (Phase 3)
+    /// </summary>
+    public const string InstagramDerivativeMissing = "INSTAGRAM_DERIVATIVE_MISSING";
 }
 
 /// <summary>

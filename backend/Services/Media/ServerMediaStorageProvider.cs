@@ -41,6 +41,11 @@ public class ServerMediaStorageProvider : IMediaStorageProvider
         throw new NotImplementedException(NotImplementedMessage);
     }
 
+    public Task UploadObjectAsync(string storageKey, Stream content, string contentType, CancellationToken cancellationToken = default)
+    {
+        throw new NotImplementedException(NotImplementedMessage);
+    }
+
     public bool Exists(string storageKey)
     {
         throw new NotImplementedException(NotImplementedMessage);

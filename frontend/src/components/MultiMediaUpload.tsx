@@ -288,8 +288,9 @@ export function MultiMediaUpload({
   // Determine accepted file types for the <input>
   const getAcceptTypes = (): string => {
     if (isInstagram) {
-      // Instagram supports mixed media carousels — images (JPEG only; Meta rejects PNG/WebP) + video
-      return 'image/jpeg,video/mp4'
+      // Instagram supports mixed media carousels — images (JPEG + PNG; PNG is
+      // auto-converted to JPEG by the backend, WebP is not supported) + video.
+      return 'image/jpeg,image/png,video/mp4'
     }
     // Facebook: accept video only when empty; images-only once images exist
     if (isFacebook) {

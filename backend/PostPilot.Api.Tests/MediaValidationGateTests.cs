@@ -122,8 +122,10 @@ public class MediaValidationGateTests : IDisposable
     }
 
     [Fact]
-    public async Task Png_Instagram_IsBlocked()
+    public async Task Png_Instagram_WithoutDerivative_IsBlocked()
     {
+        // Phase 3: a PNG with no Instagram JPEG derivative is blocked for Instagram with the
+        // derivative-missing code (a derivative is normally generated at upload time).
         var path = SeedMedia("k-ig-png", "image/png", "png", 1080, 1080);
         var gate = CreateGate(new() { ["k-ig-png"] = path });
 
@@ -131,7 +133,7 @@ public class MediaValidationGateTests : IDisposable
             new[] { new MediaGateItem("k-ig-png", MediaType.Image, 0) }, new[] { Ig });
 
         Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.UnsupportedMimeType
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.InstagramDerivativeMissing
                                           && e.Platform == Platform.Instagram);
     }
 
@@ -213,7 +215,8 @@ public class MediaValidationGateTests : IDisposable
         Assert.False(result.IsValid);
         // Only the offending item (order 1) is reported.
         Assert.All(result.Errors, e => Assert.Equal(1, e.Order));
-        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.UnsupportedMimeType);
+        // PNG without a derivative is blocked for Instagram with the derivative-missing code.
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.InstagramDerivativeMissing);
     }
 
     // ── Pass-through cases ──────────────────────────────────────────────────────

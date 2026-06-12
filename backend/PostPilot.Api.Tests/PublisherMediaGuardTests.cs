@@ -209,8 +209,12 @@ public class PublisherMediaGuardTests : IDisposable
     // ── Instagram: PNG refused before Meta ──────────────────────────────────────
 
     [Fact]
-    public async Task InstagramPublisher_RefusesPng_BeforeCallingMeta()
+    public async Task InstagramPublisher_RefusesPngWithoutDerivative_BeforeCallingMeta()
     {
+        // Phase 3: a PNG with NO Instagram JPEG derivative must be blocked before any Meta
+        // call (a derivative is normally generated at upload; this is the defense-in-depth
+        // case where it is missing). PNG WITH a derivative is exercised in
+        // InstagramDerivativeGateAndPublisherTests.
         var (_, _, ig) = SeedIgTarget();
         var key = SeedImageMedia("ig-key-png", "image/png", "png", 1080, 1080);
         var post = SeedIgImagePost(key, ig);
@@ -223,7 +227,7 @@ public class PublisherMediaGuardTests : IDisposable
         // A clear, blocking failure reason is produced (and, by construction, no Meta call:
         // the guard returns before any HTTP, and the HttpClient throws if ever used).
         Assert.NotNull(guardError);
-        Assert.Contains("not supported", guardError!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Instagram-ready JPEG", guardError!, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -43,4 +43,33 @@ public class Media
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UploadedAt { get; set; }
+
+    // ── Instagram-safe JPEG derivative (Phase 3) ────────────────────────────────
+    // When a PNG image is uploaded, the upload-complete flow generates an
+    // Instagram-safe JPEG derivative (Meta accepts JPEG only for Instagram) and
+    // stores it alongside the original. The original is NEVER replaced — Facebook
+    // and previews keep using it. Instagram validation/publishing use the derivative.
+    // These columns are null for JPEG uploads, videos, and legacy rows.
+
+    /// <summary>
+    /// Storage key of the generated Instagram JPEG derivative (e.g. the same media
+    /// folder as the original with a deterministic <c>instagram.jpg</c> name).
+    /// Null when no derivative was generated (JPEG original, video, or legacy row).
+    /// </summary>
+    public string? InstagramImageStorageKey { get; set; }
+
+    /// <summary>MIME type of the derivative. Always <c>image/jpeg</c> when present.</summary>
+    public string? InstagramImageMimeType { get; set; }
+
+    /// <summary>Size in bytes of the generated derivative.</summary>
+    public long? InstagramImageSizeBytes { get; set; }
+
+    /// <summary>Pixel width of the generated derivative (after any downscale).</summary>
+    public int? InstagramImageWidth { get; set; }
+
+    /// <summary>Pixel height of the generated derivative (after any downscale).</summary>
+    public int? InstagramImageHeight { get; set; }
+
+    /// <summary>UTC timestamp the derivative was generated.</summary>
+    public DateTime? InstagramImageGeneratedAt { get; set; }
 }

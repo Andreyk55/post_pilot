@@ -153,6 +153,7 @@ public class MediaPublicFetchTests
         public Task DeleteAsync(string storageKey, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<string?> GetLocalFilePathAsync(string storageKey, CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
         public Task SaveAsync(string storageKey, Stream content, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task UploadObjectAsync(string storageKey, Stream content, string contentType, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public bool Exists(string storageKey) => _objects.ContainsKey(storageKey);
         public Task<bool> ObjectExistsAsync(string storageKey, CancellationToken cancellationToken = default) => Task.FromResult(_objects.ContainsKey(storageKey));
         public Task<StoredObjectInfo?> GetObjectInfoAsync(string storageKey, CancellationToken cancellationToken = default) => Task.FromResult<StoredObjectInfo?>(null);

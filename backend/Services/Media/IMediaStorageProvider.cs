@@ -66,6 +66,20 @@ public interface IMediaStorageProvider
     Task SaveAsync(string storageKey, Stream content, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Server-side upload of bytes the API itself generated (NOT a browser upload).
+    /// Used by the Phase 3 Instagram-derivative flow to store a JPEG derivative the
+    /// backend produced from a PNG original. Unlike <see cref="SaveAsync"/> (local-disk
+    /// only — object-storage browser uploads go through presigned URLs), every provider
+    /// implements this because the bytes originate on the server and there is no browser
+    /// in the loop. Overwrites any existing object at <paramref name="storageKey"/>.
+    /// </summary>
+    /// <param name="storageKey">Destination object key.</param>
+    /// <param name="content">The bytes to write.</param>
+    /// <param name="contentType">MIME type to record on the stored object.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task UploadObjectAsync(string storageKey, Stream content, string contentType, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Checks if a file exists at the given key.
     /// </summary>
     [Obsolete("Use ObjectExistsAsync. This synchronous overload will be removed.")]
