@@ -286,12 +286,25 @@ public class MediaValidationService : IMediaValidationService
 
             if (width > rules.MaxWidth || height > rules.MaxHeight)
             {
-                errors.Add(new MediaValidationError(
-                    MediaValidationErrorCodes.DimensionsTooLarge,
-                    "dimensions",
-                    $"Dimensions ({width}x{height}) are too large. Maximum: {rules.MaxWidth}x{rules.MaxHeight}",
-                    $"{rules.MaxWidth}x{rules.MaxHeight}",
-                    $"{width}x{height}"));
+                if (rules.MaxWidthIsAdvisory)
+                {
+                    // Platform downscales oversized images instead of rejecting them
+                    // (e.g. Instagram scales width > 1440px down to 1440px). Warn only.
+                    warnings.Add(new MediaValidationWarning(
+                        MediaValidationWarningCodes.DimensionsAboveMaxWillDownscale,
+                        "dimensions",
+                        $"Dimensions ({width}x{height}) exceed the platform maximum ({rules.MaxWidth}x{rules.MaxHeight}). The platform will downscale the image automatically.",
+                        $"Use at most {rules.MaxWidth}x{rules.MaxHeight} to avoid automatic downscaling"));
+                }
+                else
+                {
+                    errors.Add(new MediaValidationError(
+                        MediaValidationErrorCodes.DimensionsTooLarge,
+                        "dimensions",
+                        $"Dimensions ({width}x{height}) are too large. Maximum: {rules.MaxWidth}x{rules.MaxHeight}",
+                        $"{rules.MaxWidth}x{rules.MaxHeight}",
+                        $"{width}x{height}"));
+                }
             }
 
             // Check recommended dimensions (warning only)

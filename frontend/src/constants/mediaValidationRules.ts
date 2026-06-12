@@ -127,8 +127,10 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
   },
 
   // Instagram Feed Image
+  // Meta accepts JPEG ONLY for Instagram — PNG/WebP are rejected at publish time.
+  // (Carousel items reuse this rule; placement is always 'Feed' for them.)
   'instagram:feed:image': {
-    allowedMimeTypes: ['image/jpeg', 'image/png'],
+    allowedMimeTypes: ['image/jpeg'],
     maxBytes: 8 * 1024 * 1024, // 8MB
     minWidth: 320,
     minHeight: 320,
@@ -153,8 +155,9 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
   },
 
   // Instagram Story Image
+  // Meta accepts JPEG ONLY for Instagram (story included).
   'instagram:story:image': {
-    allowedMimeTypes: ['image/jpeg', 'image/png'],
+    allowedMimeTypes: ['image/jpeg'],
     maxBytes: 8 * 1024 * 1024, // 8MB
     minWidth: 320,
     minHeight: 320,

@@ -77,6 +77,13 @@ public static class MediaValidationWarningCodes
 {
     public const string DimensionsBelowRecommended = "DIMENSIONS_BELOW_RECOMMENDED";
     public const string AspectRatioSuboptimal = "ASPECT_RATIO_SUBOPTIMAL";
+
+    /// <summary>
+    /// Image width exceeds the platform max, but the platform downscales rather than
+    /// rejecting (e.g. Instagram scales any width &gt; 1440px down to 1440px). Advisory
+    /// only — the upload is still publishable.
+    /// </summary>
+    public const string DimensionsAboveMaxWillDownscale = "DIMENSIONS_ABOVE_MAX_WILL_DOWNSCALE";
 }
 
 /// <summary>

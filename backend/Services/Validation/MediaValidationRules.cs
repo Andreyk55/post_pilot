@@ -117,14 +117,18 @@ public static class MediaValidationRules
         // INSTAGRAM - FEED
         // ============================================
         // Instagram Feed Image Rules
+        // Source: https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media/
+        // Meta accepts JPEG ONLY for Instagram (PNG/WebP are rejected at publish time).
+        // Width > 1440 is downscaled by Meta, not rejected → advisory, not a hard error.
         [(Platform.Instagram, Placement.Feed, MediaType.Image)] = new MediaValidationRule
         {
-            AllowedMimeTypes = ["image/jpeg", "image/png"],
+            AllowedMimeTypes = ["image/jpeg"],
             MaxBytes = 8L * 1024 * 1024, // 8MB
             MinWidth = 320,
             MinHeight = 320,
             MaxWidth = 1440,
             MaxHeight = 1440,
+            MaxWidthIsAdvisory = true, // Meta downscales > 1440px instead of rejecting
             AspectRatioMin = 0.8, // 4:5 (portrait)
             AspectRatioMax = 1.91, // 1.91:1 (landscape)
             RecommendedWidth = 1080,
@@ -160,7 +164,8 @@ public static class MediaValidationRules
         // Source: https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media
         [(Platform.Instagram, Placement.Story, MediaType.Image)] = new MediaValidationRule
         {
-            AllowedMimeTypes = ["image/jpeg", "image/png"],
+            // Meta accepts JPEG ONLY for Instagram (story included); PNG/WebP are rejected.
+            AllowedMimeTypes = ["image/jpeg"],
             MaxBytes = 8L * 1024 * 1024, // 8MB
             MinWidth = 320,
             MinHeight = 320,
@@ -291,6 +296,14 @@ public class MediaValidationRule
     public int MinHeight { get; init; }
     public int MaxWidth { get; init; }
     public int MaxHeight { get; init; }
+
+    /// <summary>
+    /// When true, exceeding <see cref="MaxWidth"/>/<see cref="MaxHeight"/> produces a
+    /// WARNING instead of a hard error, because the platform downscales oversized images
+    /// rather than rejecting them (Instagram scales any width &gt; 1440px down to 1440px).
+    /// Default false: most platforms reject oversized media outright.
+    /// </summary>
+    public bool MaxWidthIsAdvisory { get; init; }
 
     // Aspect ratio constraints (width / height)
     public double AspectRatioMin { get; init; }

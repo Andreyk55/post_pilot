@@ -10,7 +10,9 @@
       "Bash(Get-ChildItem -Path \"d:\\\\dev\\\\projects\\\\post_pilot\" -Directory -Force)",
       "Bash(Select-Object Name)",
       "Bash(npx eslint *)",
-      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(d\\);r.filter\\(f=>f.errorCount>0\\).forEach\\(f=>console.log\\(f.errorCount+' errors: '+f.filePath.replace\\(/.*frontend./,''\\)\\)\\)}\\)\")"
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(d\\);r.filter\\(f=>f.errorCount>0\\).forEach\\(f=>console.log\\(f.errorCount+' errors: '+f.filePath.replace\\(/.*frontend./,''\\)\\)\\)}\\)\")",
+      "WebSearch",
+      "WebFetch(domain:www.ayrshare.com)"
     ]
   }
 }

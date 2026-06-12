@@ -2,11 +2,15 @@
  * Instagram media selection validation.
  *
  * Rules:
- * - Single photo (JPG/PNG): allowed
+ * - Single photo (JPG only): allowed
  * - Single video (MP4): allowed (published as Reel)
- * - Carousel (images): 2–10 images only (JPG/PNG)
+ * - Carousel (images): 2–10 images only (JPG only)
  * - Carousel (videos): 2–10 videos only (MP4)
  * - Carousel (mixed): 2–10 items mixing images + videos (IG only)
+ *
+ * NOTE: Meta accepts JPEG ONLY for Instagram images — PNG/WebP are rejected at
+ * publish time. (A later phase will auto-convert PNG/WebP to JPEG; until then we
+ * reject them up front so the user isn't blocked at scheduling.)
  */
 
 export interface MediaFileInfo {
@@ -21,7 +25,8 @@ export interface InstagramSelectionResult {
   nextFiles: MediaFileInfo[]
 }
 
-const IMAGE_TYPES = ['image/jpeg', 'image/png']
+// JPEG only for Instagram — PNG/WebP are rejected by Meta at publish time.
+const IMAGE_TYPES = ['image/jpeg']
 const VIDEO_TYPES = ['video/mp4']
 
 export function isImageFile(file: MediaFileInfo): boolean {
@@ -52,7 +57,7 @@ export function validateInstagramSelection(
   if (unsupported.length > 0) {
     return {
       ok: false,
-      errorMessage: `Unsupported file type: ${unsupported[0].name}. Instagram accepts JPG, PNG, or MP4.`,
+      errorMessage: `Unsupported file type: ${unsupported[0].name}. Instagram accepts JPG or MP4 (PNG is not supported).`,
       nextFiles: [...existingFiles],
     }
   }
@@ -111,10 +116,10 @@ export function getInstagramUploaderLabel(mode: InstagramMediaMode, count: numbe
 /** Dynamic format hint text */
 export function getInstagramFormatHint(mode: InstagramMediaMode): string {
   switch (mode) {
-    case 'empty': return 'Photos (JPG/PNG) or Reel (MP4)'
+    case 'empty': return 'Photos (JPG) or Reel (MP4)'
     case 'single_video': return 'Reel (MP4) — add more for carousel'
-    case 'single_image': return 'Photo (JPG/PNG) — add more for carousel'
-    case 'carousel': return 'Carousel photos (JPG/PNG) — videos also accepted'
+    case 'single_image': return 'Photo (JPG) — add more for carousel'
+    case 'carousel': return 'Carousel photos (JPG) — videos also accepted'
     case 'carousel_videos': return 'Carousel videos (MP4) — photos also accepted'
     case 'carousel_mixed': return 'Mixed carousel (photos + videos)'
   }
