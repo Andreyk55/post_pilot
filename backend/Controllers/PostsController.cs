@@ -968,8 +968,28 @@ public class PostsController : ControllerBase
             {
                 return Ok(PostDto.FromEntity(post));
             }
+
+            // Transient publisher failures are handled inside the publisher by moving
+            // the post to RetryPending/Processing and scheduling the next attempt.
+            // That is not a gateway failure for Publish Now; return the fresh post so
+            // the UI can show the in-progress/retry state instead of an error.
+            if (post.Status == PostStatus.RetryPending || post.Status == PostStatus.Processing)
+            {
+                return Accepted(PostDto.FromEntity(post));
+            }
             else
             {
+                _logger.LogWarning(
+                    "Publish-now returning platform failure for post {PostId}: platform={Platform} status={Status} errorType={ErrorType} retryCount={RetryCount}/{MaxRetries} nextRetryAt={NextRetryAt} error={Error}",
+                    post.Id,
+                    post.Platform,
+                    post.Status,
+                    result.ErrorType,
+                    post.RetryCount,
+                    post.MaxRetries,
+                    post.NextRetryAt,
+                    result.ErrorMessage);
+
                 // Publishing failed — return the error but don't 500
                 var problem = new ProblemDetails
                 {
@@ -979,6 +999,11 @@ public class PostsController : ControllerBase
                 };
                 problem.Extensions["platform"] = post.Platform.ToString();
                 problem.Extensions["postId"] = post.Id;
+                problem.Extensions["postStatus"] = post.Status.ToString();
+                problem.Extensions["errorType"] = result.ErrorType?.ToString();
+                problem.Extensions["retryCount"] = post.RetryCount;
+                problem.Extensions["maxRetries"] = post.MaxRetries;
+                problem.Extensions["nextRetryAt"] = post.NextRetryAt;
                 return StatusCode(StatusCodes.Status502BadGateway, problem);
             }
         }

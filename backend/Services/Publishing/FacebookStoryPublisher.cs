@@ -596,7 +596,29 @@ public class FacebookStoryPublisher : IStoryPublisher
 
         return new PublishResult(false,
             ErrorType: errorType,
-            ErrorMessage: error?.Error?.Message ?? $"HTTP {(int)response.StatusCode}");
+            ErrorMessage: FormatMetaErrorMessage(error?.Error, response));
+    }
+
+    private static string FormatMetaErrorMessage(FbMetaError? error, HttpResponseMessage response)
+    {
+        if (error == null)
+            return $"HTTP {(int)response.StatusCode}";
+
+        var message = string.IsNullOrWhiteSpace(error.Message)
+            ? $"HTTP {(int)response.StatusCode}"
+            : error.Message;
+
+        var parts = new List<string>();
+        if (error.Code != 0)
+            parts.Add($"code {error.Code}");
+        if (error.ErrorSubcode.HasValue)
+            parts.Add($"subcode {error.ErrorSubcode.Value}");
+        if (!string.IsNullOrWhiteSpace(error.FbTraceId))
+            parts.Add($"fbtrace_id {error.FbTraceId}");
+
+        return parts.Count == 0
+            ? message
+            : $"{message} ({string.Join(", ", parts)})";
     }
 
     private PublishErrorType ClassifyError(int errorCode, int? subcode = null, string? fbTraceId = null, string? message = null)

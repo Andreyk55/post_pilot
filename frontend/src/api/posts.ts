@@ -3,6 +3,18 @@ import { config } from '../config/appConfig'
 
 const API_URL = config.apiBaseUrl
 
+async function readErrorMessage(response: Response, fallback: string): Promise<string> {
+  const contentType = response.headers.get('content-type') ?? ''
+
+  if (contentType.includes('json')) {
+    const body = await response.json().catch(() => null)
+    return body?.detail || body?.error || body?.title || fallback
+  }
+
+  const text = await response.text().catch(() => '')
+  return text.trim() || fallback
+}
+
 export type Platform = 'Twitter' | 'Instagram' | 'Facebook' | 'LinkedIn'
 
 export type PostStatus = 'Scheduled' | 'Publishing' | 'Published' | 'Failed' | 'RetryPending' | 'Canceled' | 'Processing'
@@ -159,7 +171,9 @@ export const postsApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(post),
     })
-    if (!response.ok) throw new Error('Failed to create post')
+    if (!response.ok) {
+      throw new Error(await readErrorMessage(response, 'Failed to create post'))
+    }
     return response.json()
   },
 
@@ -168,14 +182,13 @@ export const postsApi = {
       method: 'POST',
     })
     if (!response.ok) {
-      const body = await response.json().catch(() => null)
       if (response.status === 409) {
-        throw new Error(body?.detail || 'This post can no longer be published because its status has changed.')
+        throw new Error(await readErrorMessage(response, 'This post can no longer be published because its status has changed.'))
       }
       if (response.status === 502) {
-        throw new Error(body?.detail || 'Publishing to the platform failed. Please try again.')
+        throw new Error(await readErrorMessage(response, 'Publishing to the platform failed. Please try again.'))
       }
-      throw new Error(body?.detail || 'Failed to publish post')
+      throw new Error(await readErrorMessage(response, 'Failed to publish post'))
     }
     return response.json()
   },

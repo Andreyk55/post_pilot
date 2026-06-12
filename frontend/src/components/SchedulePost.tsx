@@ -523,6 +523,10 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
 
       // Reset form on success
       handleReset()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to publish post'
+      setUploadError(message)
+      console.error('Publish now failed:', err)
     } finally {
       setIsPublishingNow(false)
     }

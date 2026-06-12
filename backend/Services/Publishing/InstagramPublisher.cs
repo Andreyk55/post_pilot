@@ -278,6 +278,14 @@ public class InstagramPublisher : IPostPublisher
             else
             {
                 result = await PublishImageToInstagramAsync(post, accessToken, cancellationToken);
+
+                // Image containers are usually ready immediately, but Meta can occasionally
+                // keep them processing. In that case the image flow schedules a retry and
+                // returns success with no media id, just like the video/carousel flows.
+                if (result.Success && string.IsNullOrEmpty(result.ExternalPostId))
+                {
+                    return result;
+                }
             }
 
             if (result.Success)
@@ -391,25 +399,45 @@ public class InstagramPublisher : IPostPublisher
                 post.Id);
         }
 
-        // Create image container (include user_tags if present)
-        var containerResult = await CreateImageContainerAsync(
-            igUserId, mediaUrl, post.Content, accessToken, cancellationToken,
-            userTagsJson: userTagsJson);
+        var creationId = post.InstagramCreationId;
+        if (string.IsNullOrEmpty(creationId))
+        {
+            // Create image container (include user_tags if present)
+            var containerResult = await CreateImageContainerAsync(
+                igUserId, mediaUrl, post.Content, accessToken, cancellationToken,
+                userTagsJson: userTagsJson);
 
-        if (!containerResult.Success)
-            return containerResult;
+            if (!containerResult.Success)
+                return containerResult;
 
-        var creationId = containerResult.ExternalPostId!;
-        _logger.LogInformation(
-            "[IG_PUBLISH] Step 1 DONE — IG container created. creation_id={CreationId} for post {PostId}",
-            creationId, post.Id);
+            creationId = containerResult.ExternalPostId!;
+            post.InstagramCreationId = creationId;
+            post.UpdatedAt = DateTime.UtcNow;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "[IG_PUBLISH] Step 1 DONE — IG image container created. creation_id={CreationId} for post {PostId}",
+                creationId, post.Id);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "[IG_PUBLISH] Resuming IG image container creation_id={CreationId} for post {PostId}",
+                creationId, post.Id);
+        }
 
         // Poll for container to be ready (images are fast)
         var pollResult = await PollContainerStatusInProcessAsync(
             creationId, accessToken, _maxImagePollAttempts, _imagePollInterval, cancellationToken);
 
         if (!pollResult.Success)
+        {
+            if (pollResult.ErrorType == PublishErrorType.Transient)
+            {
+                return await ScheduleProcessingRetryAsync(post, cancellationToken);
+            }
             return pollResult;
+        }
 
         // Publish the container
         var publishResult = await PublishMediaContainerAsync(igUserId, creationId, accessToken, cancellationToken);
