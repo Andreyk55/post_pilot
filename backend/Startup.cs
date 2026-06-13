@@ -121,7 +121,11 @@ public class Startup
             .AddAuthentication(options =>
             {
                 options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-                options.DefaultChallengeScheme = GoogleDefaults.AuthenticationScheme;
+                // API endpoints should challenge with the app cookie so
+                // unauthenticated fetches get a clean 401 instead of a
+                // cross-origin redirect to Google. The OAuth start endpoint
+                // explicitly challenges the Google scheme.
+                options.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
             })
             .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
             {
