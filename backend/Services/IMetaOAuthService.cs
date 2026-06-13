@@ -47,6 +47,13 @@ public interface IMetaOAuthService
     Task<MetaSaveConnectionResponse> UpdateConnectionAsync(Guid workspaceId, List<string> selectedPageIds, List<string> selectedInstagramIds);
 
     /// <summary>
+    /// Idempotent repair: re-promote Instagram accounts linked to currently-connected
+    /// Facebook Pages to connected publishable assets, without changing page selection.
+    /// Fixes pre-existing rows where a linked IG never became a connected asset.
+    /// </summary>
+    Task<MetaSaveConnectionResponse> RefreshAssetsAsync(Guid workspaceId);
+
+    /// <summary>
     /// Disconnect Meta - revoke tokens and remove connection for this workspace
     /// </summary>
     Task DisconnectAsync(Guid workspaceId);

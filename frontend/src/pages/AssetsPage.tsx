@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import './AssetsPage.css'
 import { metaApi } from '../api/meta'
 import type { MetaConnection, FacebookPage, ConnectedPage, ConnectedInstagramAccount, InstagramEligibilityDto } from '../types/meta'
+import { hasUnpromotedLinkedInstagram } from '../utils/instagramPromotion'
 
 interface AssetsPageProps {
   onNavigate: (page: string) => void
@@ -22,6 +23,10 @@ export function AssetsPage({ onNavigate }: AssetsPageProps) {
   const [disconnectingPageIds, setDisconnectingPageIds] = useState<Set<string>>(new Set())
   const [disconnectingIgIds, setDisconnectingIgIds] = useState<Set<string>>(new Set())
 
+  // Guards a single auto-repair attempt per page load so we never loop if the
+  // backend repair can't promote an IG (e.g. transient discovery failure).
+  const [repairAttempted, setRepairAttempted] = useState(false)
+
   // Load Meta connection on mount
   useEffect(() => {
     loadMetaConnection()
@@ -34,7 +39,7 @@ export function AssetsPage({ onNavigate }: AssetsPageProps) {
       if (response.isConnected && response.connection) {
         setMetaConnection(response.connection)
         // Load available pages to see what else can be connected
-        await loadAvailablePages()
+        await loadAvailablePages(response.connection)
       } else {
         setMetaConnection(null)
       }
@@ -46,7 +51,7 @@ export function AssetsPage({ onNavigate }: AssetsPageProps) {
     }
   }
 
-  const loadAvailablePages = async () => {
+  const loadAvailablePages = async (connection: MetaConnection) => {
     try {
       setLoadingPages(true)
       const { pages } = await metaApi.getAvailablePages()
@@ -56,6 +61,30 @@ export function AssetsPage({ onNavigate }: AssetsPageProps) {
       try {
         const eligibility = await metaApi.getInstagramEligibility()
         setIgEligibility(eligibility.pages)
+
+        // Self-heal: a connected Page whose Meta-linked IG (eligibility "Connected")
+        // is missing from the connected IG asset list is the production bug — IG was
+        // discovered but never promoted to a connected publishable asset, which blocks
+        // the composer. Trigger the idempotent backend repair ONCE, then reload so the
+        // promoted IG shows up everywhere (Assets, SchedulePost, validation).
+        if (!repairAttempted) {
+          const needsRepair = hasUnpromotedLinkedInstagram(
+            connection.pages,
+            connection.instagramAccounts,
+            eligibility.pages,
+          )
+          if (needsRepair) {
+            setRepairAttempted(true)
+            try {
+              await metaApi.refreshAssets()
+            } catch (repairErr) {
+              console.error('Failed to auto-repair linked Instagram accounts:', repairErr)
+            }
+            // Reload connection state regardless; on success the IG is now connected.
+            await loadMetaConnection()
+            return
+          }
+        }
       } catch {
         // Non-critical: eligibility info is supplementary
       }

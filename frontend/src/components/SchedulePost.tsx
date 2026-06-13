@@ -12,6 +12,7 @@ import { type VoiceProfileSummary } from '../api/voiceProfiles'
 import { InstagramMention } from './InstagramMention'
 import { InstagramMediaTags, type MediaTag } from './InstagramMediaTags'
 import { canShowCarouselTags, buildCarouselMediaTags } from '../utils/instagramTagging'
+import { hasUnpromotedLinkedInstagram } from '../utils/instagramPromotion'
 import {
   getPostTextMaxChars,
   getPlatformDisplayName,
@@ -200,21 +201,46 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
     loadConnectedAccounts()
   }, [])
 
-  const loadConnectedAccounts = async () => {
+  const loadConnectedAccounts = async (allowRepair = true) => {
     try {
       setLoadingPages(true)
       const response = await metaApi.getConnection()
       setIsAccountConnected(response.isConnected)
       if (response.isConnected && response.connection) {
+        const igAccounts = response.connection.instagramAccounts || []
+
+        // Self-heal the production bug where a connected Page has a linked IG that was
+        // never promoted to a connected asset: with pages connected but no connected IG,
+        // check eligibility and run the idempotent backend repair once, then reload so
+        // the composer no longer shows "No Instagram Business Account connected".
+        if (allowRepair && response.connection.pages.length > 0 && igAccounts.length === 0) {
+          try {
+            const eligibility = await metaApi.getInstagramEligibility()
+            const needsRepair = hasUnpromotedLinkedInstagram(
+              response.connection.pages,
+              igAccounts,
+              eligibility.pages,
+            )
+            if (needsRepair) {
+              await metaApi.refreshAssets()
+              await loadConnectedAccounts(false) // reload once; don't recurse into repair again
+              return
+            }
+          } catch (repairErr) {
+            // Non-critical: fall through to the (possibly empty) IG list.
+            console.error('Instagram auto-repair check failed:', repairErr)
+          }
+        }
+
         setConnectedPages(response.connection.pages)
-        setConnectedInstagramAccounts(response.connection.instagramAccounts || [])
+        setConnectedInstagramAccounts(igAccounts)
         // Auto-select first page if only one exists
         if (response.connection.pages.length === 1) {
           setSelectedPageId(response.connection.pages[0].id)
         }
         // Auto-select first IG account if only one exists
-        if (response.connection.instagramAccounts?.length === 1) {
-          setSelectedInstagramAccountId(response.connection.instagramAccounts[0].id)
+        if (igAccounts.length === 1) {
+          setSelectedInstagramAccountId(igAccounts[0].id)
         }
       }
     } catch (err) {

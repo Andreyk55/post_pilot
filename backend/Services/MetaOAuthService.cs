@@ -731,13 +731,24 @@ public class MetaOAuthService : IMetaOAuthService
             await _providerConnections.EnsureCanConnectAsync(workspaceId, ProviderType.Meta);
         }
 
-        // Asset-level cross-workspace ownership guard against the SELECTED pages + IGs
-        // (the account-level guard already ran above). Throws ProviderOwnedByAnotherWorkspaceException → 409.
+        // Discover Instagram accounts for selected pages. We persist EVERY IG linked to a
+        // selected page (auto-promotion), so the ownership guard below must cover those
+        // discovered IG ids too — not only the ids the user explicitly checked. selectedInstagramIds
+        // is retained for backward compatibility with the caller's contract but no longer gates
+        // which linked IGs become connected.
+        var igResponse = await DiscoverInstagramAccountsAsync(tempToken, selectedPageIds, workspaceId);
+        var discoveredIgIds = igResponse.InstagramAccounts
+            .Where(ig => !string.IsNullOrEmpty(ig.Id))
+            .Select(ig => ig.Id);
+
+        // Asset-level cross-workspace ownership guard against the SELECTED pages + every
+        // linked IG that will be auto-promoted (the account-level guard already ran above).
+        // Throws ProviderOwnedByAnotherWorkspaceException → 409.
         await _providerConnections.EnsureNotOwnedByAnotherWorkspaceAsync(
             workspaceId,
             ProviderType.Meta,
             metaUserId,
-            selectedPageIds.Concat(selectedInstagramIds));
+            selectedPageIds.Concat(discoveredIgIds));
 
         var expiresIn = (int)Math.Max(0, (oauthState.TokenExpiresAt.Value - now).TotalSeconds);
         var connection = await ResolveOrCreateMetaConnectionAsync(
@@ -765,13 +776,7 @@ public class MetaOAuthService : IMetaOAuthService
             throw new InvalidOperationException("At least one page must be selected");
         }
 
-        // Discover Instagram accounts for selected pages
-        var igResponse = await DiscoverInstagramAccountsAsync(tempToken, selectedPageIds, workspaceId);
-        var selectedIgAccounts = igResponse.InstagramAccounts
-            .Where(ig => selectedInstagramIds.Contains(ig.Id))
-            .ToList();
-
-        await ReconcileSelectedAssetsAsync(connection, selectedPages, selectedIgAccounts, now);
+        await ReconcileSelectedAssetsAsync(connection, selectedPages, igResponse.InstagramAccounts, now);
 
         // Clean up OAuth state
         _context.MetaOAuthStates.Remove(oauthState);
@@ -786,14 +791,34 @@ public class MetaOAuthService : IMetaOAuthService
     /// the user's selection. Existing rows (connected or disconnected) with matching external IDs
     /// are reattached and refreshed in-place; new ones are inserted; previously-connected ones
     /// that are not in the selection are soft-disconnected (and their active posts canceled).
+    ///
+    /// PRODUCT RULE — IG follows its parent Page: any Instagram professional account that Meta
+    /// reports as linked to a SELECTED (connected) Facebook Page is auto-promoted to a connected
+    /// publishable IG asset, even when its id was not in the user's explicit IG selection. This
+    /// is what makes "connect a Page that has a linked IG" => "that IG is a connected Instagram
+    /// account" hold everywhere (Assets, SchedulePost, post validation, publisher). It also acts
+    /// as the idempotent repair path for production rows that predate this rule: every connect /
+    /// page-update re-discovers and re-promotes. <paramref name="discoveredIgAccounts"/> carries
+    /// the full set of IGs discovered for the selected pages (already filtered to selected pages
+    /// by the caller's discovery call); the union of these with any historically-connected IG on
+    /// a still-selected page is the connected set.
     /// </summary>
     private async Task ReconcileSelectedAssetsAsync(
         MetaConnection connection,
         List<FacebookPageDto> selectedPages,
-        List<InstagramAccountDto> selectedIgAccounts,
+        List<InstagramAccountDto> discoveredIgAccounts,
         DateTime now)
     {
         var selectedFbPageIds = selectedPages.Select(p => p.Id).ToHashSet();
+
+        // Auto-promote: an IG linked to a connected page is a connected publishable asset.
+        // Discovery is already scoped to the selected pages, but guard PageId membership
+        // defensively so a stray discovery row can never connect an IG for an unselected page.
+        var selectedIgAccounts = discoveredIgAccounts
+            .Where(ig => !string.IsNullOrEmpty(ig.Id) && selectedFbPageIds.Contains(ig.PageId))
+            .GroupBy(ig => ig.Id)
+            .Select(g => g.First())
+            .ToList();
         var selectedIgBusinessIds = selectedIgAccounts.Select(i => i.Id).ToHashSet();
 
         var pagesToDisconnect = new List<ConnectedPage>();
@@ -972,17 +997,70 @@ public class MetaOAuthService : IMetaOAuthService
 
         // Discover Instagram accounts (only for selected pages). Zero is allowed —
         // the user can soft-disconnect every page while keeping the Meta identity.
+        // Every IG linked to a still-selected page is auto-promoted to connected, so we
+        // pass the FULL discovered list (selectedInstagramIds no longer gates promotion).
+        // This is also the repair path: removing a page drops its linked IG (via reconcile
+        // soft-disconnect), and re-connecting/refreshing a page re-promotes its linked IG.
         var igResponse = selectedPageIds.Any()
             ? await DiscoverInstagramAccountsAsync("", selectedPageIds, workspaceId)
             : new MetaDiscoverInstagramResponse(new List<InstagramAccountDto>());
-        var selectedIgAccounts = igResponse.InstagramAccounts
-            .Where(ig => selectedInstagramIds.Contains(ig.Id))
-            .ToList();
 
         var now = DateTime.UtcNow;
         connection.UpdatedAt = now;
 
-        await ReconcileSelectedAssetsAsync(connection, selectedPages, selectedIgAccounts, now);
+        await ReconcileSelectedAssetsAsync(connection, selectedPages, igResponse.InstagramAccounts, now);
+
+        await _context.SaveChangesAsync();
+
+        return new MetaSaveConnectionResponse(MapToDto(connection));
+    }
+
+    /// <summary>
+    /// Idempotent repair: re-discover Instagram accounts for the workspace's currently
+    /// connected Facebook Pages and promote any linked IG professional account to a
+    /// connected publishable asset — WITHOUT changing which pages are connected.
+    ///
+    /// This fixes production rows created before IG auto-promotion existed: a connected
+    /// Page whose linked IG never became a <see cref="ConnectedInstagramAccount"/> (so it
+    /// showed "Linked" in discovery but was missing from the connected list and blocked the
+    /// composer). Safe to call repeatedly; a no-op when every linked IG is already connected.
+    /// Provider/workspace scoped — never touches other workspaces' assets, ownership rules,
+    /// or the disconnect/reconnect lifecycle.
+    /// </summary>
+    public async Task<MetaSaveConnectionResponse> RefreshAssetsAsync(Guid workspaceId)
+    {
+        var connection = await _context.MetaConnections
+            .Include(c => c.Pages)
+            .Include(c => c.InstagramAccounts)
+            .FirstOrDefaultAsync(c => c.WorkspaceId == workspaceId && c.IsConnected);
+
+        if (connection == null)
+        {
+            throw new InvalidOperationException("No Meta connection found");
+        }
+
+        // Keep exactly the pages that are currently connected — this is a repair, not a
+        // re-selection. Re-fetch live page metadata (incl. tokens) for them.
+        var connectedPageIds = connection.Pages
+            .Where(p => p.IsConnected)
+            .Select(p => p.PageId)
+            .ToList();
+
+        if (connectedPageIds.Count == 0)
+        {
+            // Nothing connected to derive IGs from; return current state untouched.
+            return new MetaSaveConnectionResponse(MapToDto(connection));
+        }
+
+        var allPages = await FetchUserPagesAsync(connection.AccessToken);
+        var selectedPages = allPages.Where(p => connectedPageIds.Contains(p.Id)).ToList();
+
+        var igResponse = await DiscoverInstagramAccountsAsync("", connectedPageIds, workspaceId);
+
+        var now = DateTime.UtcNow;
+        connection.UpdatedAt = now;
+
+        await ReconcileSelectedAssetsAsync(connection, selectedPages, igResponse.InstagramAccounts, now);
 
         await _context.SaveChangesAsync();
 

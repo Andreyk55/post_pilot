@@ -248,6 +248,27 @@ public class MetaController : ControllerBase
         }
     }
 
+    [HttpPost("connection/refresh")]
+    public async Task<ActionResult<MetaSaveConnectionResponse>> RefreshAssets()
+    {
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
+        try
+        {
+            var result = await _metaOAuthService.RefreshAssetsAsync(workspaceId);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Refresh assets failed: {Message}", ex.Message);
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to refresh Meta assets");
+            return StatusCode(500, new { error = "Failed to refresh assets" });
+        }
+    }
+
     [HttpDelete("connection")]
     public async Task<IActionResult> Disconnect()
     {

@@ -167,6 +167,19 @@ export const metaApi = {
   },
 
   /**
+   * Idempotent repair: re-promote Instagram accounts linked to currently-connected
+   * Facebook Pages so they appear as connected publishable assets. Used to heal
+   * pre-existing connections where a linked IG never became a connected asset.
+   */
+  async refreshAssets(): Promise<MetaSaveConnectionResponse> {
+    const response = await fetch(`${API_URL}/meta/connection/refresh`, {
+      method: 'POST',
+    })
+    if (!response.ok) throw new Error('Failed to refresh Meta assets')
+    return response.json()
+  },
+
+  /**
    * Get Instagram eligibility for all connected Facebook Pages
    */
   async getInstagramEligibility(): Promise<InstagramDiscoveryResponse> {
