@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import './AssetsPage.css'
 import { metaApi } from '../api/meta'
-import type { MetaConnection, FacebookPage, ConnectedPage, ConnectedInstagramAccount, InstagramEligibilityDto } from '../types/meta'
+import type { MetaConnection, FacebookPage, ConnectedPage, InstagramEligibilityDto } from '../types/meta'
 import { hasUnpromotedLinkedInstagram } from '../utils/instagramPromotion'
+import { instagramAssetRowView } from '../utils/instagramAssetRow'
 
 interface AssetsPageProps {
   onNavigate: (page: string) => void
@@ -21,7 +22,6 @@ export function AssetsPage({ onNavigate }: AssetsPageProps) {
   // Connection states
   const [connectingPageIds, setConnectingPageIds] = useState<Set<string>>(new Set())
   const [disconnectingPageIds, setDisconnectingPageIds] = useState<Set<string>>(new Set())
-  const [disconnectingIgIds, setDisconnectingIgIds] = useState<Set<string>>(new Set())
 
   // Guards a single auto-repair attempt per page load so we never loop if the
   // backend repair can't promote an IG (e.g. transient discovery failure).
@@ -155,33 +155,10 @@ export function AssetsPage({ onNavigate }: AssetsPageProps) {
     }
   }
 
-  const handleDisconnectInstagram = async (ig: ConnectedInstagramAccount) => {
-    if (!metaConnection) return
-
-    setDisconnectingIgIds(prev => new Set(prev).add(ig.igBusinessId))
-    try {
-      const currentPageIds = metaConnection.pages.map(p => p.pageId)
-      const currentIgIds = metaConnection.instagramAccounts
-        .filter(a => a.igBusinessId !== ig.igBusinessId)
-        .map(a => a.igBusinessId)
-
-      await metaApi.updateConnection({
-        selectedPageIds: currentPageIds,
-        selectedInstagramIds: currentIgIds
-      })
-
-      await loadMetaConnection()
-    } catch (err) {
-      console.error('Failed to disconnect Instagram:', err)
-      alert('Failed to disconnect Instagram account. Please try again.')
-    } finally {
-      setDisconnectingIgIds(prev => {
-        const next = new Set(prev)
-        next.delete(ig.igBusinessId)
-        return next
-      })
-    }
-  }
+  // Instagram connected accounts are DERIVED assets: a linked IG is publishable iff its
+  // parent Facebook Page is connected. There is no per-IG opt-out — to disable Instagram
+  // publishing for an account, disconnect its parent Facebook Page (or the Meta provider).
+  // Hence: no handleDisconnectInstagram; IG rows are read-only.
 
   // Get pages that are available but not yet connected
   const getUnconnectedPages = () => {
@@ -364,44 +341,32 @@ export function AssetsPage({ onNavigate }: AssetsPageProps) {
         <div className="assets-list">
           <h3 className="list-subtitle">Connected accounts</h3>
           {metaConnection.instagramAccounts.length > 0 ? (
-            metaConnection.instagramAccounts.map(ig => (
-              <div key={ig.igBusinessId} className="asset-item connected">
-                <div className="asset-avatar instagram">
-                  {ig.profilePictureUrl ? (
-                    <img src={ig.profilePictureUrl} alt={ig.username} />
-                  ) : (
-                    (ig.username ?? ig.name ?? '?').charAt(0).toUpperCase()
-                  )}
-                </div>
-                <div className="asset-details">
-                  <span className="asset-name">
-                    {ig.username ? `@${ig.username}` : ig.name ?? 'Instagram Account'}
-                  </span>
-                  <span className="asset-meta">Linked to {ig.pageName}</span>
-                </div>
-                <div className="asset-status connected">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  Connected
-                </div>
-                <button
-                  className="disconnect-btn"
-                  onClick={() => handleDisconnectInstagram(ig)}
-                  disabled={disconnectingIgIds.has(ig.igBusinessId)}
-                  title="Disconnect account"
-                >
-                  {disconnectingIgIds.has(ig.igBusinessId) ? (
-                    <span className="spinner small"></span>
-                  ) : (
+            metaConnection.instagramAccounts.map(ig => {
+              const row = instagramAssetRowView(ig)
+              return (
+                <div key={ig.igBusinessId} className="asset-item connected">
+                  <div className="asset-avatar instagram">
+                    {ig.profilePictureUrl ? (
+                      <img src={ig.profilePictureUrl} alt={ig.username} />
+                    ) : (
+                      (ig.username ?? ig.name ?? '?').charAt(0).toUpperCase()
+                    )}
+                  </div>
+                  <div className="asset-details">
+                    <span className="asset-name">{row.displayName}</span>
+                    {/* Derived asset: attributed to its parent Facebook Page, not independently managed. */}
+                    <span className="asset-meta">{row.parentPageLabel}</span>
+                  </div>
+                  <div className="asset-status connected">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <line x1="18" y1="6" x2="6" y2="18"></line>
-                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                      <polyline points="20 6 9 17 4 12" />
                     </svg>
-                  )}
-                </button>
-              </div>
-            ))
+                    Connected
+                  </div>
+                  {/* No disconnect action: IG accounts are managed through their linked Facebook Page. */}
+                </div>
+              )
+            })
           ) : (
             <div className="section-empty">
               <p>No Instagram accounts enabled yet. Connect a Facebook Page that has a linked Instagram professional account.</p>
@@ -412,7 +377,7 @@ export function AssetsPage({ onNavigate }: AssetsPageProps) {
         {/* Section B: Instagram linked Pages — link status in Meta (per Page), discovery info only */}
         {!loadingPages && (
           <div className="assets-list">
-            <h3 className="list-subtitle">Instagram linked Pages</h3>
+            <h3 className="list-subtitle">Facebook Pages and linked Instagram accounts</h3>
             {igEligibility.length > 0 ? (
               igEligibility.map(page => (
                 <div key={page.pageId} className={`asset-item ${page.eligibilityStatus === 'Connected' ? 'connected' : ''}`}>

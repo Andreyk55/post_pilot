@@ -297,6 +297,84 @@ public class InstagramAutoPromotionTests : IDisposable
         Assert.Equal(PostStatus.Canceled, postAfter!.Status);
     }
 
+    // ─── 6. Facebook Page disconnect disables its derived IG and cancels its posts ──
+
+    [Fact]
+    public async Task UpdateConnection_DisconnectingParentPage_DisablesDerivedIg_AndCancelsItsPosts()
+    {
+        // Connected page + its auto-promoted (derived) IG, with a scheduled IG post.
+        SeedConnectedPageWithoutIg(WorkspaceId);
+        await MakeOAuthService().RefreshAssetsAsync(WorkspaceId);
+        _db.ChangeTracker.Clear();
+
+        var ig = await _db.ConnectedInstagramAccounts.SingleAsync(i => i.WorkspaceId == WorkspaceId);
+        var scheduled = new Post
+        {
+            Id = Guid.NewGuid(),
+            WorkspaceId = WorkspaceId,
+            Content = "scheduled ig post",
+            Platform = Platform.Instagram,
+            PostType = PostType.Feed,
+            Status = PostStatus.Scheduled,
+            TargetInstagramAccountId = ig.Id,
+            ScheduledAt = DateTime.UtcNow.AddHours(1),
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            ScheduleArn = "local-polling",
+        };
+        _db.Posts.Add(scheduled);
+        await _db.SaveChangesAsync();
+        _db.ChangeTracker.Clear();
+
+        // Disconnect the parent Facebook Page (Assets-page page-disconnect path: it drops the
+        // page from the selection). The derived IG must follow — there is no per-IG opt-out,
+        // so disabling the page is the only way to disable its Instagram publishing.
+        await MakeOAuthService().UpdateConnectionAsync(
+            WorkspaceId,
+            selectedPageIds: new List<string>(),
+            selectedInstagramIds: new List<string>());
+
+        _db.ChangeTracker.Clear();
+        var pageAfter = await _db.ConnectedPages.SingleAsync(p => p.WorkspaceId == WorkspaceId);
+        var igAfter = await _db.ConnectedInstagramAccounts.SingleAsync(i => i.WorkspaceId == WorkspaceId);
+        var postAfter = await _db.Posts.FindAsync(scheduled.Id);
+
+        Assert.False(pageAfter.IsConnected);          // page disconnected
+        Assert.False(igAfter.IsConnected);            // derived IG disabled with it
+        Assert.NotNull(igAfter.DisconnectedAt);
+        Assert.Equal(PostStatus.Canceled, postAfter!.Status);   // its future post canceled
+    }
+
+    // ─── 7. Independent IG opt-out is impossible — refresh re-promotes ──────────────
+
+    [Fact]
+    public async Task UpdateConnection_CannotIndependentlyDisconnectIg_WhileParentPageStaysConnected()
+    {
+        // Connected page + its auto-promoted IG.
+        SeedConnectedPageWithoutIg(WorkspaceId);
+        await MakeOAuthService().RefreshAssetsAsync(WorkspaceId);
+        _db.ChangeTracker.Clear();
+
+        // Attempt the old "disconnect just this IG" affordance: keep the page selected but
+        // drop the IG from the selection. selectedInstagramIds no longer gates promotion, so
+        // the IG linked to the still-connected page stays connected — there is no opt-out.
+        await MakeOAuthService().UpdateConnectionAsync(
+            WorkspaceId,
+            selectedPageIds: new List<string> { PageId },
+            selectedInstagramIds: new List<string>());
+
+        _db.ChangeTracker.Clear();
+        var igAfter = await _db.ConnectedInstagramAccounts.SingleAsync(i => i.WorkspaceId == WorkspaceId);
+        Assert.True(igAfter.IsConnected);
+        Assert.Null(igAfter.DisconnectedAt);
+
+        // And a subsequent refresh keeps it promoted (idempotent, never re-disconnects).
+        await MakeOAuthService().RefreshAssetsAsync(WorkspaceId);
+        _db.ChangeTracker.Clear();
+        var igAfterRefresh = await _db.ConnectedInstagramAccounts.SingleAsync(i => i.WorkspaceId == WorkspaceId);
+        Assert.True(igAfterRefresh.IsConnected);
+    }
+
     // ─── routed fake Graph API ───────────────────────────────────────────────────
 
     /// <summary>
