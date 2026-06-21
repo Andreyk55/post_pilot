@@ -190,7 +190,7 @@ public class GemmaTextClient : GoogleAiClientBase, IGeminiClient
     {
         throw new GeminiApiException(
             $"Vision (image processing) is not supported by Gemma model '{Settings.Model}'. " +
-            "Please configure a Gemini model (e.g., gemini-2.0-flash) for image analysis features.",
+            "Please configure Gemini:VisionModel with a vision-capable Gemini model.",
             400);
     }
 
@@ -205,7 +205,7 @@ public class GemmaTextClient : GoogleAiClientBase, IGeminiClient
     {
         throw new GeminiApiException(
             $"Vision (image processing) is not supported by Gemma model '{Settings.Model}'. " +
-            "Please configure a Gemini model (e.g., gemini-2.0-flash) for image analysis features.",
+            "Please configure Gemini:VisionModel with a vision-capable Gemini model.",
             400);
     }
 
@@ -220,7 +220,7 @@ public class GemmaTextClient : GoogleAiClientBase, IGeminiClient
     {
         throw new GeminiApiException(
             $"Vision (image processing) is not supported by Gemma model '{Settings.Model}'. " +
-            "Please configure a Gemini model (e.g., gemini-2.0-flash) for image analysis features.",
+            "Please configure Gemini:VisionModel with a vision-capable Gemini model.",
             400);
     }
 }

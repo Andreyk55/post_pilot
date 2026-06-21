@@ -10,6 +10,8 @@ namespace PostPilot.Api.Services.Ai;
 /// - gemma-* models → GemmaTextClient (no JSON mode, no vision)
 /// - gemini-* models (and others) → GeminiTextClient (JSON mode, vision supported)
 ///
+/// - vision calls always use Gemini:VisionModel
+///
 /// This router is registered as IGeminiClient in DI and delegates to the appropriate implementation.
 /// </summary>
 public class GoogleAiClientRouter : IGeminiClient
@@ -54,30 +56,23 @@ public class GoogleAiClientRouter : IGeminiClient
                 cacheOptions);
         }
 
-        // Vision client: use dedicated VisionModel if configured, otherwise fall back to primary client
-        if (!string.IsNullOrEmpty(settings.VisionModel))
+        var visionSettings = new GeminiSettings
         {
-            var visionSettings = new GeminiSettings
-            {
-                ApiKey = settings.ApiKey,
-                Model = settings.VisionModel,
-                BaseUrl = settings.BaseUrl,
-                TimeoutSeconds = settings.TimeoutSeconds
-            };
-            _logger.LogInformation(
-                "Using dedicated vision model '{VisionModel}' for image analysis.",
-                settings.VisionModel);
-            _visionClient = new GeminiTextClient(
-                httpClient,
-                visionSettings,
-                cache,
-                loggerFactory.CreateLogger<GeminiTextClient>(),
-                cacheOptions);
-        }
-        else
-        {
-            _visionClient = _client;
-        }
+            ApiKey = settings.ApiKey,
+            Model = settings.VisionModel,
+            VisionModel = settings.VisionModel,
+            BaseUrl = settings.BaseUrl,
+            TimeoutSeconds = settings.TimeoutSeconds
+        };
+        _logger.LogInformation(
+            "Using dedicated vision model '{VisionModel}' for image analysis.",
+            settings.VisionModel);
+        _visionClient = new GeminiTextClient(
+            httpClient,
+            visionSettings,
+            cache,
+            loggerFactory.CreateLogger<GeminiTextClient>(),
+            cacheOptions);
     }
 
     /// <summary>

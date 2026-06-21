@@ -12,7 +12,8 @@ public class GeminiSettingsValidatorTests
     private static GeminiSettings ValidSettings() => new()
     {
         ApiKey = "test-api-key",
-        Model = "gemini-2.0-flash",
+        Model = "gemma-4-26b",
+        VisionModel = "gemini-2.5-flash",
         BaseUrl = "https://generativelanguage.googleapis.com/v1beta",
         TimeoutSeconds = 30
     };
@@ -55,18 +56,47 @@ public class GeminiSettingsValidatorTests
         Assert.Contains("Gemini:Model", result.FailureMessage);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Validate_MissingVisionModel_Fails(string? visionModel)
+    {
+        var settings = ValidSettings();
+        settings.VisionModel = visionModel!;
+
+        var result = _validator.Validate(null, settings);
+
+        Assert.True(result.Failed);
+        Assert.Contains("Gemini:VisionModel", result.FailureMessage);
+    }
+
     [Fact]
-    public void Validate_MissingApiKeyAndModel_ReportsBothFailures()
+    public void Validate_GemmaVisionModel_Fails()
+    {
+        var settings = ValidSettings();
+        settings.VisionModel = "gemma-4-26b";
+
+        var result = _validator.Validate(null, settings);
+
+        Assert.True(result.Failed);
+        Assert.Contains("vision-capable Gemini model", result.FailureMessage);
+    }
+
+    [Fact]
+    public void Validate_MissingApiKeyModelAndVisionModel_ReportsAllFailures()
     {
         var settings = ValidSettings();
         settings.ApiKey = "";
         settings.Model = "";
+        settings.VisionModel = "";
 
         var result = _validator.Validate(null, settings);
 
         Assert.True(result.Failed);
         Assert.Contains("Gemini:ApiKey", result.FailureMessage);
         Assert.Contains("Gemini:Model", result.FailureMessage);
+        Assert.Contains("Gemini:VisionModel", result.FailureMessage);
     }
 
     [Theory]
@@ -111,14 +141,4 @@ public class GeminiSettingsValidatorTests
         Assert.Contains("TimeoutSeconds", result.FailureMessage);
     }
 
-    [Fact]
-    public void Validate_VisionModelOptional_SucceedsWhenNull()
-    {
-        var settings = ValidSettings();
-        settings.VisionModel = null;
-
-        var result = _validator.Validate(null, settings);
-
-        Assert.True(result.Succeeded);
-    }
 }

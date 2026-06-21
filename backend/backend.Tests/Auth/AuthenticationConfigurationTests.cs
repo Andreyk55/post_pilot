@@ -35,6 +35,7 @@ public class AuthenticationConfigurationTests
             ["Meta:RedirectUri"] = "http://localhost:5173/oauth/meta/callback",
             ["Gemini:ApiKey"] = "test-gemini-key",
             ["Gemini:Model"] = "gemini-test",
+            ["Gemini:VisionModel"] = "gemini-vision-test",
             ["Gemini:BaseUrl"] = "https://generativelanguage.googleapis.com/v1beta",
             ["Gemini:TimeoutSeconds"] = "30",
             ["MediaStorage:Provider"] = "local-disk",

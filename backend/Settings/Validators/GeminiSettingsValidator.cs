@@ -13,7 +13,16 @@ public class GeminiSettingsValidator : IValidateOptions<GeminiSettings>
             failures.Add("Gemini:ApiKey is required. Set via Gemini__ApiKey env var.");
 
         if (string.IsNullOrWhiteSpace(options.Model))
-            failures.Add("Gemini:Model is required. Set in appsettings or via Gemini__Model env var.");
+            failures.Add("Gemini:Model is required. Set via Gemini__Model env var.");
+
+        if (string.IsNullOrWhiteSpace(options.VisionModel))
+        {
+            failures.Add("Gemini:VisionModel is required. Set via Gemini__VisionModel env var.");
+        }
+        else if (options.VisionModel.StartsWith("gemma", StringComparison.OrdinalIgnoreCase))
+        {
+            failures.Add("Gemini:VisionModel must be a vision-capable Gemini model, not a Gemma text model.");
+        }
 
         if (string.IsNullOrWhiteSpace(options.BaseUrl))
             failures.Add($"{nameof(options.BaseUrl)} is required.");

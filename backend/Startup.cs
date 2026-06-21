@@ -273,14 +273,9 @@ public class Startup
         services.AddSingleton<IValidateOptions<AiCacheOptions>, AiCacheOptionsValidator>();
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<AiCacheOptions>>().Value);
 
-        // Gemini settings: all from "Gemini" section (ApiKey from env var, rest from appsettings)
+        // Gemini settings: ApiKey, Model, and VisionModel are provided by deployment env vars.
         services.AddOptions<GeminiSettings>()
             .Bind(configuration.GetSection(GeminiSettings.SectionName))
-            .PostConfigure(settings =>
-            {
-                if (string.IsNullOrWhiteSpace(settings.VisionModel))
-                    settings.VisionModel = settings.Model;
-            })
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<GeminiSettings>, GeminiSettingsValidator>();
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<GeminiSettings>>().Value);
