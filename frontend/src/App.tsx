@@ -9,6 +9,7 @@ import { MetaOAuthCallback } from './pages/MetaOAuthCallback'
 import { AuthCallback } from './pages/AuthCallback'
 import { SettingsPage } from './pages/SettingsPage'
 import { ContactPage } from './pages/ContactPage'
+import { HomePage } from './pages/HomePage'
 import { DataDeletionPage } from './pages/DataDeletionPage'
 import { DataDeletionStatusPage } from './pages/DataDeletionStatusPage'
 import { PasswordGate } from './components/PasswordGate'
@@ -19,10 +20,12 @@ import { WorkspaceGuard } from './components/WorkspaceGuard'
 import './App.css'
 
 function MainApp() {
-  const [currentPage, setCurrentPage] = useState('schedule')
+  const [currentPage, setCurrentPage] = useState('home')
 
   const renderPage = () => {
     switch (currentPage) {
+      case 'home':
+        return <HomePage onNavigate={setCurrentPage} />
       case 'schedule':
         return <SchedulePostsPage onNavigate={setCurrentPage} />
       case 'posts':
@@ -36,7 +39,7 @@ function MainApp() {
       case 'contact':
         return <ContactPage />
       default:
-        return <SchedulePostsPage onNavigate={setCurrentPage} />
+        return <HomePage onNavigate={setCurrentPage} />
     }
   }
 

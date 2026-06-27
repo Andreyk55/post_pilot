@@ -16,6 +16,18 @@
   margin-bottom: 2rem;
 }
 
+.sidebar-logo--btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+.sidebar-logo--btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
 .sidebar-logo .logo-icon {
   width: 40px;
   height: 40px;
