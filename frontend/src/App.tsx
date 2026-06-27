@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { Sidebar } from './components/Sidebar'
-import { Dashboard } from './pages/Dashboard'
 import { SchedulePostsPage } from './pages/SchedulePostsPage'
 import { MyPostsPage } from './pages/MyPostsPage'
 import { ConnectedAccountsPage } from './pages/ConnectedAccountsPage'
@@ -20,12 +19,10 @@ import { WorkspaceGuard } from './components/WorkspaceGuard'
 import './App.css'
 
 function MainApp() {
-  const [currentPage, setCurrentPage] = useState('dashboard')
+  const [currentPage, setCurrentPage] = useState('schedule')
 
   const renderPage = () => {
     switch (currentPage) {
-      case 'dashboard':
-        return <Dashboard />
       case 'schedule':
         return <SchedulePostsPage onNavigate={setCurrentPage} />
       case 'posts':
@@ -39,7 +36,7 @@ function MainApp() {
       case 'contact':
         return <ContactPage />
       default:
-        return <Dashboard />
+        return <SchedulePostsPage onNavigate={setCurrentPage} />
     }
   }
 
