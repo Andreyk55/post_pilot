@@ -167,27 +167,6 @@ export function HomePage({ onNavigate }: HomePageProps) {
         </div>
       </section>
 
-      {/* Features */}
-      <section className="home-features">
-        <h2 className="home-features__title">Everything you need</h2>
-        <p className="home-features__sub">Powerful tools to grow your social presence without the grind.</p>
-        <div className="home-features__grid">
-          {features.map(f => (
-            <button
-              key={f.label}
-              className="home-feature-card"
-              onClick={() => onNavigate(f.page)}
-              style={{ '--feature-color': f.color } as React.CSSProperties}
-            >
-              <div className="home-feature-card__icon">{f.icon}</div>
-              <h3 className="home-feature-card__label">{f.label}</h3>
-              <p className="home-feature-card__desc">{f.description}</p>
-              <span className="home-feature-card__arrow">→</span>
-            </button>
-          ))}
-        </div>
-      </section>
-
       {/* Platform logos strip */}
       <section className="home-platforms">
         <p className="home-platforms__label">Publish to your favourite platforms</p>
