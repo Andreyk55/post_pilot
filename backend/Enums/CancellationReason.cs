@@ -20,3 +20,4 @@ public enum CancellationReason
     /// while the parent provider connection stayed connected.</summary>
     ProviderAssetUnlinked = 3,
 }
+
