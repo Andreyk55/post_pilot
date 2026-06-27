@@ -35,8 +35,6 @@ function MainApp() {
         return <ConnectedAccountsPage />
       case 'assets':
         return <AssetsPage onNavigate={setCurrentPage} />
-      case 'analytics':
-        return <PlaceholderPage title="Analytics" icon="📊" />
       case 'settings':
         return <SettingsPage />
       case 'contact':
