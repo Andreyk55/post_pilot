@@ -5,11 +5,11 @@ import './DataDeletionPage.css'
  * Public, ungated informational page (no login / no password gate). This is the
  * URL registered with Meta as the app's Data Deletion Instructions URL.
  *
+ * Informational ONLY: it exposes no support email and no contact form. Logged-in
+ * users are directed to the in-app "Contact Us" (sidebar) for help.
+ *
  * Route: /data-deletion
  */
-
-// Support contact surfaced to users. Update if the support address changes.
-const SUPPORT_EMAIL = 'support@postpilot.app'
 
 export function DataDeletionPage() {
   return (
@@ -63,10 +63,9 @@ export function DataDeletionPage() {
         <section>
           <h2>Need help?</h2>
           <p>
-            Contact us at{' '}
-            <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> and we will help you
-            complete your deletion request. Deletion requests are typically processed
-            immediately and confirmed within 30 days.
+            If you have a PostPilot account and need help, sign in to PostPilot and use{' '}
+            <strong>Contact Us</strong> from the sidebar to send us a message. Deletion
+            requests are typically processed immediately and confirmed within 30 days.
           </p>
           <p className="data-deletion-links">
             <Link to="/">Back to PostPilot</Link>

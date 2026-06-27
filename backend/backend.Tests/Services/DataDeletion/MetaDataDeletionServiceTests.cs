@@ -177,6 +177,26 @@ public class MetaDataDeletionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Meta_purge_does_not_delete_support_requests()
+    {
+        // Support ("Contact Us") messages are unrelated to provider data and must SURVIVE
+        // a Meta data-deletion callback — even for the same user/workspace being purged.
+        SeedMeta(WorkspaceAId, UserAId, AccountAlpha);
+        var support = new SupportContactRequest
+        {
+            Id = Guid.NewGuid(), UserId = UserAId, WorkspaceId = WorkspaceAId,
+            Subject = "Hi", Message = "Help", Status = SupportContactStatus.New, CreatedAt = DateTime.UtcNow,
+        };
+        _db.SupportContactRequests.Add(support);
+        _db.SaveChanges();
+
+        var result = await _service.PurgeByProviderAccountIdAsync(AccountAlpha, CancellationToken.None);
+
+        Assert.Equal(DataDeletionStatus.Completed, result.Status);
+        Assert.True(await _db.SupportContactRequests.AnyAsync(r => r.Id == support.Id));
+    }
+
+    [Fact]
     public async Task Second_purge_call_is_noop_success()
     {
         SeedMeta(WorkspaceAId, UserAId, AccountAlpha);

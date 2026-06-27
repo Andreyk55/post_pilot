@@ -15,6 +15,7 @@ const navItems = [
   { id: 'posts', label: 'My Posts', icon: '📝' },
   { id: 'analytics', label: 'Analytics', icon: '📊' },
   { id: 'settings', label: 'Settings', icon: '⚙️' },
+  { id: 'contact', label: 'Contact Us', icon: '✉️' },
 ]
 
 export function Sidebar({ currentPage, onNavigate }: SidebarProps) {

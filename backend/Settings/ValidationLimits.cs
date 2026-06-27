@@ -77,4 +77,13 @@ public static class ValidationLimits
     // Media limits (in bytes)
     public const long MediaImageMaxBytes = 20L * 1024 * 1024; // 20MB
     public const long MediaVideoMaxBytes = 200L * 1024 * 1024; // 200MB
+
+    // Support "Contact Us" limits (authenticated in-app support messages)
+    public const int SupportSubjectMaxLength = 200;
+    public const int SupportMessageMaxLength = 5000;
+    public const int SupportInternalNoteMaxLength = 2000;
+
+    // Per-user abuse cap: max support messages accepted within the rolling window.
+    public const int SupportMaxRequestsPerWindow = 10;
+    public const int SupportRateLimitWindowHours = 1;
 }

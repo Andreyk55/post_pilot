@@ -585,6 +585,25 @@ public class ProviderConnectionLifecycleTests : IDisposable
     }
 
     [Fact]
+    public async Task Disconnect_does_not_delete_support_requests()
+    {
+        // Disconnecting a provider is an account/asset operation; it must NOT touch the
+        // user's "Contact Us" support messages.
+        SeedMeta(WorkspaceAId, UserAId, MetaAccountAlpha);
+        var support = new SupportContactRequest
+        {
+            Id = Guid.NewGuid(), UserId = UserAId, WorkspaceId = WorkspaceAId,
+            Subject = "Hi", Message = "Help", Status = SupportContactStatus.New, CreatedAt = DateTime.UtcNow,
+        };
+        _db.SupportContactRequests.Add(support);
+        await _db.SaveChangesAsync();
+
+        await _providerService.DisconnectAsync(WorkspaceAId, ProviderType.Meta);
+
+        Assert.True(await _db.SupportContactRequests.AnyAsync(r => r.Id == support.Id));
+    }
+
+    [Fact]
     public async Task Disconnect_in_workspace_A_does_not_touch_workspace_B_posts()
     {
         // Each workspace owns a DISTINCT account (account ownership is exclusive +

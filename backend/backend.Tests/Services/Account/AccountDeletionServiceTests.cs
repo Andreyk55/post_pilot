@@ -108,6 +108,18 @@ public class AccountDeletionServiceTests : IDisposable
         return m;
     }
 
+    private SupportContactRequest SeedSupportRequest(Guid userId, Guid? workspaceId)
+    {
+        var r = new SupportContactRequest
+        {
+            Id = Guid.NewGuid(), UserId = userId, WorkspaceId = workspaceId,
+            Subject = "Help", Message = "Please", Status = SupportContactStatus.New, CreatedAt = DateTime.UtcNow,
+        };
+        _db.SupportContactRequests.Add(r);
+        _db.SaveChanges();
+        return r;
+    }
+
     // ── Tests ────────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -167,6 +179,30 @@ public class AccountDeletionServiceTests : IDisposable
         Assert.True(await _db.Media.AnyAsync(m => m.Id == bMedia.Id));
         Assert.True(await _db.WorkspaceMembers.AnyAsync(m => m.UserId == UserBId));
         Assert.DoesNotContain(bMedia.StorageKey, _storage.DeletedKeys);
+    }
+
+    [Fact]
+    public async Task Deletes_authenticated_users_support_requests()
+    {
+        var mine = SeedSupportRequest(UserAId, WorkspaceAId);
+        var minePlain = SeedSupportRequest(UserAId, workspaceId: null);
+
+        await _service.DeleteCurrentAccountAsync(UserAId, CancellationToken.None);
+
+        Assert.False(await _db.SupportContactRequests.AnyAsync(r => r.Id == mine.Id));
+        Assert.False(await _db.SupportContactRequests.AnyAsync(r => r.Id == minePlain.Id));
+    }
+
+    [Fact]
+    public async Task Does_not_delete_other_users_support_requests()
+    {
+        var mine = SeedSupportRequest(UserAId, WorkspaceAId);
+        var theirs = SeedSupportRequest(UserBId, WorkspaceBId);
+
+        await _service.DeleteCurrentAccountAsync(UserAId, CancellationToken.None);
+
+        Assert.False(await _db.SupportContactRequests.AnyAsync(r => r.Id == mine.Id));
+        Assert.True(await _db.SupportContactRequests.AnyAsync(r => r.Id == theirs.Id));
     }
 
     [Fact]

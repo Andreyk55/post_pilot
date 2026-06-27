@@ -10,6 +10,7 @@ import { PlaceholderPage } from './pages/PlaceholderPage'
 import { MetaOAuthCallback } from './pages/MetaOAuthCallback'
 import { AuthCallback } from './pages/AuthCallback'
 import { SettingsPage } from './pages/SettingsPage'
+import { ContactPage } from './pages/ContactPage'
 import { DataDeletionPage } from './pages/DataDeletionPage'
 import { DataDeletionStatusPage } from './pages/DataDeletionStatusPage'
 import { PasswordGate } from './components/PasswordGate'
@@ -38,6 +39,8 @@ function MainApp() {
         return <PlaceholderPage title="Analytics" icon="📊" />
       case 'settings':
         return <SettingsPage />
+      case 'contact':
+        return <ContactPage />
       default:
         return <Dashboard />
     }

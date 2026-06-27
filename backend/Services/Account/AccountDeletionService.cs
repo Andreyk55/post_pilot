@@ -93,6 +93,15 @@ public sealed class AccountDeletionService : IAccountDeletionService
             .Where(w => ownedWorkspaceIds.Contains(w.Id))
             .ToListAsync(ct);
 
+        // Support ("Contact Us") messages owned by THIS user. Scoped strictly by UserId so
+        // we never touch another user's requests. Removed explicitly (in addition to the
+        // cascade FK) so the same behavior holds on the in-memory test provider, which does
+        // not enforce cascades. Deliberately NOT scoped by workspace — a support request can
+        // have a null/foreign WorkspaceId yet still belong to this user.
+        var supportRequests = await _context.SupportContactRequests
+            .Where(s => s.UserId == authenticatedUserId)
+            .ToListAsync(ct);
+
         // All bucket files for this user live under this single prefix. The guard makes
         // it impossible to touch another user's objects even if a stray key slipped in.
         var allowedPrefixes = new[] { $"users/{authenticatedUserId:D}/" };
@@ -115,6 +124,7 @@ public sealed class AccountDeletionService : IAccountDeletionService
             _context.MetaOAuthStates.RemoveRange(oauthStates);
             _context.Media.RemoveRange(media);
             _context.AiVoiceProfiles.RemoveRange(voiceProfiles);
+            _context.SupportContactRequests.RemoveRange(supportRequests);
             _context.WorkspaceMembers.RemoveRange(memberships);
             _context.Workspaces.RemoveRange(workspaces);
             _context.AppUsers.Remove(user);

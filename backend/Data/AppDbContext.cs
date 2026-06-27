@@ -21,6 +21,7 @@ public class AppDbContext : DbContext
     public DbSet<Workspace> Workspaces => Set<Workspace>();
     public DbSet<WorkspaceMember> WorkspaceMembers => Set<WorkspaceMember>();
     public DbSet<DataDeletionRequest> DataDeletionRequests => Set<DataDeletionRequest>();
+    public DbSet<SupportContactRequest> SupportContactRequests => Set<SupportContactRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -320,6 +321,40 @@ public class AppDbContext : DbContext
             // No FK to AppUser/Workspace/MetaConnection: this audit row must SURVIVE the
             // hard-delete of every one of those targets. UserId/WorkspaceId are soft
             // pointers kept for internal audit only.
+        });
+
+        modelBuilder.Entity<SupportContactRequest>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            // Common access pattern: "all requests by this user, newest first".
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.Status);
+            // Category/Status stored as int (open enums we may extend; matches the
+            // newer-enum convention used by Post.CancellationReason).
+            entity.Property(e => e.Category).HasConversion<int?>();
+            entity.Property(e => e.Status).HasConversion<int>();
+            entity.Property(e => e.Subject)
+                .IsRequired()
+                .HasMaxLength(ValidationLimits.SupportSubjectMaxLength);
+            entity.Property(e => e.Message)
+                .IsRequired()
+                .HasMaxLength(ValidationLimits.SupportMessageMaxLength);
+            entity.Property(e => e.InternalNote)
+                .HasMaxLength(ValidationLimits.SupportInternalNoteMaxLength);
+
+            // UserId FK → AppUser, CASCADE. Unlike DataDeletionRequest (FK-free so it can
+            // outlive a purge), a support request has no reason to survive the user who
+            // sent it: full account deletion removes these. AccountDeletionService ALSO
+            // removes them explicitly so the same behavior holds on the in-memory test
+            // provider, which does not enforce cascades.
+            entity.HasOne<AppUser>()
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // No FK on WorkspaceId — it's a nullable soft pointer (mirrors AppUser.
+            // CurrentWorkspaceId). Contact Us must work with no workspace selected, and a
+            // later workspace deletion must not cascade through or be blocked by this row.
         });
     }
 }

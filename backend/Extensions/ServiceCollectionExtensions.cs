@@ -9,6 +9,7 @@ using PostPilot.Api.Services.Media;
 using PostPilot.Api.Services.Providers;
 using PostPilot.Api.Services.Publishing;
 using PostPilot.Api.Services.Scheduling;
+using PostPilot.Api.Services.Support;
 using PostPilot.Api.Services.Validation;
 using PostPilot.Api.Settings;
 using PostPilot.Api.Settings.Validators;
@@ -75,6 +76,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IStorageDeletionService, StorageDeletionService>();
         services.AddScoped<IMetaDataDeletionService, MetaDataDeletionService>();
         services.AddScoped<IAccountDeletionService, AccountDeletionService>();
+
+        // ── Support ("Contact Us") ───────────────────────────────────────────
+        // Authenticated in-app support messages. Stores requests for later triage;
+        // no email/notification provider is wired (none is configured for the MVP).
+        services.AddScoped<ISupportContactService, SupportContactService>();
 
         // ── Post scheduling ──────────────────────────────────────────────────
         services.AddScoped<IPostScheduler, PostScheduler>();
