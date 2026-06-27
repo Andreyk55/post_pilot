@@ -82,6 +82,9 @@ public static class ValidationLimits
     public const int SupportSubjectMaxLength = 200;
     public const int SupportMessageMaxLength = 5000;
     public const int SupportInternalNoteMaxLength = 2000;
+    // Cap for the stored email-notification failure summary. Holds a short, safe message
+    // only (exception type + message) — never a stack trace or any secret.
+    public const int SupportEmailNotificationErrorMaxLength = 2000;
 
     // Per-user abuse cap: max support messages accepted within the rolling window.
     public const int SupportMaxRequestsPerWindow = 10;

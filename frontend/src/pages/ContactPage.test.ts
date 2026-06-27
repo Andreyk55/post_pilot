@@ -41,6 +41,14 @@ describe('ContactPage — form', () => {
     )
   })
 
+  it('exposes no support email address anywhere in the Contact Us UI', () => {
+    // The destination support inbox is backend-only; it must never appear in the page.
+    expect(contactPageSource).not.toMatch(/mailto:/)
+    expect(contactPageSource).not.toMatch(/support@/i)
+    // No email-address literal of any kind.
+    expect(contactPageSource).not.toMatch(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/)
+  })
+
   it('submits via supportApi with only category/subject/message, and collects no identity fields', () => {
     // Delegates to the API client (which builds the body); the page passes only the
     // three allowed fields.

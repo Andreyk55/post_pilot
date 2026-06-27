@@ -5,6 +5,7 @@ using PostPilot.Api.Enums;
 using PostPilot.Api.Services;
 using PostPilot.Api.Services.Account;
 using PostPilot.Api.Services.DataDeletion;
+using PostPilot.Api.Services.Email;
 using PostPilot.Api.Services.Media;
 using PostPilot.Api.Services.Providers;
 using PostPilot.Api.Services.Publishing;
@@ -78,8 +79,21 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAccountDeletionService, AccountDeletionService>();
 
         // ── Support ("Contact Us") ───────────────────────────────────────────
-        // Authenticated in-app support messages. Stores requests for later triage;
-        // no email/notification provider is wired (none is configured for the MVP).
+        // Authenticated in-app support messages. The DB row is the source of truth; an
+        // internal email notification is sent best-effort after the row is saved.
+        services.AddOptions<SupportNotificationOptions>()
+            .Bind(configuration.GetSection(SupportNotificationOptions.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<SupportNotificationOptions>, SupportNotificationOptionsValidator>();
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<SupportNotificationOptions>>().Value);
+
+        services.AddOptions<SmtpOptions>()
+            .Bind(configuration.GetSection(SmtpOptions.SectionName));
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<SmtpOptions>>().Value);
+
+        // SMTP transport (no third-party dependency). Swappable via IEmailSender.
+        services.AddSingleton<IEmailSender, SmtpEmailSender>();
+        services.AddScoped<ISupportNotificationService, SupportNotificationService>();
         services.AddScoped<ISupportContactService, SupportContactService>();
 
         // ── Post scheduling ──────────────────────────────────────────────────

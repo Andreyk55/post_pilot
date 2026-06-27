@@ -51,4 +51,18 @@ public class SupportContactRequest
 
     /// <summary>Operator-only note. NEVER returned to the user by any endpoint.</summary>
     public string? InternalNote { get; set; }
+
+    // ── Email notification tracking ──────────────────────────────────────────────
+    // Best-effort internal notification: the row is saved first, then we try to email
+    // the support inbox. These fields record the outcome only; they never gate or undo
+    // the saved request, and they are never exposed to the user / API response.
+
+    /// <summary>Outcome of the internal support-inbox notification. Starts <see cref="SupportEmailNotificationStatus.NotAttempted"/>.</summary>
+    public SupportEmailNotificationStatus EmailNotificationStatus { get; set; } = SupportEmailNotificationStatus.NotAttempted;
+
+    /// <summary>When the notification email was successfully handed to the transport.</summary>
+    public DateTime? EmailNotificationSentAt { get; set; }
+
+    /// <summary>Short, safe failure summary when <see cref="EmailNotificationStatus"/> is Failed. Never contains secrets or stack traces.</summary>
+    public string? EmailNotificationError { get; set; }
 }

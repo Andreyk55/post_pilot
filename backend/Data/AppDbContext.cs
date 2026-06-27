@@ -333,6 +333,7 @@ public class AppDbContext : DbContext
             // newer-enum convention used by Post.CancellationReason).
             entity.Property(e => e.Category).HasConversion<int?>();
             entity.Property(e => e.Status).HasConversion<int>();
+            entity.Property(e => e.EmailNotificationStatus).HasConversion<int>();
             entity.Property(e => e.Subject)
                 .IsRequired()
                 .HasMaxLength(ValidationLimits.SupportSubjectMaxLength);
@@ -341,6 +342,8 @@ public class AppDbContext : DbContext
                 .HasMaxLength(ValidationLimits.SupportMessageMaxLength);
             entity.Property(e => e.InternalNote)
                 .HasMaxLength(ValidationLimits.SupportInternalNoteMaxLength);
+            entity.Property(e => e.EmailNotificationError)
+                .HasMaxLength(ValidationLimits.SupportEmailNotificationErrorMaxLength);
 
             // UserId FK → AppUser, CASCADE. Unlike DataDeletionRequest (FK-free so it can
             // outlive a purge), a support request has no reason to survive the user who
