@@ -70,6 +70,8 @@ export function SettingsPage() {
             Instagram. You can delete those directly in Facebook or Instagram.
           </p>
 
+          <hr className="settings-danger-divider" />
+
           <label className="settings-danger-label" htmlFor="delete-confirm">
             To confirm, type <strong>{DELETE_ACCOUNT_CONFIRMATION}</strong>.
           </label>

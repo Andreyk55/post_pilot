@@ -1,92 +1,171 @@
 .settings-page {
-  padding: 32px;
-  max-width: 720px;
+  padding: 40px 32px;
+  max-width: 680px;
 }
 
 .settings-page h1 {
   margin-top: 0;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
 }
 
 .settings-section {
-  margin-top: 28px;
+  margin-top: 36px;
 }
 
 .settings-section h2 {
-  font-size: 18px;
-  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #8a8fa8;
+  margin-bottom: 14px;
 }
 
+/* ── Account info card ── */
 .settings-account {
   display: grid;
-  gap: 8px;
+  gap: 0;
   margin: 0;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  overflow: hidden;
 }
 
 .settings-account div {
   display: flex;
-  gap: 16px;
+  align-items: center;
+  gap: 0;
+  padding: 14px 20px;
+}
+
+.settings-account div + div {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .settings-account dt {
-  width: 80px;
-  color: #65676b;
+  width: 100px;
+  font-size: 13px;
+  color: #8a8fa8;
   margin: 0;
+  flex-shrink: 0;
 }
 
 .settings-account dd {
   margin: 0;
-  font-weight: 600;
+  font-weight: 500;
+  font-size: 14px;
 }
 
+/* ── Danger zone card ── */
 .settings-danger-card {
-  border: 1px solid #f5b5af;
-  background: #fff8f7;
-  border-radius: 10px;
-  padding: 20px 24px;
+  border: 1px solid rgba(217, 48, 37, 0.35);
+  background: rgba(179, 38, 30, 0.07);
+  border-radius: 12px;
+  padding: 24px 28px;
 }
 
 .settings-danger-card h3 {
   margin-top: 0;
-  color: #b3261e;
+  margin-bottom: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #ef5350;
+}
+
+.settings-danger-card p {
+  margin: 0 0 10px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #c8cad4;
+}
+
+.settings-danger-card p:last-of-type {
+  margin-bottom: 0;
+}
+
+.settings-danger-divider {
+  border: none;
+  border-top: 1px solid rgba(217, 48, 37, 0.2);
+  margin: 20px 0;
 }
 
 .settings-danger-label {
   display: block;
-  margin-top: 12px;
-  margin-bottom: 6px;
+  margin-top: 20px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: #c8cad4;
+}
+
+.settings-danger-label strong {
+  color: #ef5350;
+  font-family: monospace;
+  font-size: 12px;
+  background: rgba(239, 83, 80, 0.12);
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
 .settings-danger-input {
   width: 100%;
-  max-width: 320px;
-  padding: 8px 12px;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  font-size: 14px;
+  max-width: 340px;
+  padding: 9px 13px;
+  border: 1px solid rgba(217, 48, 37, 0.35);
+  border-radius: 8px;
+  font-size: 13.5px;
+  background: rgba(0, 0, 0, 0.25);
+  color: inherit;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+
+.settings-danger-input:focus {
+  outline: none;
+  border-color: #ef5350;
+  box-shadow: 0 0 0 3px rgba(239, 83, 80, 0.15);
+}
+
+.settings-danger-input::placeholder {
+  color: #6b6f80;
 }
 
 .settings-danger-error {
   margin-top: 12px;
-  color: #b3261e;
+  font-size: 13px;
+  color: #ef5350;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .settings-danger-button {
-  display: block;
+  display: inline-block;
   margin-top: 16px;
-  padding: 10px 18px;
+  padding: 10px 20px;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   background: #d93025;
   color: #fff;
   font-weight: 600;
+  font-size: 14px;
   cursor: pointer;
+  transition: background 0.15s, opacity 0.15s, transform 0.1s;
 }
 
 .settings-danger-button:disabled {
-  background: #e9a8a3;
+  background: rgba(217, 48, 37, 0.35);
+  color: rgba(255, 255, 255, 0.45);
   cursor: not-allowed;
 }
 
 .settings-danger-button:not(:disabled):hover {
   background: #b3261e;
+  transform: translateY(-1px);
+}
+
+.settings-danger-button:not(:disabled):active {
+  transform: translateY(0);
 }
