@@ -34,6 +34,9 @@ public class PrivateAccessMiddleware
         "/api/auth/google/callback",
         "/api/auth/me",
         "/api/auth/logout",
+        // Meta Data Deletion Callback. Meta's servers POST here with no PostPilot
+        // cookie; trust comes from the HMAC-verified signed_request, not the gate.
+        "/api/meta/data-deletion",
         // Google handler's default CallbackPath. The redirect comes from
         // Google itself (no cookie attached) so it must not be password-gated.
         "/signin-google",
@@ -105,6 +108,9 @@ public class PrivateAccessMiddleware
                 return true;
         }
         if (path.StartsWith("/api/media/files/", StringComparison.OrdinalIgnoreCase))
+            return true;
+        // Public deletion status page polls this; no cookie required.
+        if (path.StartsWith("/api/data-deletion/status/", StringComparison.OrdinalIgnoreCase))
             return true;
         return false;
     }

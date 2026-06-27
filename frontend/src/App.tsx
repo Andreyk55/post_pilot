@@ -9,6 +9,9 @@ import { AssetsPage } from './pages/AssetsPage'
 import { PlaceholderPage } from './pages/PlaceholderPage'
 import { MetaOAuthCallback } from './pages/MetaOAuthCallback'
 import { AuthCallback } from './pages/AuthCallback'
+import { SettingsPage } from './pages/SettingsPage'
+import { DataDeletionPage } from './pages/DataDeletionPage'
+import { DataDeletionStatusPage } from './pages/DataDeletionStatusPage'
 import { PasswordGate } from './components/PasswordGate'
 import { LoginScreen } from './components/LoginScreen'
 import { AuthProvider, useAuth } from './hooks/useAuth'
@@ -34,7 +37,7 @@ function MainApp() {
       case 'analytics':
         return <PlaceholderPage title="Analytics" icon="📊" />
       case 'settings':
-        return <PlaceholderPage title="Settings" icon="⚙️" />
+        return <SettingsPage />
       default:
         return <Dashboard />
     }
@@ -82,21 +85,39 @@ function RequireAuth({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
-function App() {
+/**
+ * The password-gated, authenticated application. Everything here sits behind the
+ * private-access gate and the Google sign-in.
+ */
+function GatedApp() {
   return (
     <PasswordGate>
-      <BrowserRouter>
-        <AuthProvider>
-          <WorkspacesProvider>
-            <Routes>
-              <Route path="/oauth/meta/callback" element={<MetaOAuthCallback />} />
-              <Route path="/auth/callback" element={<AuthCallback />} />
-              <Route path="/*" element={<RequireAuth><MainApp /></RequireAuth>} />
-            </Routes>
-          </WorkspacesProvider>
-        </AuthProvider>
-      </BrowserRouter>
+      <AuthProvider>
+        <WorkspacesProvider>
+          <Routes>
+            <Route path="/oauth/meta/callback" element={<MetaOAuthCallback />} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
+            <Route path="/*" element={<RequireAuth><MainApp /></RequireAuth>} />
+          </Routes>
+        </WorkspacesProvider>
+      </AuthProvider>
     </PasswordGate>
+  )
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        {/* Public, ungated pages. Meta's reviewers and end-users reach these
+            WITHOUT the private-access password or a login. Declared before the
+            catch-all so they are never swallowed by the gated app. */}
+        <Route path="/data-deletion" element={<DataDeletionPage />} />
+        <Route path="/data-deletion/status/:confirmationCode" element={<DataDeletionStatusPage />} />
+        {/* Everything else is the gated app. */}
+        <Route path="/*" element={<GatedApp />} />
+      </Routes>
+    </BrowserRouter>
   )
 }
 

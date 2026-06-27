@@ -1,0 +1,92 @@
+.settings-page {
+  padding: 32px;
+  max-width: 720px;
+}
+
+.settings-page h1 {
+  margin-top: 0;
+}
+
+.settings-section {
+  margin-top: 28px;
+}
+
+.settings-section h2 {
+  font-size: 18px;
+  margin-bottom: 12px;
+}
+
+.settings-account {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.settings-account div {
+  display: flex;
+  gap: 16px;
+}
+
+.settings-account dt {
+  width: 80px;
+  color: #65676b;
+  margin: 0;
+}
+
+.settings-account dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.settings-danger-card {
+  border: 1px solid #f5b5af;
+  background: #fff8f7;
+  border-radius: 10px;
+  padding: 20px 24px;
+}
+
+.settings-danger-card h3 {
+  margin-top: 0;
+  color: #b3261e;
+}
+
+.settings-danger-label {
+  display: block;
+  margin-top: 12px;
+  margin-bottom: 6px;
+}
+
+.settings-danger-input {
+  width: 100%;
+  max-width: 320px;
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.settings-danger-error {
+  margin-top: 12px;
+  color: #b3261e;
+}
+
+.settings-danger-button {
+  display: block;
+  margin-top: 16px;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 6px;
+  background: #d93025;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.settings-danger-button:disabled {
+  background: #e9a8a3;
+  cursor: not-allowed;
+}
+
+.settings-danger-button:not(:disabled):hover {
+  background: #b3261e;
+}

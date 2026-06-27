@@ -1,0 +1,63 @@
+.data-deletion-page {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 48px 16px;
+  background: #f5f6f8;
+  color: #1c1e21;
+}
+
+.data-deletion-card {
+  max-width: 720px;
+  width: 100%;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  padding: 40px;
+  line-height: 1.6;
+}
+
+.data-deletion-card h1 {
+  margin-top: 0;
+  font-size: 28px;
+}
+
+.data-deletion-card h2 {
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+
+.data-deletion-lead {
+  color: #444;
+  font-size: 16px;
+}
+
+.data-deletion-card section {
+  margin-top: 28px;
+}
+
+.data-deletion-card ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+.data-deletion-note {
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  border-radius: 8px;
+  padding: 16px 20px;
+}
+
+.data-deletion-links {
+  margin-top: 20px;
+}
+
+.data-deletion-card a {
+  color: #1877f2;
+  text-decoration: none;
+}
+
+.data-deletion-card a:hover {
+  text-decoration: underline;
+}

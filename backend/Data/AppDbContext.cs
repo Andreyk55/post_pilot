@@ -20,6 +20,7 @@ public class AppDbContext : DbContext
     public DbSet<AppUser> AppUsers => Set<AppUser>();
     public DbSet<Workspace> Workspaces => Set<Workspace>();
     public DbSet<WorkspaceMember> WorkspaceMembers => Set<WorkspaceMember>();
+    public DbSet<DataDeletionRequest> DataDeletionRequests => Set<DataDeletionRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -302,6 +303,23 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<DataDeletionRequest>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            // Public lookup handle — unique so the status page resolves exactly one row.
+            entity.HasIndex(e => e.ConfirmationCode).IsUnique();
+            entity.HasIndex(e => new { e.Provider, e.ProviderAccountId });
+            entity.Property(e => e.ConfirmationCode).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.Provider).HasConversion<int>();
+            entity.Property(e => e.Status).HasConversion<int>();
+            entity.Property(e => e.ProviderAccountId).HasMaxLength(255);
+            entity.Property(e => e.Error).HasMaxLength(1000);
+            entity.Property(e => e.Warning).HasMaxLength(1000);
+            // No FK to AppUser/Workspace/MetaConnection: this audit row must SURVIVE the
+            // hard-delete of every one of those targets. UserId/WorkspaceId are soft
+            // pointers kept for internal audit only.
         });
     }
 }

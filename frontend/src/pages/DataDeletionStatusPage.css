@@ -1,0 +1,91 @@
+.deletion-status-page {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 48px 16px;
+  background: #f5f6f8;
+  color: #1c1e21;
+}
+
+.deletion-status-card {
+  max-width: 560px;
+  width: 100%;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  padding: 36px;
+  line-height: 1.6;
+}
+
+.deletion-status-card h1 {
+  margin-top: 0;
+  font-size: 24px;
+}
+
+.deletion-status-muted {
+  color: #65676b;
+}
+
+.deletion-status-body {
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-top: 16px;
+}
+
+.deletion-status-body h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.deletion-status-tone-pending {
+  background: #e7f3ff;
+  border: 1px solid #b3d7ff;
+}
+
+.deletion-status-tone-success {
+  background: #e6f4ea;
+  border: 1px solid #a8d5b5;
+}
+
+.deletion-status-tone-error {
+  background: #fdecea;
+  border: 1px solid #f5b5af;
+}
+
+.deletion-status-meta {
+  margin: 16px 0 0;
+  display: grid;
+  gap: 8px;
+}
+
+.deletion-status-meta div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.deletion-status-meta dt {
+  color: #65676b;
+  margin: 0;
+}
+
+.deletion-status-meta dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+  word-break: break-all;
+}
+
+.deletion-status-links {
+  margin-top: 24px;
+}
+
+.deletion-status-card a {
+  color: #1877f2;
+  text-decoration: none;
+}
+
+.deletion-status-card a:hover {
+  text-decoration: underline;
+}

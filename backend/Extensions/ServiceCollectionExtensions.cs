@@ -3,6 +3,8 @@ using Microsoft.Extensions.Options;
 using PostPilot.Api.Data;
 using PostPilot.Api.Enums;
 using PostPilot.Api.Services;
+using PostPilot.Api.Services.Account;
+using PostPilot.Api.Services.DataDeletion;
 using PostPilot.Api.Services.Media;
 using PostPilot.Api.Services.Providers;
 using PostPilot.Api.Services.Publishing;
@@ -63,6 +65,16 @@ public static class ServiceCollectionExtensions
         // asset/post cleanup handlers.
         services.AddScoped<IProviderConnectionService, ProviderConnectionService>();
         services.AddScoped<IProviderLifecycleHandler, MetaProviderLifecycleHandler>();
+
+        // ── Data deletion (Meta callback) + full account deletion ────────────
+        // Small, single-responsibility services: signed_request verification,
+        // request/audit tracking, prefix-guarded storage deletion, the Meta purge,
+        // and full account deletion. Kept deliberately separate (no giant service).
+        services.AddSingleton<IMetaSignedRequestVerifier, MetaSignedRequestVerifier>();
+        services.AddScoped<IDataDeletionRequestService, DataDeletionRequestService>();
+        services.AddScoped<IStorageDeletionService, StorageDeletionService>();
+        services.AddScoped<IMetaDataDeletionService, MetaDataDeletionService>();
+        services.AddScoped<IAccountDeletionService, AccountDeletionService>();
 
         // ── Post scheduling ──────────────────────────────────────────────────
         services.AddScoped<IPostScheduler, PostScheduler>();
