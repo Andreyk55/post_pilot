@@ -251,14 +251,6 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
 
         setConnectedPages(response.connection.pages)
         setConnectedInstagramAccounts(igAccounts)
-        // Auto-select first page if only one exists
-        if (response.connection.pages.length === 1) {
-          setSelectedPageId(response.connection.pages[0].id)
-        }
-        // Auto-select first IG account if only one exists
-        if (igAccounts.length === 1) {
-          setSelectedInstagramAccountId(igAccounts[0].id)
-        }
       }
     } catch (err) {
       console.error('Failed to load connected accounts:', err)
@@ -330,14 +322,6 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
         // Clear IG selection if Instagram is deselected
         if (selectedPlatforms.includes('instagram') && platformId !== 'instagram') {
           setSelectedInstagramAccountId('')
-        }
-        // Auto-select IG account if switching to Instagram and only one exists
-        if (platformId === 'instagram' && connectedInstagramAccounts.length === 1) {
-          setSelectedInstagramAccountId(connectedInstagramAccounts[0].id)
-        }
-        // Auto-select Facebook page if switching to Facebook and only one exists
-        if (platformId === 'facebook' && connectedPages.length === 1) {
-          setSelectedPageId(connectedPages[0].id)
         }
       }
     } else {
@@ -698,7 +682,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
                 className="page-select"
                 disabled={loadingPages}
               >
-                <option value="">Select a page...</option>
+                <option value="">Select a Facebook Page</option>
                 {connectedPages.map(page => (
                   <option key={page.id} value={page.id}>
                     {page.name} {page.category && `(${page.category})`}
@@ -724,7 +708,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
                 className="page-select"
                 disabled={loadingPages}
               >
-                <option value="">Select an account...</option>
+                <option value="">Select an Instagram Account</option>
                 {connectedInstagramAccounts.map(account => (
                   <option key={account.id} value={account.id}>
                     @{account.username} {account.pageName && `(${account.pageName})`}

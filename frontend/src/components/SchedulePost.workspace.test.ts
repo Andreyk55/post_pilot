@@ -177,6 +177,52 @@ describe('SchedulePost AI sections', () => {
   })
 })
 
+describe('SchedulePost — asset selection behavior', () => {
+  it('does not auto-select the first Facebook Page on load', () => {
+    // Auto-select on load must be absent — user must choose explicitly
+    expect(schedulePostSource).not.toMatch(/Auto-select first page if only one exists/)
+    expect(schedulePostSource).not.toMatch(/response\.connection\.pages\.length === 1[\s\S]{0,60}setSelectedPageId/)
+  })
+
+  it('does not auto-select the first Instagram account on load', () => {
+    expect(schedulePostSource).not.toMatch(/Auto-select first IG account if only one exists/)
+    expect(schedulePostSource).not.toMatch(/igAccounts\.length === 1[\s\S]{0,60}setSelectedInstagramAccountId/)
+  })
+
+  it('does not auto-select an asset when switching to Facebook or Instagram', () => {
+    expect(schedulePostSource).not.toMatch(/Auto-select IG account if switching to Instagram/)
+    expect(schedulePostSource).not.toMatch(/Auto-select Facebook page if switching to Facebook/)
+  })
+
+  it('clears the Facebook Page selection when switching away from Facebook', () => {
+    // The selectPlatform handler must contain both the guard condition and the clear call
+    expect(schedulePostSource).toContain("selectedPlatforms.includes('facebook') && platformId !== 'facebook'")
+    expect(schedulePostSource).toContain("setSelectedPageId('')")
+  })
+
+  it('clears the Instagram account selection when switching away from Instagram', () => {
+    expect(schedulePostSource).toContain("selectedPlatforms.includes('instagram') && platformId !== 'instagram'")
+    expect(schedulePostSource).toContain("setSelectedInstagramAccountId('')")
+  })
+
+  it('blocks schedule submit until an explicit Facebook Page is selected', () => {
+    // isFormValid must gate on selectedPageId when Facebook is selected
+    expect(schedulePostSource).toMatch(/!isFacebookSelected \|\| selectedPageId/)
+  })
+
+  it('blocks schedule submit until an explicit Instagram account is selected', () => {
+    expect(schedulePostSource).toMatch(/!isInstagramSelected \|\| selectedInstagramAccountId/)
+  })
+
+  it('uses an unselected placeholder for the Facebook Page dropdown', () => {
+    expect(schedulePostSource).toMatch(/Select a Facebook Page/)
+  })
+
+  it('uses an unselected placeholder for the Instagram Account dropdown', () => {
+    expect(schedulePostSource).toMatch(/Select an Instagram Account/)
+  })
+})
+
 describe('Meta-focused page copy', () => {
   it('keeps the schedule page positioned around Facebook and Instagram only', () => {
     expect(schedulePostsPageSource).toMatch(/Plan and schedule Facebook and Instagram content/)
