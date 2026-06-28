@@ -52,6 +52,17 @@ export function MultiMediaUpload({
   const [uploadError, setUploadError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Optimistic placeholders for files currently uploading/validating. They render
+  // as "Validating…" cards so the new media shows immediately, and the previous
+  // validation-error panel stays hidden until the new result is finalized — never
+  // leaving a stale error visible while a new upload is in flight.
+  const [pendingUploads, setPendingUploads] = useState<{ id: string; fileName: string; isVideo: boolean }[]>([])
+
+  // Latest committed items, read at upload-completion time so an item removed while
+  // a new upload is in flight is never resurrected by the append below.
+  const itemsRef = useRef(items)
+  itemsRef.current = items
+
   const isInstagram = selectedPlatform === 'instagram'
   const isFacebook = selectedPlatform === 'facebook'
 
@@ -158,6 +169,16 @@ export function MultiMediaUpload({
     setUploading(true)
     onUploadingChange?.(true)
 
+    // Show the incoming files as pending cards right away and hide any prior
+    // validation error while the new media is uploading/validating.
+    setPendingUploads(
+      filesToUpload.map(file => ({
+        id: crypto.randomUUID(),
+        fileName: file.name,
+        isVideo: file.type.startsWith('video/'),
+      })),
+    )
+
     const newItems: UploadedMediaItem[] = []
     for (const file of filesToUpload) {
       // Pre-validate
@@ -241,9 +262,12 @@ export function MultiMediaUpload({
     }
 
     if (newItems.length > 0) {
-      onItemsChange([...items, ...newItems])
+      // Merge against the latest items (not the closure snapshot) so a removal that
+      // happened during this upload is respected instead of being clobbered.
+      onItemsChange([...itemsRef.current, ...newItems])
     }
 
+    setPendingUploads([])
     setUploading(false)
     onUploadingChange?.(false)
   }
@@ -284,6 +308,11 @@ export function MultiMediaUpload({
   const invalidItems = items.filter(item => item.validationStatus === 'Invalid')
   const hasInvalidItems = invalidItems.length > 0
   const itemCount = items.length
+
+  // While media is uploading/validating we suppress the previous validation
+  // results so a stale error never sits below a freshly added (pending) item.
+  const isUploadingMedia = uploading || pendingUploads.length > 0
+  const showValidationErrors = !isUploadingMedia && hasInvalidItems
 
   // Determine accepted file types for the <input>
   const getAcceptTypes = (): string => {
@@ -385,7 +414,7 @@ export function MultiMediaUpload({
       />
 
       {/* Media grid */}
-      {items.length > 0 && (
+      {(items.length > 0 || pendingUploads.length > 0) && (
         <div className="carousel-grid">
           {items.map((item, index) => (
             <div key={item.id} className={`carousel-item ${item.validationStatus === 'Invalid' ? 'invalid' : ''}`}>
@@ -436,8 +465,18 @@ export function MultiMediaUpload({
             </div>
           ))}
 
+          {/* Pending (uploading/validating) placeholder cards */}
+          {pendingUploads.map(pending => (
+            <div key={pending.id} className="carousel-item pending">
+              <div className="carousel-thumbnail carousel-thumbnail--pending">
+                <span className="carousel-validating-badge">Validating…</span>
+              </div>
+              <div className="carousel-item-filename">{pending.fileName}</div>
+            </div>
+          ))}
+
           {/* Add more button */}
-          {canAddMore && !disabled && (
+          {canAddMore && !disabled && !isUploadingMedia && (
             <div
               className={`carousel-add-btn ${uploading ? 'uploading' : ''}`}
               onClick={handleClick}
@@ -453,7 +492,7 @@ export function MultiMediaUpload({
       )}
 
       {/* Empty state / initial upload */}
-      {items.length === 0 && (
+      {items.length === 0 && pendingUploads.length === 0 && (
         <div
           className={`upload-area ${uploading ? 'uploading' : ''} ${disabled ? 'disabled' : ''}`}
           onClick={handleClick}
@@ -479,7 +518,7 @@ export function MultiMediaUpload({
           {getStatusHint() && (
             <span className="carousel-hint">{getStatusHint()}</span>
           )}
-          {hasInvalidItems && (
+          {showValidationErrors && (
             <span className="carousel-warning">
               {invalidItems.length} item{invalidItems.length !== 1 ? 's' : ''} failed validation
             </span>
@@ -487,8 +526,9 @@ export function MultiMediaUpload({
         </div>
       )}
 
-      {/* Validation error details */}
-      {hasInvalidItems && (
+      {/* Validation error details — hidden while a new upload is in flight so a
+          stale error never sits below a freshly added (pending) item. */}
+      {showValidationErrors && (
         <div className="carousel-validation-errors">
           {invalidItems.map(item => (
             <div key={item.id} className="carousel-validation-error-item">
