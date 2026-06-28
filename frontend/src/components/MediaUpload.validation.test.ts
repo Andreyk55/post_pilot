@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 // Source-level guarantees (the project has no DOM test env) that the single-media
 // uploader — used by Facebook/Instagram Stories and the generic single-media feed —
@@ -5,15 +6,26 @@ import { describe, expect, it } from 'vitest'
 // every media surface stays visually consistent.
 import mediaUploadSource from './MediaUpload.tsx?raw'
 
+const mediaUploadCss = readFileSync(new URL('./MediaUpload.css', import.meta.url), 'utf8')
+
 describe('MediaUpload — shared validation UI', () => {
   it('imports the shared validation badge + card', () => {
     expect(mediaUploadSource).toMatch(
-      /import \{ MediaValidationBadge, MediaValidationCard \} from '\.\/MediaValidationStatus'/,
+      /import \{ MediaValidationBadge, MediaValidationCard, MediaValidationOverlay \} from '\.\/MediaValidationStatus'/,
     )
   })
 
-  it('renders the badge for the live validating/terminal state', () => {
-    expect(mediaUploadSource).toMatch(/<MediaValidationBadge\s+validating=\{validating\}\s+status=\{validationStatus\}\s+showPending=\{!!selectedPlatform\}/)
+  it('renders completed validation as a high-contrast corner badge', () => {
+    expect(mediaUploadSource).toMatch(
+      /<MediaValidationBadge\s+status=\{validationStatus\}\s+showPending=\{!!selectedPlatform && !showValidationOverlay\}\s+className="media-preview-validation-badge"/,
+    )
+    expect(mediaUploadCss).toMatch(/\.media-preview-validation-badge \{[\s\S]*top: 0\.6rem;[\s\S]*right: 0\.6rem;[\s\S]*z-index: 3;/)
+  })
+
+  it('renders pending upload or validation as a centered thumbnail overlay', () => {
+    expect(mediaUploadSource).toMatch(/const showValidationOverlay = !!selectedPlatform && \(uploading \|\| validating\)/)
+    expect(mediaUploadSource).toMatch(/<MediaValidationOverlay show=\{showValidationOverlay\} \/>/)
+    expect(mediaUploadCss).toMatch(/\.preview-overlay \{[\s\S]*z-index: 2;/)
   })
 
   it('renders errors and warnings through the shared card driven by the normalized view', () => {

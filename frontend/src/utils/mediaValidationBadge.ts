@@ -16,6 +16,7 @@ export type MediaValidationBadgeVariant =
 export interface MediaValidationBadgeDescriptor {
   label: string
   variant: MediaValidationBadgeVariant
+  icon: string
 }
 
 /**
@@ -30,18 +31,18 @@ export function getMediaValidationBadgeDescriptor(
   showPending: boolean,
 ): MediaValidationBadgeDescriptor | null {
   if (validating) {
-    return { label: 'Validating...', variant: 'validating' }
+    return { label: 'Validating...', variant: 'validating', icon: '...' }
   }
 
   switch (status) {
     case 'Valid':
-      return { label: 'Valid', variant: 'valid' }
+      return { label: 'Valid', variant: 'valid', icon: '✓' }
     case 'Invalid':
-      return { label: 'Invalid', variant: 'invalid' }
+      return { label: 'Invalid', variant: 'invalid', icon: '✕' }
     case 'Warning':
-      return { label: 'Warning', variant: 'warning' }
+      return { label: 'Warning', variant: 'warning', icon: '!' }
     case 'Pending':
-      return showPending ? { label: 'Pending', variant: 'pending' } : null
+      return showPending ? { label: 'Pending', variant: 'pending', icon: '...' } : null
     default:
       return null
   }

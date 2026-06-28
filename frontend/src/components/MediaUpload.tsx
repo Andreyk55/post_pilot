@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { mediaApi, type MediaType, type ValidationStatus, type MediaValidationError, type MediaValidationWarning, type Platform, type Placement } from '../api/media'
 import { getImageDimensions, getClientValidationRule } from '../constants/mediaValidationRules'
 import type { PlatformId } from '../constants/validationLimits'
-import { MediaValidationBadge, MediaValidationCard } from './MediaValidationStatus'
+import { MediaValidationBadge, MediaValidationCard, MediaValidationOverlay } from './MediaValidationStatus'
 import { resolveClientMediaError, resolveClientDimensionError } from '../utils/mediaRequirements'
 import { resolveMediaValidationView } from '../utils/mediaValidationView'
 import { getUploadErrorMessage } from '../utils/uploadError'
@@ -351,6 +351,8 @@ export function MediaUpload({
     )
   }
 
+  const showValidationOverlay = !!selectedPlatform && (uploading || validating)
+
   return (
     <div className="media-upload">
       <input
@@ -381,11 +383,6 @@ export function MediaUpload({
                 <span className={`media-type-badge ${mediaType}`}>
                   {mediaType === 'image' ? 'Photo' : 'Video'}
                 </span>
-                <MediaValidationBadge
-                  validating={validating}
-                  status={validationStatus}
-                  showPending={!!selectedPlatform}
-                />
                 <span className="preview-filename">{fileName}</span>
               </div>
               <button
@@ -397,6 +394,12 @@ export function MediaUpload({
                 Remove
               </button>
             </div>
+            <MediaValidationBadge
+              status={validationStatus}
+              showPending={!!selectedPlatform && !showValidationOverlay}
+              className="media-preview-validation-badge"
+            />
+            <MediaValidationOverlay show={showValidationOverlay} />
           </div>
 
           {/* Shared validation card — same ready/warning/error look as every other

@@ -14,7 +14,7 @@ import {
   getFacebookFormatHint,
 } from '../utils/facebookMediaValidation'
 import type { PlatformId } from '../constants/validationLimits'
-import { MediaValidationBadge, MediaValidationCard } from './MediaValidationStatus'
+import { MediaValidationBadge, MediaValidationCard, MediaValidationOverlay } from './MediaValidationStatus'
 import { resolveClientMediaError, resolveClientDimensionError } from '../utils/mediaRequirements'
 import { aggregateMediaValidationViews } from '../utils/mediaValidationView'
 import { getUploadErrorMessage } from '../utils/uploadError'
@@ -584,8 +584,8 @@ export function MultiMediaUpload({
               ) : (
                 <div className="carousel-thumbnail carousel-thumbnail--pending" />
               )}
-              <MediaValidationBadge validating className="carousel-item-badge" />
               <div className="carousel-item-filename">{pending.fileName}</div>
+              <MediaValidationOverlay show />
             </div>
           ))}
 

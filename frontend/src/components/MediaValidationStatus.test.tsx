@@ -1,8 +1,11 @@
 import { renderToStaticMarkup } from 'react-dom/server'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { MediaValidationBadge, MediaValidationCard, MediaRequirementHint } from './MediaValidationStatus'
+import { MediaValidationBadge, MediaValidationCard, MediaRequirementHint, MediaValidationOverlay } from './MediaValidationStatus'
 import { getMediaValidationBadgeDescriptor } from '../utils/mediaValidationBadge'
 import type { MediaValidationView } from '../utils/mediaValidationView'
+
+const mediaValidationStatusCss = readFileSync(new URL('./MediaValidationStatus.css', import.meta.url), 'utf8')
 
 const view = (overrides: Partial<MediaValidationView>): MediaValidationView => ({
   status: 'valid',
@@ -18,21 +21,23 @@ describe('getMediaValidationBadgeDescriptor', () => {
     expect(getMediaValidationBadgeDescriptor(true, 'Valid', true)).toEqual({
       label: 'Validating...',
       variant: 'validating',
+      icon: '...',
     })
     expect(getMediaValidationBadgeDescriptor(true, null, false)).toEqual({
       label: 'Validating...',
       variant: 'validating',
+      icon: '...',
     })
   })
 
   it('maps each terminal status to its badge', () => {
-    expect(getMediaValidationBadgeDescriptor(false, 'Valid', false)).toEqual({ label: 'Valid', variant: 'valid' })
-    expect(getMediaValidationBadgeDescriptor(false, 'Invalid', false)).toEqual({ label: 'Invalid', variant: 'invalid' })
-    expect(getMediaValidationBadgeDescriptor(false, 'Warning', false)).toEqual({ label: 'Warning', variant: 'warning' })
+    expect(getMediaValidationBadgeDescriptor(false, 'Valid', false)).toEqual({ label: 'Valid', variant: 'valid', icon: '✓' })
+    expect(getMediaValidationBadgeDescriptor(false, 'Invalid', false)).toEqual({ label: 'Invalid', variant: 'invalid', icon: '✕' })
+    expect(getMediaValidationBadgeDescriptor(false, 'Warning', false)).toEqual({ label: 'Warning', variant: 'warning', icon: '!' })
   })
 
   it('shows Pending only when the surface opts in (single media with a platform selected)', () => {
-    expect(getMediaValidationBadgeDescriptor(false, 'Pending', true)).toEqual({ label: 'Pending', variant: 'pending' })
+    expect(getMediaValidationBadgeDescriptor(false, 'Pending', true)).toEqual({ label: 'Pending', variant: 'pending', icon: '...' })
     expect(getMediaValidationBadgeDescriptor(false, 'Pending', false)).toBeNull()
   })
 
@@ -52,12 +57,14 @@ describe('MediaValidationBadge', () => {
   it('renders the positive valid/success state', () => {
     const markup = renderToStaticMarkup(<MediaValidationBadge status="Valid" />)
     expect(markup).toContain('class="validation-badge valid"')
+    expect(markup).toContain('class="validation-badge__icon"')
     expect(markup).toContain('Valid')
   })
 
   it('renders the invalid state', () => {
     const markup = renderToStaticMarkup(<MediaValidationBadge status="Invalid" />)
     expect(markup).toContain('class="validation-badge invalid"')
+    expect(markup).toContain('class="validation-badge__icon"')
     expect(markup).toContain('Invalid')
   })
 
@@ -74,6 +81,30 @@ describe('MediaValidationBadge', () => {
     )
     expect(markup).toContain('class="validation-badge invalid carousel-item-badge"')
     expect(markup).toContain('title="Aspect ratio is invalid."')
+  })
+})
+
+describe('MediaValidationOverlay', () => {
+  it('renders a centered validating pill over the thumbnail when shown', () => {
+    const markup = renderToStaticMarkup(<MediaValidationOverlay show />)
+    expect(markup).toContain('class="validation-thumbnail-overlay"')
+    expect(markup).toContain('role="status"')
+    expect(markup).toContain('class="validation-thumbnail-overlay__pill"')
+    expect(markup).toContain('class="validation-thumbnail-overlay__spinner"')
+    expect(markup).toContain('Validating...')
+  })
+
+  it('renders nothing when hidden', () => {
+    expect(renderToStaticMarkup(<MediaValidationOverlay />)).toBe('')
+  })
+
+  it('uses high-contrast badge and overlay CSS that remains readable on bright thumbnails', () => {
+    expect(mediaValidationStatusCss).toMatch(/\.validation-badge \{[\s\S]*box-shadow:/)
+    expect(mediaValidationStatusCss).toMatch(/\.validation-badge\.valid \{[\s\S]*background: rgba\([^;]+0\.96\);/)
+    expect(mediaValidationStatusCss).toMatch(/\.validation-badge\.warning \{[\s\S]*background: rgba\([^;]+0\.96\);/)
+    expect(mediaValidationStatusCss).toMatch(/\.validation-badge\.invalid \{[\s\S]*background: rgba\([^;]+0\.96\);/)
+    expect(mediaValidationStatusCss).toMatch(/\.validation-thumbnail-overlay \{[\s\S]*inset: 0;[\s\S]*z-index: 5;[\s\S]*background: rgba/)
+    expect(mediaValidationStatusCss).toMatch(/\.validation-thumbnail-overlay__pill \{[\s\S]*background: rgba\([^;]+0\.94\);/)
   })
 })
 

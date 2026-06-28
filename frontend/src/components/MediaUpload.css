@@ -98,6 +98,7 @@
   bottom: 0;
   left: 0;
   right: 0;
+  z-index: 2;
   padding: 0.75rem;
   background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
   display: flex;
@@ -137,6 +138,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.media-preview-validation-badge {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  z-index: 3;
+  pointer-events: none;
 }
 
 .clear-btn {

@@ -44,9 +44,39 @@ export function MediaValidationBadge({
     .join(' ')
 
   return (
-    <span className={classes} title={title}>
-      {descriptor.label}
+    <span className={classes} title={title} aria-label={descriptor.label}>
+      <span className="validation-badge__icon" aria-hidden="true">
+        {descriptor.icon}
+      </span>
+      <span>{descriptor.label}</span>
     </span>
+  )
+}
+
+interface MediaValidationOverlayProps {
+  show?: boolean
+  label?: string
+  className?: string
+}
+
+export function MediaValidationOverlay({
+  show = false,
+  label = 'Validating...',
+  className,
+}: MediaValidationOverlayProps) {
+  if (!show) return null
+
+  const classes = ['validation-thumbnail-overlay', className]
+    .filter(Boolean)
+    .join(' ')
+
+  return (
+    <div className={classes} role="status" aria-live="polite">
+      <span className="validation-thumbnail-overlay__pill">
+        <span className="validation-thumbnail-overlay__spinner" aria-hidden="true" />
+        <span>{label}</span>
+      </span>
+    </div>
   )
 }
 
