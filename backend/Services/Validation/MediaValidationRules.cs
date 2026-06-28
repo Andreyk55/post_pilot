@@ -46,8 +46,8 @@ public static class MediaValidationRules
             MaxHeight = 2048,
             AspectRatioMin = 0.5625, // 9:16 (portrait)
             AspectRatioMax = 1.91, // ~1.91:1 (landscape)
-            RecommendedWidth = 1200,
-            RecommendedHeight = 630,
+            QualityWarningMinWidth = 600,
+            QualityWarningMinHeight = 600,
         },
 
         // Facebook Feed Video Rules
@@ -85,8 +85,10 @@ public static class MediaValidationRules
             MinHeight = 320,
             MaxWidth = 1080,
             MaxHeight = 1920,
-            AspectRatioMin = 0.5625, // 9:16 (full vertical)
-            AspectRatioMax = 0.5625, // 9:16 (stories are vertical)
+            AspectRatioMin = 0.50, // block only clearly non-story-like media
+            AspectRatioMax = 0.75,
+            PreferredAspectRatio = 0.5625, // 9:16
+            AspectRatioWarningTolerance = 0.02,
             RecommendedWidth = 1080,
             RecommendedHeight = 1920,
         },
@@ -104,8 +106,10 @@ public static class MediaValidationRules
             MinHeight = 320,
             MaxWidth = 1080,
             MaxHeight = 1920,
-            AspectRatioMin = 0.5625, // 9:16
-            AspectRatioMax = 0.5625,
+            AspectRatioMin = 0.50,
+            AspectRatioMax = 0.75,
+            PreferredAspectRatio = 0.5625, // 9:16
+            AspectRatioWarningTolerance = 0.02,
             DurationMinSeconds = 1,
             DurationMaxSeconds = 120, // 2 minutes for FB stories
             MaxFps = 60,
@@ -127,12 +131,12 @@ public static class MediaValidationRules
             MinWidth = 320,
             MinHeight = 320,
             MaxWidth = 1440,
-            MaxHeight = 1440,
+            MaxHeight = 2560,
             MaxWidthIsAdvisory = true, // Meta downscales > 1440px instead of rejecting
-            AspectRatioMin = 0.8, // 4:5 (portrait)
+            AspectRatioMin = 0.5625, // 9:16 (portrait)
             AspectRatioMax = 1.91, // 1.91:1 (landscape)
-            RecommendedWidth = 1080,
-            RecommendedHeight = 1080,
+            QualityWarningMinWidth = 600,
+            QualityWarningMinHeight = 600,
         },
 
         // Instagram Feed Video Rules
@@ -171,8 +175,10 @@ public static class MediaValidationRules
             MinHeight = 320,
             MaxWidth = 1080,
             MaxHeight = 1920,
-            AspectRatioMin = 0.5625, // 9:16 (full vertical)
-            AspectRatioMax = 0.5625,
+            AspectRatioMin = 0.50,
+            AspectRatioMax = 0.75,
+            PreferredAspectRatio = 0.5625, // 9:16
+            AspectRatioWarningTolerance = 0.02,
             RecommendedWidth = 1080,
             RecommendedHeight = 1920,
         },
@@ -189,8 +195,10 @@ public static class MediaValidationRules
             MinHeight = 320,
             MaxWidth = 1080,
             MaxHeight = 1920,
-            AspectRatioMin = 0.5625, // 9:16
-            AspectRatioMax = 0.5625,
+            AspectRatioMin = 0.50,
+            AspectRatioMax = 0.75,
+            PreferredAspectRatio = 0.5625, // 9:16
+            AspectRatioWarningTolerance = 0.02,
             DurationMinSeconds = 3,
             DurationMaxSeconds = 60, // 60 seconds for IG stories
             MinFps = 23,
@@ -298,9 +306,9 @@ public class MediaValidationRule
     public int MaxHeight { get; init; }
 
     /// <summary>
-    /// When true, exceeding <see cref="MaxWidth"/>/<see cref="MaxHeight"/> produces a
-    /// WARNING instead of a hard error, because the platform downscales oversized images
-    /// rather than rejecting them (Instagram scales any width &gt; 1440px down to 1440px).
+    /// When true, exceeding <see cref="MaxWidth"/> produces a WARNING instead of a
+    /// hard error, because the platform downscales oversized images rather than
+    /// rejecting them (Instagram scales any width &gt; 1440px down to 1440px).
     /// Default false: most platforms reject oversized media outright.
     /// </summary>
     public bool MaxWidthIsAdvisory { get; init; }
@@ -308,6 +316,8 @@ public class MediaValidationRule
     // Aspect ratio constraints (width / height)
     public double AspectRatioMin { get; init; }
     public double AspectRatioMax { get; init; }
+    public double? PreferredAspectRatio { get; init; }
+    public double? AspectRatioWarningTolerance { get; init; }
 
     // Video-specific constraints
     public double? DurationMinSeconds { get; init; }
@@ -318,4 +328,6 @@ public class MediaValidationRule
     // Recommendations (for warnings, not errors)
     public int? RecommendedWidth { get; init; }
     public int? RecommendedHeight { get; init; }
+    public int? QualityWarningMinWidth { get; init; }
+    public int? QualityWarningMinHeight { get; init; }
 }

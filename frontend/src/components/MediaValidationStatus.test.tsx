@@ -7,7 +7,7 @@ import type { MediaValidationView } from '../utils/mediaValidationView'
 const view = (overrides: Partial<MediaValidationView>): MediaValidationView => ({
   status: 'valid',
   blocking: false,
-  title: 'Media is ready',
+  title: 'Media is publishable.',
   messages: [],
   recommendations: [],
   ...overrides,
@@ -85,7 +85,7 @@ describe('MediaValidationCard', () => {
   it('renders the neutral/green ready state', () => {
     const markup = renderToStaticMarkup(<MediaValidationCard view={view({ status: 'valid' })} />)
     expect(markup).toContain('class="media-validation-card valid"')
-    expect(markup).toContain('Media is ready')
+    expect(markup).toContain('Media is publishable.')
     expect(markup).toContain('role="status"')
   })
 
@@ -94,14 +94,14 @@ describe('MediaValidationCard', () => {
       <MediaValidationCard
         view={view({
           status: 'warning',
-          title: 'Media can be published, but there are recommendations',
-          recommendations: ['Quality may be reduced.'],
+          title: 'Media is publishable.',
+          recommendations: ['For best quality, use a higher-resolution image.'],
         })}
       />,
     )
     expect(markup).toContain('class="media-validation-card warning"')
-    expect(markup).toContain('Media can be published, but there are recommendations')
-    expect(markup).toContain('Quality may be reduced.')
+    expect(markup).toContain('Media is publishable.')
+    expect(markup).toContain('For best quality, use a higher-resolution image.')
     // A warning is a status, never a blocking alert.
     expect(markup).toContain('role="status"')
     expect(markup).not.toContain('role="alert"')

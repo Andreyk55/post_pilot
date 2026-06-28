@@ -60,8 +60,11 @@ export interface ClientMediaValidationRule {
   minHeight: number
   maxWidth: number
   maxHeight: number
+  maxWidthIsAdvisory?: boolean
   aspectRatioMin: number
   aspectRatioMax: number
+  preferredAspectRatio?: number
+  aspectRatioWarningTolerance?: number
   durationMinSeconds?: number
   durationMaxSeconds?: number
 }
@@ -108,8 +111,10 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
     minHeight: 320,
     maxWidth: 1080,
     maxHeight: 1920,
-    aspectRatioMin: 0.5625, // 9:16
-    aspectRatioMax: 0.5625,
+    aspectRatioMin: 0.5,
+    aspectRatioMax: 0.75,
+    preferredAspectRatio: 0.5625,
+    aspectRatioWarningTolerance: 0.02,
   },
 
   // Facebook Story Video
@@ -120,8 +125,10 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
     minHeight: 320,
     maxWidth: 1080,
     maxHeight: 1920,
-    aspectRatioMin: 0.5625,
-    aspectRatioMax: 0.5625,
+    aspectRatioMin: 0.5,
+    aspectRatioMax: 0.75,
+    preferredAspectRatio: 0.5625,
+    aspectRatioWarningTolerance: 0.02,
     durationMinSeconds: 1,
     durationMaxSeconds: 120, // 2 minutes
   },
@@ -136,8 +143,9 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
     minWidth: 320,
     minHeight: 320,
     maxWidth: 1440,
-    maxHeight: 1440,
-    aspectRatioMin: 0.8, // 4:5
+    maxHeight: 2560,
+    maxWidthIsAdvisory: true,
+    aspectRatioMin: 0.5625, // 9:16
     aspectRatioMax: 1.91,
   },
 
@@ -165,8 +173,10 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
     minHeight: 320,
     maxWidth: 1080,
     maxHeight: 1920,
-    aspectRatioMin: 0.5625, // 9:16
-    aspectRatioMax: 0.5625,
+    aspectRatioMin: 0.5,
+    aspectRatioMax: 0.75,
+    preferredAspectRatio: 0.5625,
+    aspectRatioWarningTolerance: 0.02,
   },
 
   // Instagram Story Video
@@ -177,8 +187,10 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
     minHeight: 320,
     maxWidth: 1080,
     maxHeight: 1920,
-    aspectRatioMin: 0.5625,
-    aspectRatioMax: 0.5625,
+    aspectRatioMin: 0.5,
+    aspectRatioMax: 0.75,
+    preferredAspectRatio: 0.5625,
+    aspectRatioWarningTolerance: 0.02,
     durationMinSeconds: 3,
     durationMaxSeconds: 60, // 60 seconds
   },
@@ -311,7 +323,7 @@ export function preValidateImageDimensions(
   }
 
   // Check maximum dimensions
-  if (width > rule.maxWidth || height > rule.maxHeight) {
+  if (!rule.maxWidthIsAdvisory && (width > rule.maxWidth || height > rule.maxHeight)) {
     errors.push(`Image dimensions (${width}x${height}) are too large. Maximum: ${rule.maxWidth}x${rule.maxHeight}`)
   }
 

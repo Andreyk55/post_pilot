@@ -63,7 +63,7 @@ interface MediaValidationCardProps {
 
 /**
  * Shared validation card rendered below the media area. One look for every surface:
- * green/neutral "Media is ready", yellow "…recommendations" (non-blocking, never
+ * green/neutral "Media is publishable.", yellow advisories (non-blocking, never
  * confused with a failure), red "Media cannot be published". Driven entirely by the
  * normalized MediaValidationView so Facebook and Instagram are byte-for-byte identical.
  */

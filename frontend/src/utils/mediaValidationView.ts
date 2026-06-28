@@ -23,7 +23,7 @@ export interface MediaValidationView {
    * (invalid) and the in-flight check (pending) — never for advisory warnings.
    */
   blocking: boolean
-  /** Card heading, e.g. "Media is ready" / "Media cannot be published". */
+  /** Card heading, e.g. "Media is publishable." / "Media cannot be published". */
   title: string
   /** Hard problems that prevent publishing (rendered red). */
   messages: string[]
@@ -33,8 +33,8 @@ export interface MediaValidationView {
 
 // Spec copy — kept here so both the single and multi uploaders read identically.
 export const MEDIA_VIEW_TITLES: Record<MediaValidationViewStatus, string> = {
-  valid: 'Media is ready',
-  warning: 'Media can be published, but there are recommendations',
+  valid: 'Media is publishable.',
+  warning: 'Media is publishable.',
   invalid: 'Media cannot be published',
   pending: 'Checking media…',
 }

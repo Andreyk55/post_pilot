@@ -121,7 +121,7 @@ export function resolveClientDimensionError(
     return `Image is too small. Use at least ${rule.minWidth}×${rule.minHeight}px.`
   }
 
-  if (width > rule.maxWidth || height > rule.maxHeight) {
+  if (!rule.maxWidthIsAdvisory && (width > rule.maxWidth || height > rule.maxHeight)) {
     return `Image is too large. Maximum ${rule.maxWidth}×${rule.maxHeight}px.`
   }
 

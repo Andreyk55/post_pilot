@@ -69,6 +69,23 @@ describe('resolveClientDimensionError — Story 9:16 and friends', () => {
     )
   })
 
+  it('does not reject normal portrait feed images before server validation', () => {
+    expect(resolveClientDimensionError(1024, 1536, 'facebook', 'Feed')).toBeNull()
+    expect(resolveClientDimensionError(1024, 1536, 'instagram', 'Feed')).toBeNull()
+    expect(resolveClientDimensionError(1080, 1080, 'instagram', 'Feed')).toBeNull()
+    expect(resolveClientDimensionError(1080, 1350, 'instagram', 'Feed')).toBeNull()
+  })
+
+  it('lets small-but-publishable feed images upload so the server can warn', () => {
+    expect(resolveClientDimensionError(500, 500, 'facebook', 'Feed')).toBeNull()
+    expect(resolveClientDimensionError(500, 500, 'instagram', 'Feed')).toBeNull()
+  })
+
+  it('lets slightly off-ratio Story images upload so the server can warn', () => {
+    expect(resolveClientDimensionError(1080, 1800, 'instagram', 'Story')).toBeNull()
+    expect(resolveClientDimensionError(1080, 1800, 'facebook', 'Story')).toBeNull()
+  })
+
   it('passes a correctly-sized vertical Story image (null)', () => {
     expect(resolveClientDimensionError(1080, 1920, 'instagram', 'Story')).toBeNull()
   })

@@ -166,7 +166,7 @@ public class InstagramValidationRulesTests
         Assert.Equal(8L * 1024 * 1024, rules.MaxBytes); // 8MB
         Assert.Equal(320, rules.MinWidth);
         Assert.Equal(1440, rules.MaxWidth);
-        Assert.Equal(0.8, rules.AspectRatioMin); // 4:5
+        Assert.Equal(0.5625, rules.AspectRatioMin); // 9:16
         Assert.Equal(1.91, rules.AspectRatioMax);
     }
 
@@ -400,6 +400,103 @@ public class MediaValidationServiceImageBehaviorTests
     }
 
     [Fact]
+    public async Task FacebookFeed_Portrait1024x1536_HasNoWarning()
+    {
+        var svc = CreateService();
+        var path = WriteTempImage("jpeg", 1024, 1536);
+        try
+        {
+            var size = new FileInfo(path).Length;
+            var result = await svc.ValidateFileAsync(
+                path, "image/jpeg", size, MediaType.Image, Platform.Facebook, Placement.Feed);
+
+            Assert.Equal(ValidationStatus.Valid, result.Status);
+            Assert.Empty(result.Errors);
+            Assert.Empty(result.Warnings);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task InstagramFeed_Portrait1024x1536_HasNoWarning()
+    {
+        var svc = CreateService();
+        var path = WriteTempImage("jpeg", 1024, 1536);
+        try
+        {
+            var size = new FileInfo(path).Length;
+            var result = await svc.ValidateFileAsync(
+                path, "image/jpeg", size, MediaType.Image, Platform.Instagram, Placement.Feed);
+
+            Assert.Equal(ValidationStatus.Valid, result.Status);
+            Assert.Empty(result.Errors);
+            Assert.Empty(result.Warnings);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Theory]
+    [InlineData(Platform.Facebook)]
+    [InlineData(Platform.Instagram)]
+    public async Task FeedImage_500x500_WarnsForLowResolution(Platform platform)
+    {
+        var svc = CreateService();
+        var path = WriteTempImage("jpeg", 500, 500);
+        try
+        {
+            var size = new FileInfo(path).Length;
+            var result = await svc.ValidateFileAsync(
+                path, "image/jpeg", size, MediaType.Image, platform, Placement.Feed);
+
+            Assert.Equal(ValidationStatus.Warning, result.Status);
+            Assert.Empty(result.Errors);
+            Assert.Contains(result.Warnings, w =>
+                w.Code == MediaValidationWarningCodes.DimensionsBelowRecommended
+                && w.Message == "For best quality, use a higher-resolution image.");
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task InstagramStory_SlightlyOffRatioJpeg_WarnsButIsPublishable()
+    {
+        var svc = CreateService();
+        var path = WriteTempImage("jpeg", 1080, 1800);
+        try
+        {
+            var size = new FileInfo(path).Length;
+            var result = await svc.ValidateFileAsync(
+                path, "image/jpeg", size, MediaType.Image, Platform.Instagram, Placement.Story);
+
+            Assert.Equal(ValidationStatus.Warning, result.Status);
+            Assert.Empty(result.Errors);
+            Assert.Contains(result.Warnings, w =>
+                w.Code == MediaValidationWarningCodes.AspectRatioSuboptimal
+                && w.Message == "Story media should be vertical 9:16.");
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task InstagramStory_SquareJpeg_IsBlocked()
+    {
+        var svc = CreateService();
+        var path = WriteTempImage("jpeg", 1080, 1080);
+        try
+        {
+            var size = new FileInfo(path).Length;
+            var result = await svc.ValidateFileAsync(
+                path, "image/jpeg", size, MediaType.Image, Platform.Instagram, Placement.Story);
+
+            Assert.Equal(ValidationStatus.Invalid, result.Status);
+            Assert.Contains(result.Errors, e =>
+                e.Code == MediaValidationErrorCodes.AspectRatioInvalid
+                && e.Message == "Story media should be vertical 9:16.");
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
     public async Task InstagramFeed_OverWideJpeg_WarnsButIsNotError()
     {
         // 1500px wide exceeds IG max (1440) but the aspect ratio (1:1 → use square 1500x1500)
@@ -414,7 +511,8 @@ public class MediaValidationServiceImageBehaviorTests
 
             Assert.DoesNotContain(result.Errors, e => e.Code == MediaValidationErrorCodes.DimensionsTooLarge);
             Assert.Contains(result.Warnings,
-                w => w.Code == MediaValidationWarningCodes.DimensionsAboveMaxWillDownscale);
+                w => w.Code == MediaValidationWarningCodes.DimensionsAboveMaxWillDownscale
+                     && w.Message == "Instagram may resize this image before publishing.");
             Assert.Equal(ValidationStatus.Warning, result.Status);
         }
         finally { File.Delete(path); }
@@ -434,6 +532,27 @@ public class MediaValidationServiceImageBehaviorTests
 
             Assert.Equal(ValidationStatus.Invalid, result.Status);
             Assert.Contains(result.Errors, e => e.Code == MediaValidationErrorCodes.DimensionsTooLarge);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task FacebookFeed_FileTooLarge_IsHardError()
+    {
+        var svc = CreateService();
+        var path = WriteTempImage("jpeg", 1200, 630);
+        try
+        {
+            var result = await svc.ValidateFileAsync(
+                path,
+                "image/jpeg",
+                4L * 1024 * 1024 + 1,
+                MediaType.Image,
+                Platform.Facebook,
+                Placement.Feed);
+
+            Assert.Equal(ValidationStatus.Invalid, result.Status);
+            Assert.Contains(result.Errors, e => e.Code == MediaValidationErrorCodes.FileTooLarge);
         }
         finally { File.Delete(path); }
     }

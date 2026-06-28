@@ -26,20 +26,20 @@ describe('resolveMediaValidationView', () => {
     expect(resolveMediaValidationView('Valid', [], [])).toEqual({
       status: 'valid',
       blocking: false,
-      title: 'Media is ready',
+      title: 'Media is publishable.',
       messages: [],
       recommendations: [],
     })
   })
 
   it('treats a Warning as a non-blocking recommendation, never a failure', () => {
-    const view = resolveMediaValidationView('Warning', [], [warning('Quality may be reduced.')])
+    const view = resolveMediaValidationView('Warning', [], [warning('For best quality, use a higher-resolution image.')])
     expect(view).toEqual({
       status: 'warning',
       blocking: false, // <-- a warning must NOT block publish
-      title: 'Media can be published, but there are recommendations',
+      title: 'Media is publishable.',
       messages: [],
-      recommendations: ['Quality may be reduced.'],
+      recommendations: ['For best quality, use a higher-resolution image.'],
     })
   })
 
@@ -76,8 +76,8 @@ describe('resolveMediaValidationView', () => {
   it('is platform-agnostic — identical view for the same status (FB and IG render the same)', () => {
     // The resolver takes no platform argument, so a Facebook and an Instagram caller
     // with the same server result get byte-for-byte the same view.
-    const a = resolveMediaValidationView('Warning', [], [warning('Below recommended size.')])
-    const b = resolveMediaValidationView('Warning', [], [warning('Below recommended size.')])
+    const a = resolveMediaValidationView('Warning', [], [warning('For best quality, use a higher-resolution image.')])
+    const b = resolveMediaValidationView('Warning', [], [warning('For best quality, use a higher-resolution image.')])
     expect(a).toEqual(b)
   })
 })
@@ -97,7 +97,7 @@ describe('aggregateMediaValidationViews', () => {
 
   it('reports ready when every item is valid', () => {
     const view = aggregateMediaValidationViews([item('Image 1', 'Valid'), item('Image 2', 'Valid')])
-    expect(view).toMatchObject({ status: 'valid', blocking: false, title: 'Media is ready' })
+    expect(view).toMatchObject({ status: 'valid', blocking: false, title: 'Media is publishable.' })
   })
 
   it('lets the worst status win (invalid > warning > valid) and blocks only on invalid', () => {

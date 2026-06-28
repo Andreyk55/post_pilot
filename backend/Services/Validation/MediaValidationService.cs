@@ -274,7 +274,8 @@ public class MediaValidationService : IMediaValidationService
             var width = metadata.Width.Value;
             var height = metadata.Height.Value;
 
-            if (width < rules.MinWidth || height < rules.MinHeight)
+            var dimensionsTooSmall = width < rules.MinWidth || height < rules.MinHeight;
+            if (dimensionsTooSmall)
             {
                 errors.Add(new MediaValidationError(
                     MediaValidationErrorCodes.DimensionsTooSmall,
@@ -284,40 +285,37 @@ public class MediaValidationService : IMediaValidationService
                     $"{width}x{height}"));
             }
 
-            if (width > rules.MaxWidth || height > rules.MaxHeight)
+            if (rules.MaxWidthIsAdvisory)
             {
-                if (rules.MaxWidthIsAdvisory)
+                if (width > rules.MaxWidth)
                 {
-                    // Platform downscales oversized images instead of rejecting them
-                    // (e.g. Instagram scales width > 1440px down to 1440px). Warn only.
                     warnings.Add(new MediaValidationWarning(
                         MediaValidationWarningCodes.DimensionsAboveMaxWillDownscale,
                         "dimensions",
-                        $"Dimensions ({width}x{height}) exceed the platform maximum ({rules.MaxWidth}x{rules.MaxHeight}). The platform will downscale the image automatically.",
-                        $"Use at most {rules.MaxWidth}x{rules.MaxHeight} to avoid automatic downscaling"));
-                }
-                else
-                {
-                    errors.Add(new MediaValidationError(
-                        MediaValidationErrorCodes.DimensionsTooLarge,
-                        "dimensions",
-                        $"Dimensions ({width}x{height}) are too large. Maximum: {rules.MaxWidth}x{rules.MaxHeight}",
-                        $"{rules.MaxWidth}x{rules.MaxHeight}",
-                        $"{width}x{height}"));
+                        "Instagram may resize this image before publishing.",
+                        "Media is publishable."));
                 }
             }
-
-            // Check recommended dimensions (warning only)
-            if (rules.RecommendedWidth.HasValue && rules.RecommendedHeight.HasValue)
+            else if (width > rules.MaxWidth || height > rules.MaxHeight)
             {
-                if (width < rules.RecommendedWidth.Value || height < rules.RecommendedHeight.Value)
-                {
-                    warnings.Add(new MediaValidationWarning(
-                        MediaValidationWarningCodes.DimensionsBelowRecommended,
-                        "dimensions",
-                        $"Dimensions ({width}x{height}) are below recommended ({rules.RecommendedWidth}x{rules.RecommendedHeight}). Quality may be reduced.",
-                        $"Use at least {rules.RecommendedWidth}x{rules.RecommendedHeight} for best quality"));
-                }
+                errors.Add(new MediaValidationError(
+                    MediaValidationErrorCodes.DimensionsTooLarge,
+                    "dimensions",
+                    $"Dimensions ({width}x{height}) are too large. Maximum: {rules.MaxWidth}x{rules.MaxHeight}",
+                    $"{rules.MaxWidth}x{rules.MaxHeight}",
+                    $"{width}x{height}"));
+            }
+
+            if (!dimensionsTooSmall
+                && rules.QualityWarningMinWidth.HasValue
+                && rules.QualityWarningMinHeight.HasValue
+                && (width < rules.QualityWarningMinWidth.Value || height < rules.QualityWarningMinHeight.Value))
+            {
+                warnings.Add(new MediaValidationWarning(
+                    MediaValidationWarningCodes.DimensionsBelowRecommended,
+                    "dimensions",
+                    "For best quality, use a higher-resolution image.",
+                    "Media is publishable."));
             }
         }
 
@@ -326,14 +324,30 @@ public class MediaValidationService : IMediaValidationService
         {
             var aspectRatio = metadata.AspectRatio.Value;
 
+            var hasPreferredAspectRatio = rules.PreferredAspectRatio.HasValue
+                && rules.AspectRatioWarningTolerance.HasValue;
+
             if (aspectRatio < rules.AspectRatioMin || aspectRatio > rules.AspectRatioMax)
             {
                 errors.Add(new MediaValidationError(
                     MediaValidationErrorCodes.AspectRatioInvalid,
                     "aspectRatio",
-                    $"Aspect ratio ({aspectRatio:F2}) is outside allowed range ({rules.AspectRatioMin:F2} to {rules.AspectRatioMax:F2})",
-                    $"{rules.AspectRatioMin:F2} to {rules.AspectRatioMax:F2}",
+                    hasPreferredAspectRatio
+                        ? "Story media should be vertical 9:16."
+                        : $"Aspect ratio ({aspectRatio:F2}) is outside allowed range ({rules.AspectRatioMin:F2} to {rules.AspectRatioMax:F2})",
+                    hasPreferredAspectRatio
+                        ? "9:16"
+                        : $"{rules.AspectRatioMin:F2} to {rules.AspectRatioMax:F2}",
                     $"{aspectRatio:F2}"));
+            }
+            else if (hasPreferredAspectRatio
+                && Math.Abs(aspectRatio - rules.PreferredAspectRatio!.Value) > rules.AspectRatioWarningTolerance!.Value)
+            {
+                warnings.Add(new MediaValidationWarning(
+                    MediaValidationWarningCodes.AspectRatioSuboptimal,
+                    "aspectRatio",
+                    "Story media should be vertical 9:16.",
+                    "Media is publishable."));
             }
         }
 
