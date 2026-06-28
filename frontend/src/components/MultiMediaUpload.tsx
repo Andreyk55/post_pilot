@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { mediaApi, type MediaType, type ValidationStatus, type MediaValidationError, type MediaValidationWarning, type Platform } from '../api/media'
 import { preValidateFile, preValidateImageDimensions, getImageDimensions } from '../constants/mediaValidationRules'
 import {
@@ -50,6 +50,7 @@ export function MultiMediaUpload({
 }: MultiMediaUploadProps) {
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [progress, setProgress] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Optimistic placeholders for files currently uploading/validating. They render
@@ -62,6 +63,24 @@ export function MultiMediaUpload({
   // a new upload is in flight is never resurrected by the append below.
   const itemsRef = useRef(items)
   itemsRef.current = items
+
+  const uploadSessionInstanceRef = useRef(Math.random().toString(36).slice(2))
+  const uploadSessionCounterRef = useRef(0)
+  const activeUploadOwnerKeyRef = useRef<string>('')
+
+  const beginUploadSession = (): string => {
+    const uploadOwnerKey = `${uploadSessionInstanceRef.current}:${++uploadSessionCounterRef.current}`
+    activeUploadOwnerKeyRef.current = uploadOwnerKey
+    return uploadOwnerKey
+  }
+
+  const isStaleUploadOwner = (uploadOwnerKey: string) => activeUploadOwnerKeyRef.current !== uploadOwnerKey
+
+  useEffect(() => {
+    return () => {
+      activeUploadOwnerKeyRef.current = ''
+    }
+  }, [])
 
   const isInstagram = selectedPlatform === 'instagram'
   const isFacebook = selectedPlatform === 'facebook'
@@ -166,6 +185,8 @@ export function MultiMediaUpload({
   }
 
   const uploadFiles = async (filesToUpload: File[]) => {
+    const uploadOwnerKey = beginUploadSession()
+    setProgress(0)
     setUploading(true)
     onUploadingChange?.(true)
 
@@ -180,20 +201,24 @@ export function MultiMediaUpload({
     )
 
     const newItems: UploadedMediaItem[] = []
-    for (const file of filesToUpload) {
+    for (const [fileIndex, file] of filesToUpload.entries()) {
       // Pre-validate
       if (selectedPlatform) {
         const errors = preValidateFile(file, selectedPlatform, 'Feed')
+        if (isStaleUploadOwner(uploadOwnerKey)) return
         if (errors.length > 0) {
           setUploadError(`${file.name}: ${errors[0]}`)
+          setProgress(0)
           continue
         }
         if (file.type.startsWith('image/')) {
           const dims = await getImageDimensions(file)
+          if (isStaleUploadOwner(uploadOwnerKey)) return
           if (dims) {
             const dimErrors = preValidateImageDimensions(dims.width, dims.height, selectedPlatform, 'Feed')
             if (dimErrors.length > 0) {
               setUploadError(`${file.name}: ${dimErrors[0]}`)
+              setProgress(0)
               continue
             }
           }
@@ -208,15 +233,24 @@ export function MultiMediaUpload({
           sizeBytes: file.size,
           platform: isFacebook ? 'Facebook' : 'Instagram',
         })
+        if (isStaleUploadOwner(uploadOwnerKey)) return
 
         // Step 2: client uploads bytes directly to object storage (or local endpoint in dev).
-        await mediaApi.uploadFile(uploadUrl, file)
+        await mediaApi.uploadFile(uploadUrl, file, (progressPercent) => {
+          if (!isStaleUploadOwner(uploadOwnerKey)) {
+            const currentFileProgress = Math.max(0, Math.min(100, progressPercent)) / 100
+            setProgress(Math.round(((fileIndex + currentFileProgress) / filesToUpload.length) * 100))
+          }
+        })
+        if (isStaleUploadOwner(uploadOwnerKey)) return
 
         // Step 3: server verifies the object landed in storage and flips Media row to Uploaded.
         await mediaApi.completeUpload({ mediaId })
+        if (isStaleUploadOwner(uploadOwnerKey)) return
 
         // Create preview
         const previewUrl = await createPreview(file)
+        if (isStaleUploadOwner(uploadOwnerKey)) return
 
         // Validate on server
         let validationStatus: ValidationStatus = 'Pending'
@@ -237,6 +271,7 @@ export function MultiMediaUpload({
               platform: platformMap[selectedPlatform] as Platform,
               placement: 'Feed',
             })
+            if (isStaleUploadOwner(uploadOwnerKey)) return
             validationStatus = result.status
             validationErrors = result.errors
             validationWarnings = result.warnings
@@ -256,15 +291,22 @@ export function MultiMediaUpload({
           validationWarnings,
         })
       } catch (err) {
+        if (isStaleUploadOwner(uploadOwnerKey)) return
         console.error(`Upload failed for ${file.name}:`, err)
         setUploadError(`Failed to upload ${file.name}`)
+        setProgress(0)
       }
     }
+
+    if (isStaleUploadOwner(uploadOwnerKey)) return
 
     if (newItems.length > 0) {
       // Merge against the latest items (not the closure snapshot) so a removal that
       // happened during this upload is respected instead of being clobbered.
       onItemsChange([...itemsRef.current, ...newItems])
+      setProgress(100)
+    } else {
+      setProgress(0)
     }
 
     setPendingUploads([])
@@ -548,7 +590,7 @@ export function MultiMediaUpload({
 
       {uploading && (
         <div className="upload-progress">
-          <div className="progress-bar" style={{ width: '60%' }} />
+          <div className="progress-bar" style={{ width: `${progress}%` }} />
         </div>
       )}
 

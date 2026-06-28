@@ -45,21 +45,20 @@ export function MediaUpload({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
 
-  // Identifies the in-flight upload/validation session. Each new file selection or
-  // re-validation begins a fresh session; an async validation that resolves after a
-  // newer session has started carries a stale key and is dropped instead of writing
-  // an old result back over the current media (and the parent's error panel).
+  // Identifies the in-flight upload/validation owner. Each new file selection or
+  // re-validation begins a fresh owner key; late progress/completion/error events
+  // from an older owner are dropped instead of writing over the current media.
   const sessionInstanceRef = useRef(Math.random().toString(36).slice(2))
   const sessionCounterRef = useRef(0)
-  const activeSessionRef = useRef<string>('')
+  const activeUploadOwnerKeyRef = useRef<string>('')
 
-  const beginValidationSession = (): string => {
-    const sessionId = `${sessionInstanceRef.current}:${++sessionCounterRef.current}`
-    activeSessionRef.current = sessionId
-    return sessionId
+  const beginUploadSession = (): string => {
+    const uploadOwnerKey = `${sessionInstanceRef.current}:${++sessionCounterRef.current}`
+    activeUploadOwnerKeyRef.current = uploadOwnerKey
+    return uploadOwnerKey
   }
 
-  const isStaleSession = (sessionId: string) => activeSessionRef.current !== sessionId
+  const isStaleUploadOwner = (uploadOwnerKey: string) => activeUploadOwnerKeyRef.current !== uploadOwnerKey
 
   const setNeutralValidationState = (ownerKey: string) => {
     setValidationStatus('Pending')
@@ -75,13 +74,19 @@ export function MediaUpload({
     }
   }, [selectedPlatform])
 
+  useEffect(() => {
+    return () => {
+      activeUploadOwnerKeyRef.current = ''
+    }
+  }, [])
+
   const revalidateMedia = async () => {
     if (!uploadedStorageKey || !uploadedMimeType || !selectedPlatform) return
 
-    const sessionId = beginValidationSession()
+    const uploadOwnerKey = beginUploadSession()
     try {
       setValidating(true)
-      setNeutralValidationState(sessionId)
+      setNeutralValidationState(uploadOwnerKey)
 
       const platformMap: Record<string, Platform> = {
         facebook: 'Facebook',
@@ -98,16 +103,16 @@ export function MediaUpload({
       })
 
       // A newer upload/re-validation superseded this one — ignore the stale result.
-      if (isStaleSession(sessionId)) return
+      if (isStaleUploadOwner(uploadOwnerKey)) return
 
       setValidationStatus(result.status)
       setValidationErrors(result.errors)
       setValidationWarnings(result.warnings)
-      onValidationChange?.(result.status, result.errors, result.warnings, sessionId)
+      onValidationChange?.(result.status, result.errors, result.warnings, uploadOwnerKey)
     } catch (err) {
       console.error('Re-validation failed:', err)
     } finally {
-      if (!isStaleSession(sessionId)) {
+      if (!isStaleUploadOwner(uploadOwnerKey)) {
         setValidating(false)
       }
     }
@@ -170,13 +175,17 @@ export function MediaUpload({
     // Start a fresh validation session and clear any result from the previously
     // selected media *before* the new file validates. This drops the old error
     // panel synchronously, the instant a new upload starts — not after it finishes.
-    const sessionId = beginValidationSession()
-    setNeutralValidationState(sessionId)
+    const uploadOwnerKey = beginUploadSession()
+    setProgress(0)
+    setNeutralValidationState(uploadOwnerKey)
     setUploadedStorageKey(null)
     setUploadedMimeType(null)
 
     const error = await validateFile(file)
+    if (isStaleUploadOwner(uploadOwnerKey)) return
+
     if (error) {
+      setProgress(0)
       onUploadError(error)
       return
     }
@@ -188,7 +197,11 @@ export function MediaUpload({
     // Show preview
     if (type === 'image') {
       const reader = new FileReader()
-      reader.onload = (e) => setPreview(e.target?.result as string)
+      reader.onload = (e) => {
+        if (!isStaleUploadOwner(uploadOwnerKey)) {
+          setPreview(e.target?.result as string)
+        }
+      }
       reader.readAsDataURL(file)
     } else {
       const objectUrl = URL.createObjectURL(file)
@@ -198,7 +211,7 @@ export function MediaUpload({
     try {
       setUploading(true)
       onUploadingChange?.(true)
-      setProgress(10)
+      setProgress(0)
 
       // Step 1: server issues a presigned PUT URL and creates a Media row (PendingUpload).
       const { uploadUrl, storageKey, mediaId, mediaType: returnedMediaType } = await mediaApi.initUpload({
@@ -207,17 +220,20 @@ export function MediaUpload({
         sizeBytes: file.size,
         platform: selectedPlatform === 'facebook' ? 'Facebook' : 'Instagram',
       })
-      setProgress(20)
+      if (isStaleUploadOwner(uploadOwnerKey)) return
 
       // Step 2: client uploads bytes directly to object storage (or local endpoint in dev).
       await mediaApi.uploadFile(uploadUrl, file, (progressPercent) => {
-        setProgress(20 + Math.round(progressPercent * 0.5))
+        if (!isStaleUploadOwner(uploadOwnerKey)) {
+          setProgress(Math.max(0, Math.min(100, Math.round(progressPercent))))
+        }
       })
-      setProgress(75)
+      if (isStaleUploadOwner(uploadOwnerKey)) return
 
       // Step 3: server verifies the object landed in storage and flips Media row to Uploaded.
       await mediaApi.completeUpload({ mediaId })
-      setProgress(85)
+      if (isStaleUploadOwner(uploadOwnerKey)) return
+      setProgress(100)
 
       // Store upload info for validation
       setUploadedStorageKey(storageKey)
@@ -241,37 +257,42 @@ export function MediaUpload({
             placement: placement,
           })
           // A newer upload superseded this one — ignore the stale result.
-          if (!isStaleSession(sessionId)) {
+          if (!isStaleUploadOwner(uploadOwnerKey)) {
             setValidationStatus(validationResult.status)
             setValidationErrors(validationResult.errors)
             setValidationWarnings(validationResult.warnings)
-            onValidationChange?.(validationResult.status, validationResult.errors, validationResult.warnings, sessionId)
+            onValidationChange?.(validationResult.status, validationResult.errors, validationResult.warnings, uploadOwnerKey)
           }
         } catch (err) {
           console.error('Validation failed:', err)
           // Keep upload but show as pending
         } finally {
-          if (!isStaleSession(sessionId)) {
+          if (!isStaleUploadOwner(uploadOwnerKey)) {
             setValidating(false)
           }
         }
       }
 
-      setProgress(100)
+      if (isStaleUploadOwner(uploadOwnerKey)) return
       onUploadComplete(storageKey, returnedMediaType as MediaType)
     } catch (err) {
+      if (isStaleUploadOwner(uploadOwnerKey)) return
       console.error('Upload failed:', err)
       onUploadError(err instanceof Error ? err.message : 'Failed to upload file. Please try again.')
+      setProgress(0)
       setPreview(null)
       setFileName(null)
       setMediaType(null)
     } finally {
-      setUploading(false)
-      onUploadingChange?.(false)
+      if (!isStaleUploadOwner(uploadOwnerKey)) {
+        setUploading(false)
+        onUploadingChange?.(false)
+      }
     }
   }
 
   const handleClear = () => {
+    activeUploadOwnerKeyRef.current = ''
     if (mediaType === 'video' && preview) {
       URL.revokeObjectURL(preview)
     }

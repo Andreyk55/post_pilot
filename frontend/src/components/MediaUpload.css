@@ -163,6 +163,7 @@
 }
 
 .upload-progress {
+  position: relative;
   height: 3px;
   background: rgba(255, 255, 255, 0.1);
   border-radius: 2px;
@@ -171,10 +172,14 @@
 }
 
 .progress-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
   height: 100%;
   background: linear-gradient(90deg, #667eea, #764ba2);
   border-radius: 2px;
   transition: width 0.3s ease;
+  transform-origin: left center;
 }
 
 /* Validation badges */
