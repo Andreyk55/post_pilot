@@ -38,7 +38,9 @@ public static class MediaValidationRules
         // Source: https://developers.facebook.com/docs/graph-api/reference/page/photos/
         [(Platform.Facebook, Placement.Feed, MediaType.Image)] = new MediaValidationRule
         {
-            AllowedMimeTypes = ["image/jpeg", "image/png", "image/gif", "image/bmp", "image/tiff", "image/webp"],
+            // Final product policy: JPG/JPEG + PNG only (no GIF/BMP/TIFF/WebP — they are
+            // neither advertised in the UI nor accepted by upload init).
+            AllowedMimeTypes = ["image/jpeg", "image/png"],
             MaxBytes = 4L * 1024 * 1024, // 4MB (Facebook limit)
             MinWidth = 320,
             MinHeight = 320,
@@ -54,11 +56,14 @@ public static class MediaValidationRules
         // Source: https://developers.facebook.com/docs/video-api/getting-started
         [(Platform.Facebook, Placement.Feed, MediaType.Video)] = new MediaValidationRule
         {
-            AllowedMimeTypes = ["video/mp4", "video/quicktime", "video/x-msvideo", "video/webm"],
-            AllowedContainers = ["mp4", "mov", "avi", "webm"],
-            AllowedVideoCodecs = ["h264", "hevc", "vp8", "vp9"],
-            AllowedAudioCodecs = ["aac", "mp3", "vorbis", "opus"],
-            MaxBytes = 1024L * 1024 * 1024, // 1GB (Facebook limit for API uploads)
+            // Final product policy: MP4 + MOV only. MOV (video/quicktime) stays supported for
+            // iPhone compatibility, but its codec/audio must still pass when metadata is
+            // available. AVI/WebM are intentionally NOT supported (no upload/publisher support).
+            AllowedMimeTypes = ["video/mp4", "video/quicktime"],
+            AllowedContainers = ["mp4", "mov"],
+            AllowedVideoCodecs = ["h264", "hevc"],
+            AllowedAudioCodecs = ["aac"],
+            MaxBytes = 200L * 1024 * 1024, // 200MB — the real app upload cap (not Meta's 1GB API limit)
             MinWidth = 120,
             MinHeight = 120,
             MaxWidth = 4096,
@@ -79,7 +84,8 @@ public static class MediaValidationRules
         // Source: https://developers.facebook.com/docs/graph-api/reference/page/photo_stories/
         [(Platform.Facebook, Placement.Story, MediaType.Image)] = new MediaValidationRule
         {
-            AllowedMimeTypes = ["image/jpeg", "image/png", "image/gif", "image/bmp", "image/tiff", "image/webp"],
+            // Final product policy: JPG/JPEG + PNG only.
+            AllowedMimeTypes = ["image/jpeg", "image/png"],
             MaxBytes = 4L * 1024 * 1024, // 4MB
             MinWidth = 320,
             MinHeight = 320,
@@ -89,6 +95,8 @@ public static class MediaValidationRules
             AspectRatioMax = 0.75,
             PreferredAspectRatio = 0.5625, // 9:16
             AspectRatioWarningTolerance = 0.02,
+            QualityWarningMinWidth = 600,
+            QualityWarningMinHeight = 600,
             RecommendedWidth = 1080,
             RecommendedHeight = 1920,
         },
@@ -97,11 +105,12 @@ public static class MediaValidationRules
         // Source: https://developers.facebook.com/docs/graph-api/reference/page/video_stories/
         [(Platform.Facebook, Placement.Story, MediaType.Video)] = new MediaValidationRule
         {
+            // Final product policy: MP4 + MOV only (MOV for iPhone compatibility).
             AllowedMimeTypes = ["video/mp4", "video/quicktime"],
             AllowedContainers = ["mp4", "mov"],
             AllowedVideoCodecs = ["h264", "hevc"],
             AllowedAudioCodecs = ["aac"],
-            MaxBytes = 1024L * 1024 * 1024, // 1GB
+            MaxBytes = 200L * 1024 * 1024, // 200MB — the real app upload cap
             MinWidth = 320,
             MinHeight = 320,
             MaxWidth = 1080,
@@ -122,8 +131,10 @@ public static class MediaValidationRules
         // ============================================
         // Instagram Feed Image Rules
         // Source: https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media/
-        // Meta accepts JPEG ONLY for Instagram (PNG/WebP are rejected at publish time).
-        // Width > 1440 is downscaled by Meta, not rejected → advisory, not a hard error.
+        // Meta accepts JPEG ONLY for Instagram. This rule is the NATIVE publish format; a PNG
+        // upload is validated against its Instagram JPEG derivative instead (see
+        // EffectiveMediaResolver), so PNG is supported end-to-end without being marked invalid
+        // here. Width > 1440 is downscaled by Meta, not rejected → advisory, not a hard error.
         [(Platform.Instagram, Placement.Feed, MediaType.Image)] = new MediaValidationRule
         {
             AllowedMimeTypes = ["image/jpeg"],
@@ -142,9 +153,10 @@ public static class MediaValidationRules
         // Instagram Feed Video Rules
         [(Platform.Instagram, Placement.Feed, MediaType.Video)] = new MediaValidationRule
         {
+            // MP4 + MOV (MOV for iPhone compatibility). H.264 or HEVC/H.265, AAC audio.
             AllowedMimeTypes = ["video/mp4", "video/quicktime"],
             AllowedContainers = ["mp4", "mov"],
-            AllowedVideoCodecs = ["h264"],
+            AllowedVideoCodecs = ["h264", "hevc"],
             AllowedAudioCodecs = ["aac"],
             MaxBytes = 100L * 1024 * 1024, // 100MB for feed videos
             MinWidth = 500,
@@ -168,7 +180,9 @@ public static class MediaValidationRules
         // Source: https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media
         [(Platform.Instagram, Placement.Story, MediaType.Image)] = new MediaValidationRule
         {
-            // Meta accepts JPEG ONLY for Instagram (story included); PNG/WebP are rejected.
+            // Meta accepts JPEG ONLY for Instagram. This rule is the NATIVE publish format;
+            // a PNG upload is validated against its Instagram JPEG derivative instead (see
+            // EffectiveMediaResolver), so PNG users are not rejected for being non-JPEG.
             AllowedMimeTypes = ["image/jpeg"],
             MaxBytes = 8L * 1024 * 1024, // 8MB
             MinWidth = 320,
@@ -179,6 +193,8 @@ public static class MediaValidationRules
             AspectRatioMax = 0.75,
             PreferredAspectRatio = 0.5625, // 9:16
             AspectRatioWarningTolerance = 0.02,
+            QualityWarningMinWidth = 600,
+            QualityWarningMinHeight = 600,
             RecommendedWidth = 1080,
             RecommendedHeight = 1920,
         },
@@ -186,9 +202,10 @@ public static class MediaValidationRules
         // Instagram Story Video Rules
         [(Platform.Instagram, Placement.Story, MediaType.Video)] = new MediaValidationRule
         {
+            // MP4 + MOV (MOV for iPhone compatibility). H.264 or HEVC/H.265, AAC audio.
             AllowedMimeTypes = ["video/mp4", "video/quicktime"],
             AllowedContainers = ["mp4", "mov"],
-            AllowedVideoCodecs = ["h264"],
+            AllowedVideoCodecs = ["h264", "hevc"],
             AllowedAudioCodecs = ["aac"],
             MaxBytes = 100L * 1024 * 1024, // 100MB
             MinWidth = 320,

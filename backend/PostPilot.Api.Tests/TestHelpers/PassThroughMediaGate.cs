@@ -1,3 +1,4 @@
+using PostPilot.Api.DTOs;
 using PostPilot.Api.Enums;
 using PostPilot.Api.Services.Validation;
 
@@ -23,4 +24,15 @@ public sealed class PassThroughMediaGate : IMediaValidationGate
         MediaGateTarget target,
         CancellationToken cancellationToken = default)
         => Task.FromResult<string?>(null);
+
+    public Task<MediaValidationResult> ValidateForDisplayAsync(
+        Guid workspaceId,
+        MediaGateItem item,
+        MediaGateTarget target,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult(new MediaValidationResult(
+            ValidationStatus.Valid,
+            Array.Empty<MediaValidationError>(),
+            Array.Empty<MediaValidationWarning>(),
+            null));
 }

@@ -55,11 +55,10 @@ public class MediaServiceUploadTests
                 contentType: "application/x-msdownload"));
     }
 
+    // Final product policy: JPG/JPEG + PNG images, MP4 + MOV videos. Nothing else uploads.
     [Theory]
     [InlineData("image/jpeg")]
     [InlineData("image/png")]
-    [InlineData("image/webp")]
-    [InlineData("image/gif")]
     [InlineData("video/mp4")]
     [InlineData("video/quicktime")]
     public async Task GenerateUploadUrlAsync_AcceptsBriefedTypes(string contentType)
@@ -70,8 +69,6 @@ public class MediaServiceUploadTests
         {
             "image/jpeg" => ".jpg",
             "image/png" => ".png",
-            "image/webp" => ".webp",
-            "image/gif" => ".gif",
             "video/mp4" => ".mp4",
             "video/quicktime" => ".mov",
             _ => throw new InvalidOperationException(),
@@ -87,6 +84,28 @@ public class MediaServiceUploadTests
 
         Assert.NotNull(result);
         Assert.StartsWith("users/", result.StorageKey);
+    }
+
+    // Final product policy: GIF/WebP/BMP/TIFF/AVI/WebM are no longer accepted at upload.
+    [Theory]
+    [InlineData("image/webp")]
+    [InlineData("image/gif")]
+    [InlineData("image/bmp")]
+    [InlineData("image/tiff")]
+    [InlineData("video/x-msvideo")]
+    [InlineData("video/webm")]
+    public async Task GenerateUploadUrlAsync_RejectsDroppedTypes(string contentType)
+    {
+        var (svc, _) = Build();
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            svc.GenerateUploadUrlAsync(
+                userId: Guid.NewGuid(),
+                workspaceId: Guid.NewGuid(),
+                platform: Platform.Instagram,
+                mediaId: Guid.NewGuid(),
+                fileName: "file",
+                contentType: contentType));
     }
 
     [Fact]

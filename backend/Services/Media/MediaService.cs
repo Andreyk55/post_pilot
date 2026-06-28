@@ -19,15 +19,17 @@ public class MediaService : IMediaService
     private readonly long _maxVideoFileSizeBytes;
     private readonly string _publishingBaseUrl;
 
+    // Final product policy: JPG/JPEG + PNG only. WebP/GIF/BMP/TIFF are rejected at upload init
+    // so we never accept a format that platform validation or the publisher would later block.
+    // (Instagram PNG is converted to a JPEG derivative server-side at upload-complete.)
     private static readonly HashSet<string> _allowedImageTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "image/jpeg",
         "image/jpg",
-        "image/png",
-        "image/webp",
-        "image/gif"
+        "image/png"
     };
 
+    // Final product policy: MP4 + MOV only. MOV (video/quicktime) stays for iPhone compatibility.
     private static readonly HashSet<string> _allowedVideoTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "video/mp4",

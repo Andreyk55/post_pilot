@@ -18,6 +18,7 @@ public class MediaController : ControllerBase
     private readonly IMediaService _mediaService;
     private readonly IMediaUploadService _uploadService;
     private readonly IMediaValidationService _validationService;
+    private readonly IMediaValidationGate _mediaGate;
     private readonly ICurrentWorkspaceProvider _currentWorkspace;
     private readonly AppDbContext _db;
     private readonly ILogger<MediaController> _logger;
@@ -26,6 +27,7 @@ public class MediaController : ControllerBase
         IMediaService mediaService,
         IMediaUploadService uploadService,
         IMediaValidationService validationService,
+        IMediaValidationGate mediaGate,
         ICurrentWorkspaceProvider currentWorkspace,
         AppDbContext db,
         ILogger<MediaController> logger)
@@ -33,6 +35,7 @@ public class MediaController : ControllerBase
         _mediaService = mediaService;
         _uploadService = uploadService;
         _validationService = validationService;
+        _mediaGate = mediaGate;
         _currentWorkspace = currentWorkspace;
         _db = db;
         _logger = logger;
@@ -360,42 +363,27 @@ public class MediaController : ControllerBase
             return NotFound(new { error = "Media file not found" });
         }
 
-        // Get file path from storage key. For S3-compatible storage this downloads
-        // a temp copy; the finally below deletes it. For LocalDisk it returns the
-        // real path and the cleanup helper is a no-op.
-        var filePath = await _mediaService.GetLocalFilePathAsync(request.StorageKey);
-        if (string.IsNullOrEmpty(filePath) || !System.IO.File.Exists(filePath))
-        {
-            return NotFound(new { error = "Media file not found" });
-        }
+        _logger.LogInformation(
+            "Starting validation for {MediaType} file: {StorageKey}, Platform: {Platform}, Placement: {Placement}",
+            mediaType, request.StorageKey, request.Platform, request.Placement);
 
-        try
-        {
-            var fileInfo = new FileInfo(filePath);
-            var sizeBytes = fileInfo.Length;
+        // Route through the SAME authoritative gate used at create/update/publish time. This is
+        // what makes the advisory status match the eventual enforcement exactly: it validates
+        // images AND videos, and it is derivative-aware (an Instagram PNG is validated against
+        // its JPEG derivative, so a valid PNG is never shown as invalid). The client-supplied
+        // MimeType is only used to classify image-vs-video; the gate re-derives the authoritative
+        // MIME/size from the Media row.
+        var result = await _mediaGate.ValidateForDisplayAsync(
+            workspaceId,
+            new MediaGateItem(request.StorageKey, mediaType, 0),
+            new MediaGateTarget(request.Platform, request.Placement),
+            ct);
 
-            _logger.LogInformation(
-                "Starting validation for {MediaType} file: {StorageKey}, Platform: {Platform}, Placement: {Placement}",
-                mediaType, request.StorageKey, request.Platform, request.Placement);
+        _logger.LogInformation(
+            "Validation completed for {StorageKey}: Status={Status}, Errors={ErrorCount}, Warnings={WarningCount}",
+            request.StorageKey, result.Status, result.Errors.Length, result.Warnings.Length);
 
-            var result = await _validationService.ValidateFileAsync(
-                filePath,
-                request.MimeType,
-                sizeBytes,
-                mediaType,
-                request.Platform,
-                request.Placement);
-
-            _logger.LogInformation(
-                "Validation completed for {StorageKey}: Status={Status}, Errors={ErrorCount}, Warnings={WarningCount}",
-                request.StorageKey, result.Status, result.Errors.Length, result.Warnings.Length);
-
-            return Ok(result);
-        }
-        finally
-        {
-            _mediaService.TryCleanupTempLocalPath(filePath);
-        }
+        return Ok(result);
     }
 
     /// <summary>

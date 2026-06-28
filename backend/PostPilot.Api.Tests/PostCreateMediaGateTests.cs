@@ -26,7 +26,7 @@ public class PostCreateMediaGateTests : IDisposable
     private static readonly Guid Ws = Guid.Parse("00000000-0000-0000-0000-0000000000c4");
 
     private readonly AppDbContext _db;
-    private readonly PostsController _controller;
+    private PostsController _controller;
     private readonly Dictionary<string, string> _keyToPath = new();
     private readonly List<string> _tempFiles = new();
 
@@ -37,6 +37,17 @@ public class PostCreateMediaGateTests : IDisposable
             .Options;
         _db = new AppDbContext(options);
 
+        // Default: no real video metadata (image tests never touch the video extractor).
+        _controller = BuildController(Mock.Of<IVideoMetadataExtractor>());
+    }
+
+    /// <summary>
+    /// Builds the controller with the REAL media gate over faked storage. Tests that exercise
+    /// video rules pass a fake <see cref="IVideoMetadataExtractor"/> so the gate sees controlled
+    /// dimensions/duration/codec; the default uses a no-op extractor for image-only tests.
+    /// </summary>
+    private PostsController BuildController(IVideoMetadataExtractor videoExtractor)
+    {
         var scheduler = new Mock<IPostScheduler>();
         scheduler.Setup(s => s.ScheduleAsync(It.IsAny<Post>())).ReturnsAsync(new ScheduleResult(true, "arn", null));
 
@@ -53,13 +64,42 @@ public class PostCreateMediaGateTests : IDisposable
             _db, mediaService.Object,
             new MediaValidationService(
                 new ImageMetadataExtractor(NullLogger<ImageMetadataExtractor>.Instance),
-                Mock.Of<IVideoMetadataExtractor>(),
+                videoExtractor,
                 NullLogger<MediaValidationService>.Instance),
             NullLogger<MediaValidationGate>.Instance);
 
-        _controller = new PostsController(
+        return new PostsController(
             _db, scheduler.Object, Mock.Of<IFacebookInsightsService>(),
             workspace.Object, gate, NullLogger<PostsController>.Instance);
+    }
+
+    /// <summary>Rebuilds the controller so the gate sees the given video metadata for any path.</summary>
+    private void UseVideoMetadata(int width, int height, double durationSeconds,
+        string container = "mp4", string videoCodec = "h264", string audioCodec = "aac", double? fps = 30)
+    {
+        var meta = new VideoMetadata(width, height, durationSeconds, container, videoCodec, audioCodec,
+            fps, null, container == "mov" ? "video/quicktime" : "video/mp4");
+        var ext = new Mock<IVideoMetadataExtractor>();
+        ext.Setup(e => e.ExtractAsync(It.IsAny<string>())).ReturnsAsync(meta);
+        _controller = BuildController(ext.Object);
+    }
+
+    /// <summary>Seeds a video Media row (placeholder bytes; metadata comes from the fake extractor).</summary>
+    private string SeedVideoMedia(string storageKey, string contentType, long sizeBytes)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"createtest_{Guid.NewGuid():N}.bin");
+        File.WriteAllBytes(path, new byte[] { 0x00 });
+        _tempFiles.Add(path);
+        _keyToPath[storageKey] = path;
+        _db.Media.Add(new Media
+        {
+            Id = Guid.NewGuid(), WorkspaceId = Ws, StorageProvider = "local-disk", Bucket = "",
+            StorageKey = storageKey, OriginalFileName = Path.GetFileName(path), ContentType = contentType,
+            SizeBytes = sizeBytes, Status = MediaUploadStatus.Uploaded,
+            CreatedAt = DateTime.UtcNow, UploadedAt = DateTime.UtcNow,
+        });
+        _db.SaveChanges();
+        return storageKey;
     }
 
     public void Dispose()
@@ -295,6 +335,45 @@ public class PostCreateMediaGateTests : IDisposable
         var req = new CreatePostRequest(
             Content: "hi", MediaUrl: key, MediaType: MediaType.Image, Platform: Platform.Facebook,
             ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetPageId: pageId);
+
+        var result = await _controller.CreatePost(req);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
+    // ── Videos are now gated at create time (no longer passed through) ───────────
+
+    [Fact]
+    public async Task CreatePost_InstagramVideoTooLong_IsRejected()
+    {
+        var igId = SeedInstagramAccount();
+        var key = SeedVideoMedia("ig-vid-long", "video/mp4", 10L * 1024 * 1024);
+        UseVideoMetadata(1080, 1080, durationSeconds: 75); // > 60s for IG feed
+
+        var req = new CreatePostRequest(
+            Content: "hi", MediaUrl: key, MediaType: MediaType.Video, Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId);
+
+        var result = await _controller.CreatePost(req);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var pd = Assert.IsType<ProblemDetails>(bad.Value);
+        Assert.Equal("MEDIA_VALIDATION_FAILED", pd.Extensions["code"]);
+        var errors = ExtractMediaErrors(pd);
+        Assert.Contains(errors!, e => (string?)e["code"] == DTOs.MediaValidationErrorCodes.DurationTooLong);
+        Assert.Empty(await _db.Posts.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CreatePost_InstagramValidMovVideo_IsAccepted()
+    {
+        var igId = SeedInstagramAccount();
+        var key = SeedVideoMedia("ig-vid-mov", "video/quicktime", 20L * 1024 * 1024);
+        UseVideoMetadata(1080, 1080, durationSeconds: 10, container: "mov", videoCodec: "h264", audioCodec: "aac");
+
+        var req = new CreatePostRequest(
+            Content: "hi", MediaUrl: key, MediaType: MediaType.Video, Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId);
 
         var result = await _controller.CreatePost(req);
 

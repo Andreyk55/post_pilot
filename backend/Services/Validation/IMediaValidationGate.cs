@@ -1,3 +1,4 @@
+using PostPilot.Api.DTOs;
 using PostPilot.Api.Enums;
 
 namespace PostPilot.Api.Services.Validation;
@@ -41,6 +42,19 @@ public interface IMediaValidationGate
     /// Never throws on storage/decode problems for legacy media — see implementation notes.
     /// </summary>
     Task<string?> ValidateSingleAsync(
+        Guid workspaceId,
+        MediaGateItem item,
+        MediaGateTarget target,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Validates a single (item, target) and returns the FULL result (status + errors +
+    /// warnings + metadata) for display by the advisory /api/media/validate endpoint. Uses the
+    /// exact same effective-media resolution and rule engine as the blocking gate above, so the
+    /// composer can never show "publishable" for media that create/update or publishing rejects.
+    /// Images and videos are both validated. Non-owned/legacy keys resolve to a Valid result.
+    /// </summary>
+    Task<MediaValidationResult> ValidateForDisplayAsync(
         Guid workspaceId,
         MediaGateItem item,
         MediaGateTarget target,

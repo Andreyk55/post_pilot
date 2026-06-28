@@ -28,9 +28,57 @@ public class MediaValidationTests
 
         Assert.NotNull(rules);
         Assert.Contains("video/mp4", rules.AllowedMimeTypes);
-        Assert.Equal(1024L * 1024 * 1024, rules.MaxBytes); // 1GB
+        Assert.Equal(200L * 1024 * 1024, rules.MaxBytes); // 200MB — the real app upload cap (not Meta's 1GB)
         Assert.Equal(1, rules.DurationMinSeconds);
         Assert.Equal(240 * 60, rules.DurationMaxSeconds); // 240 minutes
+    }
+
+    // ── Final product policy: supported formats per platform ────────────────────
+
+    [Theory]
+    [InlineData(Platform.Facebook, Placement.Feed)]
+    [InlineData(Platform.Facebook, Placement.Story)]
+    public void FacebookImage_AllowsJpegAndPngOnly(Platform platform, Placement placement)
+    {
+        var rules = MediaValidationRules.GetRules(platform, placement, MediaType.Image)!;
+
+        Assert.Equal(new[] { "image/jpeg", "image/png" }, rules.AllowedMimeTypes);
+        foreach (var unsupported in new[] { "image/gif", "image/webp", "image/bmp", "image/tiff" })
+            Assert.DoesNotContain(unsupported, rules.AllowedMimeTypes);
+    }
+
+    [Theory]
+    [InlineData(Platform.Facebook, Placement.Feed)]
+    [InlineData(Platform.Facebook, Placement.Story)]
+    [InlineData(Platform.Instagram, Placement.Feed)]
+    [InlineData(Platform.Instagram, Placement.Story)]
+    public void Video_AllowsMp4AndMovOnly(Platform platform, Placement placement)
+    {
+        var rules = MediaValidationRules.GetRules(platform, placement, MediaType.Video)!;
+
+        Assert.Equal(new[] { "video/mp4", "video/quicktime" }, rules.AllowedMimeTypes);
+        foreach (var unsupported in new[] { "video/x-msvideo", "video/webm" })
+            Assert.DoesNotContain(unsupported, rules.AllowedMimeTypes);
+    }
+
+    [Theory]
+    [InlineData(Platform.Facebook, Placement.Feed)]
+    [InlineData(Platform.Facebook, Placement.Story)]
+    [InlineData(Platform.Instagram, Placement.Feed)]
+    [InlineData(Platform.Instagram, Placement.Story)]
+    public void Video_AllowsH264AndHevcWithAacOnly(Platform platform, Placement placement)
+    {
+        var rules = MediaValidationRules.GetRules(platform, placement, MediaType.Video)!;
+
+        Assert.Equal(new[] { "h264", "hevc" }, rules.AllowedVideoCodecs);
+        Assert.Equal(new[] { "aac" }, rules.AllowedAudioCodecs);
+    }
+
+    [Fact]
+    public void FacebookStoryVideo_MaxIs200MB()
+    {
+        var rules = MediaValidationRules.GetRules(Platform.Facebook, Placement.Story, MediaType.Video)!;
+        Assert.Equal(200L * 1024 * 1024, rules.MaxBytes);
     }
 
     [Fact]
@@ -79,7 +127,8 @@ public class MediaValidationRulesEvaluationTests
     [Theory]
     [InlineData("image/jpeg", false)]
     [InlineData("image/png", false)]
-    [InlineData("image/gif", false)]
+    [InlineData("image/gif", true)]  // GIF no longer supported (final policy: JPG/PNG only)
+    [InlineData("image/webp", true)] // WebP not supported
     [InlineData("image/svg+xml", true)] // SVG not supported
     [InlineData("application/pdf", true)]
     public void UnsupportedMimeType_FacebookImage_ValidatesCorrectly(string mimeType, bool shouldFail)

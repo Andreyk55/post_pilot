@@ -52,6 +52,7 @@ public class MediaPublicFetchTests
             mediaService.Object,
             new Mock<IMediaUploadService>().Object,
             new Mock<IMediaValidationService>().Object,
+            new Mock<IMediaValidationGate>().Object,
             new Mock<ICurrentWorkspaceProvider>().Object,
             db,
             NullLogger<MediaController>.Instance);

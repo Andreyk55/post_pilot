@@ -240,7 +240,7 @@ public class FacebookStoryPublisher : IStoryPublisher
         // DEFENSE-IN-DEPTH MEDIA GUARD (photo stories). Validates the story image against
         // Facebook/Story rules before any Meta call. Warnings ignored; on a blocking error
         // we do not call Meta. Never logs raw keys/URLs.
-        var guardError = await GuardImageMediaAsync(post, cancellationToken);
+        var guardError = await GuardStoryMediaAsync(post, cancellationToken);
         if (guardError != null)
         {
             return new PublishResult(false, ErrorType: PublishErrorType.Permanent,
@@ -290,6 +290,16 @@ public class FacebookStoryPublisher : IStoryPublisher
     {
         var pageId = post.TargetPage!.PageId;
         var accessToken = post.TargetPage.AccessToken;
+
+        // DEFENSE-IN-DEPTH MEDIA GUARD (video stories). Validates the story video against
+        // Facebook/Story rules (duration/aspect/codec/size) before downloading bytes or calling
+        // Meta. Warnings ignored; on a blocking error we do not publish. Never logs raw keys.
+        var guardError = await GuardStoryMediaAsync(post, cancellationToken);
+        if (guardError != null)
+        {
+            return new PublishResult(false, ErrorType: PublishErrorType.Permanent,
+                ErrorMessage: $"Media failed validation before publishing: {guardError}");
+        }
 
         // ── Download video bytes from storage provider or external URL ──
         string videoUrl;
@@ -712,18 +722,20 @@ public class FacebookStoryPublisher : IStoryPublisher
     }
 
     /// <summary>
-    /// Final pre-publish guard for the single story image. Validates against Facebook/Story
-    /// rules via the shared <see cref="Validation.IMediaValidationGate"/>; returns the first
-    /// blocking error or null. Never logs raw storage keys or signed URLs.
+    /// Final pre-publish guard for the single story media item (image OR video). Validates
+    /// against Facebook/Story rules via the shared <see cref="Validation.IMediaValidationGate"/>;
+    /// returns the first blocking error or null. Uses the post's real media type so videos are
+    /// validated (duration/aspect/codec) instead of being treated as images. Never logs raw
+    /// storage keys or signed URLs.
     /// </summary>
-    private async Task<string?> GuardImageMediaAsync(Post post, CancellationToken cancellationToken)
+    private async Task<string?> GuardStoryMediaAsync(Post post, CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(post.MediaUrl))
             return null;
 
         var result = await _mediaGate.ValidateAsync(
             post.WorkspaceId,
-            new[] { new Validation.MediaGateItem(post.MediaUrl, MediaType.Image, 0) },
+            new[] { new Validation.MediaGateItem(post.MediaUrl, post.MediaType, 0) },
             new[] { new Validation.MediaGateTarget(Platform.Facebook, Placement.Story) },
             cancellationToken);
 

@@ -27,7 +27,7 @@ public class PostUpdateMediaGateTests : IDisposable
     private static readonly Guid Ws = Guid.Parse("00000000-0000-0000-0000-0000000000d5");
 
     private readonly AppDbContext _db;
-    private readonly PostsController _controller;
+    private PostsController _controller;
     private readonly Dictionary<string, string> _keyToPath = new();
     private readonly List<string> _tempFiles = new();
 
@@ -38,6 +38,11 @@ public class PostUpdateMediaGateTests : IDisposable
             .Options;
         _db = new AppDbContext(options);
 
+        _controller = BuildController(Mock.Of<IVideoMetadataExtractor>());
+    }
+
+    private PostsController BuildController(IVideoMetadataExtractor videoExtractor)
+    {
         var scheduler = new Mock<IPostScheduler>();
         scheduler.Setup(s => s.RescheduleAsync(It.IsAny<Post>())).ReturnsAsync(new ScheduleResult(true, "arn", null));
 
@@ -54,13 +59,40 @@ public class PostUpdateMediaGateTests : IDisposable
             _db, mediaService.Object,
             new MediaValidationService(
                 new ImageMetadataExtractor(NullLogger<ImageMetadataExtractor>.Instance),
-                Mock.Of<IVideoMetadataExtractor>(),
+                videoExtractor,
                 NullLogger<MediaValidationService>.Instance),
             NullLogger<MediaValidationGate>.Instance);
 
-        _controller = new PostsController(
+        return new PostsController(
             _db, scheduler.Object, Mock.Of<IFacebookInsightsService>(),
             workspace.Object, gate, NullLogger<PostsController>.Instance);
+    }
+
+    private void UseVideoMetadata(int width, int height, double durationSeconds,
+        string container = "mp4", string videoCodec = "h264", string audioCodec = "aac", double? fps = 30)
+    {
+        var meta = new VideoMetadata(width, height, durationSeconds, container, videoCodec, audioCodec,
+            fps, null, container == "mov" ? "video/quicktime" : "video/mp4");
+        var ext = new Mock<IVideoMetadataExtractor>();
+        ext.Setup(e => e.ExtractAsync(It.IsAny<string>())).ReturnsAsync(meta);
+        _controller = BuildController(ext.Object);
+    }
+
+    private string SeedVideoMedia(string storageKey, string contentType, long sizeBytes)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"updatetest_{Guid.NewGuid():N}.bin");
+        File.WriteAllBytes(path, new byte[] { 0x00 });
+        _tempFiles.Add(path);
+        _keyToPath[storageKey] = path;
+        _db.Media.Add(new Media
+        {
+            Id = Guid.NewGuid(), WorkspaceId = Ws, StorageProvider = "local-disk", Bucket = "",
+            StorageKey = storageKey, OriginalFileName = Path.GetFileName(path), ContentType = contentType,
+            SizeBytes = sizeBytes, Status = MediaUploadStatus.Uploaded,
+            CreatedAt = DateTime.UtcNow, UploadedAt = DateTime.UtcNow,
+        });
+        _db.SaveChanges();
+        return storageKey;
     }
 
     public void Dispose()
@@ -237,6 +269,30 @@ public class PostUpdateMediaGateTests : IDisposable
         var result = await _controller.UpdatePost(post.Id, req);
 
         Assert.IsType<NoContentResult>(result);
+    }
+
+    // ── Videos are gated on edit too ────────────────────────────────────────────
+
+    [Fact]
+    public async Task UpdatePost_InstagramVideoTooLong_IsRejected()
+    {
+        var igId = SeedInstagramAccount();
+        var startKey = SeedMedia("u-ig-vstart", "image/jpeg", "jpeg", 1080, 1080);
+        var vidKey = SeedVideoMedia("u-ig-vbad", "video/mp4", 10L * 1024 * 1024);
+        var post = SeedScheduledPost(Platform.Instagram, startKey, targetPageId: null, targetIgId: igId);
+        UseVideoMetadata(1080, 1080, durationSeconds: 75); // > 60s for IG feed
+
+        var req = new UpdatePostRequest(
+            Content: "edited", MediaUrl: vidKey, MediaType: MediaType.Video, Platform: Platform.Instagram,
+            ScheduledAt: post.ScheduledAt, TargetInstagramAccountId: igId);
+
+        var result = await _controller.UpdatePost(post.Id, req);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        var pd = Assert.IsType<ProblemDetails>(bad.Value);
+        Assert.Equal("MEDIA_VALIDATION_FAILED", pd.Extensions["code"]);
+        var errors = ExtractMediaErrors(pd);
+        Assert.Contains(errors!, e => (string?)e["code"] == DTOs.MediaValidationErrorCodes.DurationTooLong);
     }
 
     // ── Instagram accepts valid JPEG on edit ────────────────────────────────────

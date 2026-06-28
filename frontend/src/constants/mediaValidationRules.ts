@@ -8,7 +8,9 @@
 import type { PlatformId } from './validationLimits'
 
 export type MediaType = 'Image' | 'Video'
-export type Placement = 'Feed' | 'Story' | 'Reel'
+// PostPilot supports Feed and Story placements only. There is no Reel post type; an
+// Instagram single video is published by Meta as a Reel but still validated as Feed video.
+export type Placement = 'Feed' | 'Story'
 
 /** Validation status returned from backend */
 export type ValidationStatus = 'Pending' | 'Valid' | 'Invalid' | 'Warning'
@@ -79,7 +81,7 @@ type RuleKey = `${PlatformId}:${Lowercase<Placement>}:${Lowercase<MediaType>}`
 const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>> = {
   // Facebook Feed Image
   'facebook:feed:image': {
-    allowedMimeTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/bmp', 'image/tiff', 'image/webp'],
+    allowedMimeTypes: ['image/jpeg', 'image/png'],
     maxBytes: 4 * 1024 * 1024, // 4MB
     minWidth: 320,
     minHeight: 320,
@@ -91,8 +93,8 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
 
   // Facebook Feed Video
   'facebook:feed:video': {
-    allowedMimeTypes: ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm'],
-    maxBytes: 1024 * 1024 * 1024, // 1GB
+    allowedMimeTypes: ['video/mp4', 'video/quicktime'],
+    maxBytes: 200 * 1024 * 1024, // 200MB — the real app upload cap (not Meta's 1GB API limit)
     minWidth: 120,
     minHeight: 120,
     maxWidth: 4096,
@@ -105,7 +107,7 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
 
   // Facebook Story Image
   'facebook:story:image': {
-    allowedMimeTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/bmp', 'image/tiff', 'image/webp'],
+    allowedMimeTypes: ['image/jpeg', 'image/png'],
     maxBytes: 4 * 1024 * 1024, // 4MB
     minWidth: 320,
     minHeight: 320,
@@ -120,7 +122,7 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
   // Facebook Story Video
   'facebook:story:video': {
     allowedMimeTypes: ['video/mp4', 'video/quicktime'],
-    maxBytes: 1024 * 1024 * 1024, // 1GB
+    maxBytes: 200 * 1024 * 1024, // 200MB — the real app upload cap
     minWidth: 320,
     minHeight: 320,
     maxWidth: 1080,

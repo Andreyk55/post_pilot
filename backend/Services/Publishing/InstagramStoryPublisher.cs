@@ -267,7 +267,7 @@ public class InstagramStoryPublisher : IStoryPublisher
         // DEFENSE-IN-DEPTH MEDIA GUARD (image stories). Validates the story image against
         // Instagram/Story rules before any Meta call. Warnings ignored; on a blocking error
         // we do not call Meta. Never logs raw keys/URLs.
-        var guardError = await GuardImageMediaAsync(post, cancellationToken);
+        var guardError = await GuardStoryMediaAsync(post, cancellationToken);
         if (guardError != null)
         {
             return new PublishResult(false, ErrorType: PublishErrorType.Permanent,
@@ -306,6 +306,16 @@ public class InstagramStoryPublisher : IStoryPublisher
         Post post, string accessToken, CancellationToken cancellationToken)
     {
         var igUserId = post.TargetInstagramAccount!.IgBusinessId;
+
+        // DEFENSE-IN-DEPTH MEDIA GUARD (video stories). Validates the story video against
+        // Instagram/Story rules (duration/aspect/codec/size) before any Meta call. Warnings
+        // ignored; on a blocking error we do not publish. Never logs raw keys/URLs.
+        var guardError = await GuardStoryMediaAsync(post, cancellationToken);
+        if (guardError != null)
+        {
+            return new PublishResult(false, ErrorType: PublishErrorType.Permanent,
+                ErrorMessage: $"Media failed validation before publishing: {guardError}");
+        }
 
         // Step A: Create container if we don't have one yet
         if (string.IsNullOrEmpty(post.InstagramCreationId))
@@ -576,18 +586,20 @@ public class InstagramStoryPublisher : IStoryPublisher
     }
 
     /// <summary>
-    /// Final pre-publish guard for the single story image. Validates against Instagram/Story
-    /// rules via the shared <see cref="Validation.IMediaValidationGate"/>; returns the first
-    /// blocking error or null. Never logs raw storage keys or signed URLs.
+    /// Final pre-publish guard for the single story media item (image OR video). Validates
+    /// against Instagram/Story rules via the shared <see cref="Validation.IMediaValidationGate"/>;
+    /// returns the first blocking error or null. Uses the post's real media type so videos are
+    /// validated (duration/aspect/codec) instead of being treated as images, and Instagram PNG
+    /// images validate against their JPEG derivative. Never logs raw storage keys or signed URLs.
     /// </summary>
-    private async Task<string?> GuardImageMediaAsync(Post post, CancellationToken cancellationToken)
+    private async Task<string?> GuardStoryMediaAsync(Post post, CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(post.MediaUrl))
             return null;
 
         var result = await _mediaGate.ValidateAsync(
             post.WorkspaceId,
-            new[] { new Validation.MediaGateItem(post.MediaUrl, MediaType.Image, 0) },
+            new[] { new Validation.MediaGateItem(post.MediaUrl, post.MediaType, 0) },
             new[] { new Validation.MediaGateTarget(Platform.Instagram, Placement.Story) },
             cancellationToken);
 

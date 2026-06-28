@@ -25,17 +25,23 @@ describe('instagram media format validation', () => {
     const selection = validateInstagramSelection([], [{ name: 'photo.webp', type: 'image/webp' }])
 
     expect(selection.ok).toBe(false)
-    expect(selection.errorMessage).toContain('WebP is not supported yet')
+    expect(selection.errorMessage).toContain('WebP is not supported')
     expect(preValidateFile(file('photo.webp', 'image/webp'), 'instagram', 'Feed')).toEqual([
       'File type "image/webp" is not supported for instagram. Allowed: image/jpeg, image/png',
     ])
   })
 
+  it('allows MOV (video/quicktime) for Instagram — iPhone compatibility', () => {
+    const selection = validateInstagramSelection([], [{ name: 'clip.mov', type: 'video/quicktime' }])
+    expect(selection.ok).toBe(true)
+    expect(selection.errorMessage).toBeNull()
+  })
+
   it('explains PNG auto-conversion and WebP unsupported copy', () => {
     expect(INSTAGRAM_IMAGE_FORMAT_HINT).toBe(
-      'Instagram requires JPEG. PNG images will be converted automatically. WebP is not supported yet.'
+      'Instagram requires JPEG. PNG images will be converted automatically. WebP is not supported.'
     )
     expect(getInstagramFormatHint('empty')).toContain('PNG is converted to JPEG')
-    expect(getInstagramFormatHint('empty')).toContain('WebP not supported yet')
+    expect(getInstagramFormatHint('empty')).toContain('WebP not supported')
   })
 })

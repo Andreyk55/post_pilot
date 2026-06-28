@@ -40,10 +40,6 @@ public class MediaValidationGate : IMediaValidationGate
 
         foreach (var item in items)
         {
-            // Phase 2: images only. Videos pass through untouched (no rule change for them here).
-            if (item.MediaType != MediaType.Image)
-                continue;
-
             // We can only validate media we actually own as a storage key. Legacy external
             // URLs (http...) and non-storage values are passed through; we have no bytes to
             // decode and must not block historical content.
@@ -55,14 +51,7 @@ public class MediaValidationGate : IMediaValidationGate
                 continue;
             }
 
-            // Authoritative MIME + size come from the Media row, NOT the client. The row is
-            // workspace-scoped, so this also re-checks ownership of the key.
-            var media = await _db.Media
-                .AsNoTracking()
-                .FirstOrDefaultAsync(
-                    m => m.StorageKey == item.StorageKeyOrUrl && m.WorkspaceId == workspaceId,
-                    cancellationToken);
-
+            var media = await LoadMediaAsync(workspaceId, item.StorageKeyOrUrl, cancellationToken);
             if (media == null)
             {
                 // Key not owned by this workspace (or never tracked). Don't block on it here;
@@ -74,116 +63,25 @@ public class MediaValidationGate : IMediaValidationGate
                 continue;
             }
 
-            // Phase 3: Instagram requires JPEG. A PNG original validates against its
-            // Instagram JPEG derivative; Facebook (and everything else) validates the
-            // original. We may therefore need bytes for two different objects, so each
-            // is materialized lazily and cleaned up in the finally block.
-            var isPngOriginal = string.Equals(media.ContentType, "image/png", StringComparison.OrdinalIgnoreCase);
-            var hasDerivative = !string.IsNullOrEmpty(media.InstagramImageStorageKey);
-
-            string? originalLocalPath = null;
-            string? derivativeLocalPath = null;
-            try
+            foreach (var target in targets)
             {
-                foreach (var target in targets)
+                var result = await ValidateResolvedAsync(media, item.MediaType, target, cancellationToken);
+
+                // Warnings never block.
+                if (result.Status != ValidationStatus.Invalid)
+                    continue;
+
+                foreach (var e in result.Errors)
                 {
-                    var useDerivative = target.Platform == Platform.Instagram && isPngOriginal;
-
-                    if (useDerivative && !hasDerivative)
-                    {
-                        // PNG selected for Instagram but no derivative was generated; block
-                        // with a clear, actionable error instead of leaking the key.
-                        errors.Add(new MediaGateError(
-                            Order: item.Order,
-                            StorageKeyRedacted: RedactKey(item.StorageKeyOrUrl),
-                            Platform: target.Platform,
-                            Placement: target.Placement,
-                            Code: MediaValidationErrorCodes.InstagramDerivativeMissing,
-                            Field: "media",
-                            Message: "This PNG image has no Instagram-ready JPEG version yet. Re-upload the image and try again, or use a JPEG."));
-                        continue;
-                    }
-
-                    // Pick the bytes + authoritative MIME/size for THIS target.
-                    string validateKey;
-                    string validateMime;
-                    long? authoritativeSize;
-                    string? validatePath;
-
-                    if (useDerivative)
-                    {
-                        validateKey = media.InstagramImageStorageKey!;
-                        validateMime = media.InstagramImageMimeType ?? "image/jpeg";
-                        authoritativeSize = media.InstagramImageSizeBytes;
-                        if (derivativeLocalPath == null)
-                            derivativeLocalPath = await _mediaService.GetLocalFilePathAsync(validateKey);
-                        validatePath = derivativeLocalPath;
-                    }
-                    else
-                    {
-                        validateKey = item.StorageKeyOrUrl;
-                        validateMime = media.ContentType;
-                        authoritativeSize = media.SizeBytes;
-                        if (originalLocalPath == null)
-                            originalLocalPath = await _mediaService.GetLocalFilePathAsync(validateKey);
-                        validatePath = originalLocalPath;
-                    }
-
-                    if (string.IsNullOrEmpty(validatePath) || !File.Exists(validatePath))
-                    {
-                        _logger.LogWarning(
-                            "Media gate: bytes not retrievable for key {Key}",
-                            RedactKey(validateKey));
-
-                        if (useDerivative)
-                        {
-                            errors.Add(new MediaGateError(
-                                Order: item.Order,
-                                StorageKeyRedacted: RedactKey(item.StorageKeyOrUrl),
-                                Platform: target.Platform,
-                                Placement: target.Placement,
-                                Code: MediaValidationErrorCodes.InstagramDerivativeMissing,
-                                Field: "media",
-                                Message: "This PNG image has no retrievable Instagram-ready JPEG version. Re-upload the image and try again, or use a JPEG."));
-                            continue;
-                        }
-
-                        _logger.LogWarning(
-                            "Media gate: skipping validation for original media bytes that could not be retrieved");
-                        continue;
-                    }
-
-                    var sizeBytes = authoritativeSize ?? new FileInfo(validatePath).Length;
-
-                    var result = await _validationService.ValidateFileAsync(
-                        validatePath,
-                        validateMime,
-                        sizeBytes,
-                        MediaType.Image,
-                        target.Platform,
-                        target.Placement);
-
-                    // Warnings never block.
-                    if (result.Status != ValidationStatus.Invalid)
-                        continue;
-
-                    foreach (var e in result.Errors)
-                    {
-                        errors.Add(new MediaGateError(
-                            Order: item.Order,
-                            StorageKeyRedacted: RedactKey(item.StorageKeyOrUrl),
-                            Platform: target.Platform,
-                            Placement: target.Placement,
-                            Code: e.Code,
-                            Field: e.Field,
-                            Message: e.Message));
-                    }
+                    errors.Add(new MediaGateError(
+                        Order: item.Order,
+                        StorageKeyRedacted: RedactKey(item.StorageKeyOrUrl),
+                        Platform: target.Platform,
+                        Placement: target.Placement,
+                        Code: e.Code,
+                        Field: e.Field,
+                        Message: e.Message));
                 }
-            }
-            finally
-            {
-                _mediaService.TryCleanupTempLocalPath(originalLocalPath);
-                _mediaService.TryCleanupTempLocalPath(derivativeLocalPath);
             }
         }
 
@@ -199,6 +97,93 @@ public class MediaValidationGate : IMediaValidationGate
         var result = await ValidateAsync(workspaceId, new[] { item }, new[] { target }, cancellationToken);
         return result.IsValid ? null : result.Errors[0].Message;
     }
+
+    public async Task<MediaValidationResult> ValidateForDisplayAsync(
+        Guid workspaceId,
+        MediaGateItem item,
+        MediaGateTarget target,
+        CancellationToken cancellationToken = default)
+    {
+        // Legacy external URLs / non-storage values: nothing to decode, treat as publishable
+        // (mirrors ValidateAsync's pass-through so the advisory UI matches the gate exactly).
+        if (!_mediaService.IsStorageKey(item.StorageKeyOrUrl))
+            return Publishable();
+
+        var media = await LoadMediaAsync(workspaceId, item.StorageKeyOrUrl, cancellationToken);
+        if (media == null)
+            return Publishable();
+
+        return await ValidateResolvedAsync(media, item.MediaType, target, cancellationToken);
+    }
+
+    private Task<Entities.Media?> LoadMediaAsync(Guid workspaceId, string storageKey, CancellationToken cancellationToken) =>
+        // Authoritative MIME + size come from the Media row, NOT the client. The row is
+        // workspace-scoped, so this also re-checks ownership of the key.
+        _db.Media
+            .AsNoTracking()
+            .FirstOrDefaultAsync(m => m.StorageKey == storageKey && m.WorkspaceId == workspaceId, cancellationToken);
+
+    /// <summary>
+    /// Resolves the effective media for the target (Instagram PNG → JPEG derivative, everything
+    /// else → original), downloads its bytes once, and runs the shared rule engine. Images and
+    /// videos both validate here; videos extract metadata via ffprobe inside the rule engine.
+    /// Returns the full <see cref="MediaValidationResult"/> so callers can surface warnings too.
+    /// </summary>
+    private async Task<MediaValidationResult> ValidateResolvedAsync(
+        Entities.Media media, MediaType mediaType, MediaGateTarget target, CancellationToken cancellationToken)
+    {
+        var effective = EffectiveMediaResolver.Resolve(media, mediaType, target.Platform);
+
+        if (effective.DerivativeMissing)
+        {
+            return Invalid(MediaValidationErrorCodes.InstagramDerivativeMissing, "media",
+                "This PNG image has no Instagram-ready JPEG version yet. Re-upload the image and try again, or use a JPEG.");
+        }
+
+        string? localPath = null;
+        try
+        {
+            localPath = await _mediaService.GetLocalFilePathAsync(effective.StorageKey);
+
+            if (string.IsNullOrEmpty(localPath) || !File.Exists(localPath))
+            {
+                _logger.LogWarning("Media gate: bytes not retrievable for key {Key}", RedactKey(effective.StorageKey));
+
+                if (effective.IsDerivative)
+                {
+                    return Invalid(MediaValidationErrorCodes.InstagramDerivativeMissing, "media",
+                        "This PNG image has no retrievable Instagram-ready JPEG version. Re-upload the image and try again, or use a JPEG.");
+                }
+
+                // Original bytes unavailable (legacy/transient): don't block.
+                return Publishable();
+            }
+
+            var sizeBytes = effective.SizeBytes ?? new FileInfo(localPath).Length;
+
+            return await _validationService.ValidateFileAsync(
+                localPath,
+                effective.MimeType,
+                sizeBytes,
+                mediaType,
+                target.Platform,
+                target.Placement);
+        }
+        finally
+        {
+            _mediaService.TryCleanupTempLocalPath(localPath);
+        }
+    }
+
+    private static MediaValidationResult Publishable() =>
+        new(ValidationStatus.Valid, Array.Empty<MediaValidationError>(), Array.Empty<MediaValidationWarning>(), null);
+
+    private static MediaValidationResult Invalid(string code, string field, string message) =>
+        new(
+            ValidationStatus.Invalid,
+            new[] { new MediaValidationError(code, field, message, null, null) },
+            Array.Empty<MediaValidationWarning>(),
+            null);
 
     /// <summary>
     /// Redacts a storage key for logging; keys are capabilities (high-entropy mediaId),

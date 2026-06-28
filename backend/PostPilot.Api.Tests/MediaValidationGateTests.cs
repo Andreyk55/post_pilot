@@ -85,7 +85,9 @@ public class MediaValidationGateTests : IDisposable
         return path; // keyed by storageKey in the fake below
     }
 
-    private MediaValidationGate CreateGate(Dictionary<string, string> keyToPath)
+    private MediaValidationGate CreateGate(
+        Dictionary<string, string> keyToPath,
+        IVideoMetadataExtractor? videoExtractor = null)
     {
         var mediaService = new Mock<IMediaService>();
         // Storage keys are non-http; external URLs start with http.
@@ -97,15 +99,98 @@ public class MediaValidationGateTests : IDisposable
 
         var validationService = new MediaValidationService(
             new ImageMetadataExtractor(NullLogger<ImageMetadataExtractor>.Instance),
-            Mock.Of<IVideoMetadataExtractor>(),
+            videoExtractor ?? Mock.Of<IVideoMetadataExtractor>(),
             NullLogger<MediaValidationService>.Instance);
 
         return new MediaValidationGate(
             _db, mediaService.Object, validationService, NullLogger<MediaValidationGate>.Instance);
     }
 
+    /// <summary>
+    /// A fake video metadata extractor that returns the same metadata for every path. The gate
+    /// only ever validates one video per test, so a single fixed value is enough; the size check
+    /// uses the Media row's SizeBytes, so callers control size via <see cref="SeedRawMedia"/>.
+    /// </summary>
+    private static IVideoMetadataExtractor FakeVideo(
+        int width, int height, double durationSeconds,
+        string container = "mp4", string videoCodec = "h264", string audioCodec = "aac",
+        double? fps = 30)
+    {
+        var meta = new VideoMetadata(
+            Width: width, Height: height, DurationSeconds: durationSeconds,
+            Container: container, VideoCodec: videoCodec, AudioCodec: audioCodec,
+            Fps: fps, Bitrate: null, MimeType: container == "mov" ? "video/quicktime" : "video/mp4");
+        var mock = new Mock<IVideoMetadataExtractor>();
+        mock.Setup(e => e.ExtractAsync(It.IsAny<string>())).ReturnsAsync(meta);
+        return mock.Object;
+    }
+
+    /// <summary>
+    /// Seeds a Media row whose bytes are an arbitrary placeholder file (the real metadata comes
+    /// from the fake extractor). The row's ContentType + SizeBytes are authoritative, so this is
+    /// how a test controls a video's declared MIME and size.
+    /// </summary>
+    private string SeedRawMedia(string storageKey, string contentType, long sizeBytes)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"gatetest_{Guid.NewGuid():N}.bin");
+        File.WriteAllBytes(path, new byte[] { 0x00 });
+        _tempFiles.Add(path);
+        _db.Media.Add(new Media
+        {
+            Id = Guid.NewGuid(),
+            WorkspaceId = Ws,
+            StorageProvider = "local-disk",
+            Bucket = "",
+            StorageKey = storageKey,
+            OriginalFileName = Path.GetFileName(path),
+            ContentType = contentType,
+            SizeBytes = sizeBytes,
+            Status = MediaUploadStatus.Uploaded,
+            CreatedAt = DateTime.UtcNow,
+            UploadedAt = DateTime.UtcNow,
+        });
+        _db.SaveChanges();
+        return path;
+    }
+
+    /// <summary>
+    /// Seeds a PNG original Media row together with its Instagram JPEG derivative (a real JPEG of
+    /// the given dimensions). Returns the derivative file path so the caller maps the derivative
+    /// key → bytes. This mirrors a successful upload-time PNG→JPEG conversion.
+    /// </summary>
+    private (string originalPath, string derivativePath) SeedMediaWithInstagramDerivative(
+        string originalKey, string derivativeKey, int derivWidth, int derivHeight)
+    {
+        var originalPath = WriteImage("png", derivWidth, derivHeight);
+        var derivativePath = WriteImage("jpeg", derivWidth, derivHeight);
+        _db.Media.Add(new Media
+        {
+            Id = Guid.NewGuid(),
+            WorkspaceId = Ws,
+            StorageProvider = "local-disk",
+            Bucket = "",
+            StorageKey = originalKey,
+            OriginalFileName = Path.GetFileName(originalPath),
+            ContentType = "image/png",
+            SizeBytes = new FileInfo(originalPath).Length,
+            Status = MediaUploadStatus.Uploaded,
+            CreatedAt = DateTime.UtcNow,
+            UploadedAt = DateTime.UtcNow,
+            InstagramImageStorageKey = derivativeKey,
+            InstagramImageMimeType = "image/jpeg",
+            InstagramImageSizeBytes = new FileInfo(derivativePath).Length,
+            InstagramImageWidth = derivWidth,
+            InstagramImageHeight = derivHeight,
+            InstagramImageGeneratedAt = DateTime.UtcNow,
+        });
+        _db.SaveChanges();
+        return (originalPath, derivativePath);
+    }
+
     private static MediaGateTarget Fb => new(Platform.Facebook, Placement.Feed);
     private static MediaGateTarget Ig => new(Platform.Instagram, Placement.Feed);
+    private static MediaGateTarget FbStory => new(Platform.Facebook, Placement.Story);
+    private static MediaGateTarget IgStory => new(Platform.Instagram, Placement.Story);
 
     // ── PNG: per-target behavior ────────────────────────────────────────────────
 
@@ -219,18 +304,244 @@ public class MediaValidationGateTests : IDisposable
         Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.InstagramDerivativeMissing);
     }
 
-    // ── Pass-through cases ──────────────────────────────────────────────────────
+    // ── PNG with Instagram JPEG derivative (derivative-aware) ───────────────────
 
     [Fact]
-    public async Task VideoItem_IsPassedThrough_NotValidated()
+    public async Task Png_Instagram_WithDerivative_IsNotInvalid()
     {
-        // No Media row / file needed: videos are skipped entirely in this phase.
-        var gate = CreateGate(new());
+        // A PNG that has a valid Instagram JPEG derivative validates against the DERIVATIVE,
+        // so it must NOT be rejected for being non-JPEG. 1080x1080 → valid IG feed image.
+        var (_, derivPath) = SeedMediaWithInstagramDerivative("k-png-ok", "k-png-ok-deriv", 1080, 1080);
+        var gate = CreateGate(new() { ["k-png-ok-deriv"] = derivPath });
+
         var result = await gate.ValidateAsync(Ws,
-            new[] { new MediaGateItem("k-video", MediaType.Video, 0) }, new[] { Ig });
+            new[] { new MediaGateItem("k-png-ok", MediaType.Image, 0) }, new[] { Ig });
 
         Assert.True(result.IsValid);
     }
+
+    [Fact]
+    public async Task Png_Instagram_WithDerivative_OutOfRatio_IsBlocked()
+    {
+        // Conversion does NOT auto-fix aspect ratio: a derivative whose ratio is out of range
+        // (1600x400 → 4.0, outside IG's 0.8–1.91) is still blocked after conversion.
+        var (_, derivPath) = SeedMediaWithInstagramDerivative("k-png-bad", "k-png-bad-deriv", 1600, 400);
+        var gate = CreateGate(new() { ["k-png-bad-deriv"] = derivPath });
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("k-png-bad", MediaType.Image, 0) }, new[] { Ig });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.AspectRatioInvalid);
+    }
+
+    [Fact]
+    public async Task Png_Facebook_WithDerivativePresent_StillValidatesOriginal()
+    {
+        // Facebook never uses the Instagram derivative — the original PNG is valid for FB.
+        var (origPath, _) = SeedMediaWithInstagramDerivative("k-png-fb", "k-png-fb-deriv", 1200, 630);
+        var gate = CreateGate(new() { ["k-png-fb"] = origPath });
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("k-png-fb", MediaType.Image, 0) }, new[] { Fb });
+
+        Assert.True(result.IsValid);
+    }
+
+    // ── Video validation (gate now validates videos, not just images) ───────────
+
+    [Fact]
+    public async Task Video_InstagramFeed_OverMaxSize_IsBlocked()
+    {
+        var path = SeedRawMedia("v-ig-big", "video/mp4", 101L * 1024 * 1024); // 101MB > 100MB
+        var gate = CreateGate(new() { ["v-ig-big"] = path }, FakeVideo(1080, 1080, 10));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-ig-big", MediaType.Video, 0) }, new[] { Ig });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.FileTooLarge);
+    }
+
+    [Fact]
+    public async Task Video_InstagramFeed_TooLong_IsBlocked()
+    {
+        var path = SeedRawMedia("v-ig-long", "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-ig-long"] = path }, FakeVideo(1080, 1080, 75)); // 75s > 60s
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-ig-long", MediaType.Video, 0) }, new[] { Ig });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.DurationTooLong);
+    }
+
+    [Fact]
+    public async Task Video_InstagramStory_BadAspect_IsBlocked()
+    {
+        var path = SeedRawMedia("v-ig-story", "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-ig-story"] = path }, FakeVideo(1080, 1080, 10)); // 1:1 outside 0.5–0.75
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-ig-story", MediaType.Video, 0) }, new[] { IgStory });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.AspectRatioInvalid);
+    }
+
+    [Fact]
+    public async Task Video_FacebookStory_TooLong_IsBlocked()
+    {
+        var path = SeedRawMedia("v-fb-story-long", "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-fb-story-long"] = path }, FakeVideo(1080, 1920, 150)); // 150s > 120s
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-fb-story-long", MediaType.Video, 0) }, new[] { FbStory });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.DurationTooLong);
+    }
+
+    [Fact]
+    public async Task Video_FacebookStory_BadAspect_IsBlocked()
+    {
+        var path = SeedRawMedia("v-fb-story-aspect", "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-fb-story-aspect"] = path }, FakeVideo(1080, 1080, 10)); // 1:1
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-fb-story-aspect", MediaType.Video, 0) }, new[] { FbStory });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.AspectRatioInvalid);
+    }
+
+    [Fact]
+    public async Task Video_FacebookFeed_Over200MB_IsBlocked_NotOneGB()
+    {
+        // FB feed video cap is the real 200MB upload ceiling, NOT Meta's 1GB API limit.
+        var path = SeedRawMedia("v-fb-201", "video/mp4", 201L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-fb-201"] = path }, FakeVideo(1280, 720, 30));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-fb-201", MediaType.Video, 0) }, new[] { Fb });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.FileTooLarge);
+    }
+
+    [Fact]
+    public async Task Video_Mp4_ValidMetadata_Passes()
+    {
+        var path = SeedRawMedia("v-fb-ok", "video/mp4", 50L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-fb-ok"] = path }, FakeVideo(1280, 720, 30));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-fb-ok", MediaType.Video, 0) }, new[] { Fb });
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task Video_Mov_ValidIphoneMetadata_Passes()
+    {
+        // MOV (video/quicktime) with H.264/AAC is the typical iPhone capture → must pass.
+        var path = SeedRawMedia("v-ig-mov", "video/quicktime", 20L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-ig-mov"] = path },
+            FakeVideo(1080, 1080, 10, container: "mov", videoCodec: "h264", audioCodec: "aac"));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-ig-mov", MediaType.Video, 0) }, new[] { Ig });
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task Video_FacebookFeed_Hevc_Passes()
+    {
+        // H.265/HEVC is supported (e.g. modern iPhone MOV captures).
+        var path = SeedRawMedia("v-fb-hevc", "video/quicktime", 30L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-fb-hevc"] = path },
+            FakeVideo(1280, 720, 30, container: "mov", videoCodec: "hevc", audioCodec: "aac"));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-fb-hevc", MediaType.Video, 0) }, new[] { Fb });
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task Video_Mov_UnsupportedCodec_IsBlocked()
+    {
+        // MOV is accepted for iPhone compatibility, but an unsupported internal codec (e.g.
+        // ProRes) still fails when metadata is available.
+        var path = SeedRawMedia("v-ig-prores", "video/quicktime", 20L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-ig-prores"] = path },
+            FakeVideo(1080, 1080, 10, container: "mov", videoCodec: "prores", audioCodec: "aac"));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-ig-prores", MediaType.Video, 0) }, new[] { Ig });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.UnsupportedVideoCodec);
+    }
+
+    [Fact]
+    public async Task Video_Mov_UnsupportedAudio_IsBlocked()
+    {
+        var path = SeedRawMedia("v-ig-pcm", "video/quicktime", 20L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-ig-pcm"] = path },
+            FakeVideo(1080, 1080, 10, container: "mov", videoCodec: "h264", audioCodec: "pcm_s16le"));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-ig-pcm", MediaType.Video, 0) }, new[] { Ig });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.UnsupportedAudioCodec);
+    }
+
+    // ── ValidateForDisplayAsync (advisory /api/media/validate path) ──────────────
+
+    [Fact]
+    public async Task ValidateForDisplay_InstagramPng_WithDerivative_IsNotInvalid()
+    {
+        // The advisory endpoint must mirror the gate: a valid PNG (with derivative) is NOT
+        // marked Invalid, so the composer never blocks a publishable PNG for Instagram.
+        var (_, derivPath) = SeedMediaWithInstagramDerivative("d-png-ok", "d-png-ok-deriv", 1080, 1080);
+        var gate = CreateGate(new() { ["d-png-ok-deriv"] = derivPath });
+
+        var result = await gate.ValidateForDisplayAsync(Ws,
+            new MediaGateItem("d-png-ok", MediaType.Image, 0), Ig);
+
+        Assert.NotEqual(ValidationStatus.Invalid, result.Status);
+    }
+
+    [Fact]
+    public async Task ValidateForDisplay_InstagramPng_WithoutDerivative_IsInvalid()
+    {
+        var path = SeedMedia("d-png-missing", "image/png", "png", 1080, 1080);
+        var gate = CreateGate(new() { ["d-png-missing"] = path });
+
+        var result = await gate.ValidateForDisplayAsync(Ws,
+            new MediaGateItem("d-png-missing", MediaType.Image, 0), Ig);
+
+        Assert.Equal(ValidationStatus.Invalid, result.Status);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.InstagramDerivativeMissing);
+    }
+
+    [Fact]
+    public async Task ValidateForDisplay_InvalidVideo_IsInvalid()
+    {
+        var path = SeedRawMedia("d-vid-long", "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { ["d-vid-long"] = path }, FakeVideo(1080, 1080, 75));
+
+        var result = await gate.ValidateForDisplayAsync(Ws,
+            new MediaGateItem("d-vid-long", MediaType.Video, 0), Ig);
+
+        Assert.Equal(ValidationStatus.Invalid, result.Status);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.DurationTooLong);
+    }
+
+    // ── Pass-through cases ──────────────────────────────────────────────────────
 
     [Fact]
     public async Task ExternalUrl_IsPassedThrough_NotValidated()

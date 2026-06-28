@@ -649,6 +649,7 @@ public class WorkspaceIsolationTests : IDisposable
             mediaService,
             uploadSvc,
             new Mock<PostPilot.Api.Services.Validation.IMediaValidationService>().Object,
+            new Mock<PostPilot.Api.Services.Validation.IMediaValidationGate>().Object,
             realWorkspace,
             _db,
             NullLogger<MediaController>.Instance);
@@ -909,6 +910,7 @@ public class WorkspaceIsolationTests : IDisposable
             mediaServiceMock.Object,
             uploadSvc,
             validationSvc.Object,
+            new PassThroughMediaGate(), // returns a Valid result; the workspace check is what's pinned here
             _workspaceMock.Object,
             _db,
             NullLogger<MediaController>.Instance);

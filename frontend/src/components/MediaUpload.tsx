@@ -345,8 +345,8 @@ export function MediaUpload({
 
     return (
       <>
-        <span className="upload-hint">Images: JPG, PNG, GIF (max {DEFAULT_MAX_IMAGE_SIZE_MB}MB)</span>
-        <span className="upload-hint">Videos: MP4 (max {DEFAULT_MAX_VIDEO_SIZE_MB}MB)</span>
+        <span className="upload-hint">Images: JPG, PNG (max {DEFAULT_MAX_IMAGE_SIZE_MB}MB)</span>
+        <span className="upload-hint">Videos: MP4, MOV (max {DEFAULT_MAX_VIDEO_SIZE_MB}MB)</span>
       </>
     )
   }
@@ -358,7 +358,7 @@ export function MediaUpload({
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*,video/*"
+        accept="image/jpeg,image/png,video/mp4,video/quicktime"
         onChange={handleFileSelect}
         disabled={uploading || disabled}
         className="file-input-hidden"

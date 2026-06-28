@@ -93,13 +93,40 @@ public class PublisherMediaGuardTests : IDisposable
         return mediaService.Object;
     }
 
-    private MediaValidationGate BuildGate(IMediaService mediaService) =>
+    private MediaValidationGate BuildGate(IMediaService mediaService, IVideoMetadataExtractor? videoExtractor = null) =>
         new(_db, mediaService,
             new MediaValidationService(
                 new ImageMetadataExtractor(NullLogger<ImageMetadataExtractor>.Instance),
-                Mock.Of<IVideoMetadataExtractor>(),
+                videoExtractor ?? Mock.Of<IVideoMetadataExtractor>(),
                 NullLogger<MediaValidationService>.Instance),
             NullLogger<MediaValidationGate>.Instance);
+
+    private static IVideoMetadataExtractor FakeVideo(int width, int height, double durationSeconds,
+        string container = "mp4", string videoCodec = "h264", string audioCodec = "aac", double? fps = 30)
+    {
+        var meta = new VideoMetadata(width, height, durationSeconds, container, videoCodec, audioCodec,
+            fps, null, container == "mov" ? "video/quicktime" : "video/mp4");
+        var mock = new Mock<IVideoMetadataExtractor>();
+        mock.Setup(e => e.ExtractAsync(It.IsAny<string>())).ReturnsAsync(meta);
+        return mock.Object;
+    }
+
+    private string SeedVideoMedia(string storageKey, string contentType, long sizeBytes)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"guardtest_{Guid.NewGuid():N}.bin");
+        File.WriteAllBytes(path, new byte[] { 0x00 });
+        _tempFiles.Add(path);
+        _keyToPath[storageKey] = path;
+        _db.Media.Add(new Media
+        {
+            Id = Guid.NewGuid(), WorkspaceId = Ws, StorageProvider = "local-disk", Bucket = "",
+            StorageKey = storageKey, OriginalFileName = Path.GetFileName(path), ContentType = contentType,
+            SizeBytes = sizeBytes, Status = MediaUploadStatus.Uploaded,
+            CreatedAt = DateTime.UtcNow, UploadedAt = DateTime.UtcNow,
+        });
+        _db.SaveChanges();
+        return storageKey;
+    }
 
     private static HttpClient ThrowingHttpClient() => new(new ThrowOnSendHandler());
 
@@ -246,6 +273,69 @@ public class PublisherMediaGuardTests : IDisposable
         var guardError = await publisher.GuardMediaAsync(post, Placement.Feed, CancellationToken.None);
 
         Assert.Null(guardError); // valid JPEG is not blocked
+    }
+
+    // ── Videos are now guarded before Meta (no longer passed through) ────────────
+
+    [Fact]
+    public async Task InstagramPublisher_RefusesInvalidVideo_BeforeCallingMeta()
+    {
+        var (_, _, ig) = SeedIgTarget();
+        var key = SeedVideoMedia("ig-vid-bad", "video/mp4", 10L * 1024 * 1024);
+        var post = SeedIgImagePost(key, ig, MediaType.Video);
+
+        var mediaService = BuildMediaService();
+        // 75s exceeds the IG feed 60s max → blocked.
+        var publisher = BuildIgPublisher(mediaService, BuildGate(mediaService, FakeVideo(1080, 1080, 75)));
+
+        var guardError = await publisher.GuardMediaAsync(post, Placement.Feed, CancellationToken.None);
+
+        Assert.NotNull(guardError); // blocked before any Meta call (HttpClient throws if used)
+    }
+
+    [Fact]
+    public async Task InstagramPublisher_AllowsValidVideo_PastGuard()
+    {
+        var (_, _, ig) = SeedIgTarget();
+        var key = SeedVideoMedia("ig-vid-ok", "video/quicktime", 20L * 1024 * 1024);
+        var post = SeedIgImagePost(key, ig, MediaType.Video);
+
+        var mediaService = BuildMediaService();
+        var publisher = BuildIgPublisher(mediaService,
+            BuildGate(mediaService, FakeVideo(1080, 1080, 10, container: "mov", videoCodec: "h264", audioCodec: "aac")));
+
+        var guardError = await publisher.GuardMediaAsync(post, Placement.Feed, CancellationToken.None);
+
+        Assert.Null(guardError);
+    }
+
+    [Fact]
+    public async Task FacebookPublisher_RefusesInvalidVideo_BeforeCallingMeta()
+    {
+        var conn = new MetaConnection { Id = Guid.NewGuid(), WorkspaceId = Ws, Provider = ProviderType.Meta, IsConnected = true };
+        var page = new ConnectedPage
+        {
+            Id = Guid.NewGuid(), WorkspaceId = Ws, MetaConnectionId = conn.Id,
+            PageId = "PAGE_FB", Name = "FB Page", AccessToken = "PAGE_TOKEN", IsConnected = true,
+        };
+        _db.Add(conn); _db.Add(page); _db.SaveChanges();
+
+        var key = SeedVideoMedia("fb-vid-big", "video/mp4", 201L * 1024 * 1024); // > 200MB cap
+        var post = new Post
+        {
+            Id = Guid.NewGuid(), WorkspaceId = Ws, Content = "msg", Platform = Platform.Facebook,
+            MediaType = MediaType.Video, MediaUrl = key, TargetPageId = page.Id,
+            Status = PostStatus.Scheduled, ScheduledAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+        };
+        _db.Posts.Add(post); _db.SaveChanges();
+
+        var mediaService = BuildMediaService();
+        var publisher = BuildFbPublisher(mediaService, BuildGate(mediaService, FakeVideo(1280, 720, 30)));
+
+        var guardError = await publisher.GuardMediaAsync(post, Placement.Feed, CancellationToken.None);
+
+        Assert.NotNull(guardError); // 201MB > 200MB → blocked before Meta
     }
 
     // ── Facebook: PNG allowed by FB rules ───────────────────────────────────────

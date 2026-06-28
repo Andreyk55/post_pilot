@@ -414,15 +414,15 @@ export function MultiMediaUpload({
   // Determine accepted file types for the <input>
   const getAcceptTypes = (): string => {
     if (isInstagram) {
-      // Instagram supports mixed media carousels — images (JPEG + PNG; PNG is
-      // auto-converted to JPEG by the backend, WebP is not supported) + video.
-      return 'image/jpeg,image/png,video/mp4'
+      // Instagram supports mixed media carousels — images (JPG/PNG; PNG is auto-converted
+      // to JPEG by the backend) + video (MP4/MOV).
+      return 'image/jpeg,image/png,video/mp4,video/quicktime'
     }
     // Facebook: accept video only when empty; images-only once images exist
     if (isFacebook) {
-      if (items.length === 0) return 'image/jpeg,image/png,video/mp4,video/quicktime,video/x-msvideo'
+      if (items.length === 0) return 'image/jpeg,image/png,video/mp4,video/quicktime'
       if (items.some(i => i.mediaType === 'Image')) return 'image/jpeg,image/png'
-      return 'image/jpeg,image/png,video/mp4,video/quicktime,video/x-msvideo'
+      return 'image/jpeg,image/png,video/mp4,video/quicktime'
     }
     return 'image/jpeg,image/png'
   }

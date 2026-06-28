@@ -110,7 +110,9 @@ export interface MediaConstraintsResponse {
 // Types for media validation
 export type ValidationStatus = 'Pending' | 'Valid' | 'Invalid' | 'Warning'
 export type Platform = 'Facebook' | 'Instagram' | 'Twitter' | 'LinkedIn'
-export type Placement = 'Feed' | 'Story' | 'Reel'
+// Feed and Story only — PostPilot has no Reel post type. (An Instagram single video is
+// published by Meta as a Reel but is still created/validated as a Feed video.)
+export type Placement = 'Feed' | 'Story'
 
 export interface MediaValidationError {
   code: string

@@ -21,9 +21,6 @@ import type { PlatformId } from '../constants/validationLimits'
 const isStory = (placement: Placement | string): boolean =>
   String(placement).toLowerCase() === 'story'
 
-const isReel = (placement: Placement | string): boolean =>
-  String(placement).toLowerCase() === 'reel'
-
 /**
  * The "what's allowed here" line shown before upload. Placement-driven and identical
  * wording for every platform, so Facebook Story and Instagram Story read the same.
@@ -33,7 +30,6 @@ export function getMediaRequirementHint(
   placement: Placement | string = 'Feed',
 ): string {
   if (isStory(placement)) return '1 photo or 1 video — vertical 9:16 recommended'
-  if (isReel(placement)) return '1 video — vertical 9:16 recommended'
   return 'Photo or video supported'
 }
 
@@ -127,7 +123,7 @@ export function resolveClientDimensionError(
 
   const aspectRatio = width / height
   if (aspectRatio < rule.aspectRatioMin || aspectRatio > rule.aspectRatioMax) {
-    if (isStory(placement) || isReel(placement)) {
+    if (isStory(placement)) {
       return 'Story media should be vertical 9:16.'
     }
     return `Image aspect ratio is not supported (use between ${rule.aspectRatioMin.toFixed(2)} and ${rule.aspectRatioMax.toFixed(2)}).`

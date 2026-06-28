@@ -20,7 +20,8 @@ export interface FacebookSelectionResult {
 }
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png']
-const VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/x-msvideo']
+// Final product policy: MP4 + MOV only (MOV for iPhone compatibility). No AVI/WebM.
+const VIDEO_TYPES = ['video/mp4', 'video/quicktime']
 
 export function isImageFile(file: MediaFileInfo): boolean {
   return IMAGE_TYPES.includes(file.type.toLowerCase())
@@ -53,7 +54,7 @@ export function validateFacebookSelection(
   if (unsupported.length > 0) {
     return {
       ok: false,
-      errorMessage: `Unsupported file type: ${unsupported[0].name}. Facebook accepts JPG, PNG, or MP4.`,
+      errorMessage: `Unsupported file type: ${unsupported[0].name}. Facebook accepts JPG, PNG, MP4, or MOV.`,
       nextFiles: [...existingFiles],
     }
   }
@@ -158,8 +159,8 @@ export function getFacebookUploaderLabel(mode: FacebookMediaMode, count: number)
 /** Dynamic format hint text */
 export function getFacebookFormatHint(mode: FacebookMediaMode): string {
   switch (mode) {
-    case 'empty': return 'JPG, PNG, or MP4'
-    case 'single_video': return 'MP4 only'
+    case 'empty': return 'JPG, PNG, MP4, or MOV'
+    case 'single_video': return 'MP4 or MOV'
     case 'single_image': return 'JPG/PNG'
     case 'multi_photo': return 'JPG/PNG only (carousel)'
   }

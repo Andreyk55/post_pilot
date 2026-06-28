@@ -155,20 +155,19 @@ public class MediaUploadServiceInstagramDerivativeTests : IDisposable
     }
 
     [Fact]
-    public async Task CompleteAsync_WebpUpload_DoesNotCreateDerivative()
+    public async Task InitAsync_WebpUpload_IsRejected()
     {
+        // Final product policy: WebP is not an accepted upload type, so it never even reaches
+        // the derivative step — it is rejected up front at upload init.
         await using var db = NewDb();
         var storage = new RecordingStorage();
         var svc = NewUploadService(db, storage);
         var workspaceId = Guid.NewGuid();
 
-        var init = await svc.InitAsync(Guid.NewGuid(), workspaceId, "photo.webp", "image/webp", 1000, Platform.Instagram);
-        storage.SeedLocalFile(init.StorageKey, WriteImage("png", 1080, 1080), "image/webp");
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            svc.InitAsync(Guid.NewGuid(), workspaceId, "photo.webp", "image/webp", 1000, Platform.Instagram));
 
-        await svc.CompleteAsync(workspaceId, init.MediaId);
-
-        var row = await db.Media.SingleAsync(m => m.Id == init.MediaId);
-        Assert.Null(row.InstagramImageStorageKey);
+        Assert.Empty(await db.Media.ToListAsync());
         Assert.Empty(storage.UploadedObjects);
     }
 

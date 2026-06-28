@@ -38,6 +38,19 @@ describe('resolveClientMediaError — friendly, specific copy', () => {
     expect(resolveClientMediaError(f('video/webm'), 'twitter', 'Feed')).toBe('Videos must be MP4.')
   })
 
+  it('says "Videos must be MP4 or MOV." for Facebook and Instagram (final policy)', () => {
+    expect(resolveClientMediaError(f('video/webm'), 'facebook', 'Feed')).toBe('Videos must be MP4 or MOV.')
+    expect(resolveClientMediaError(f('video/webm'), 'instagram', 'Feed')).toBe('Videos must be MP4 or MOV.')
+    // MOV itself is accepted (passes type check → no error).
+    expect(resolveClientMediaError(f('video/quicktime', 1000), 'facebook', 'Feed')).toBeNull()
+    expect(resolveClientMediaError(f('video/quicktime', 1000), 'instagram', 'Feed')).toBeNull()
+  })
+
+  it('says "Images must be JPG or PNG." for Facebook and Instagram (final policy)', () => {
+    expect(resolveClientMediaError(f('image/gif'), 'facebook', 'Feed')).toBe('Images must be JPG or PNG.')
+    expect(resolveClientMediaError(f('image/webp'), 'instagram', 'Feed')).toBe('Images must be JPG or PNG.')
+  })
+
   it('rejects a non-media file', () => {
     expect(resolveClientMediaError(f('application/pdf'), 'instagram', 'Feed')).toBe(
       'Unsupported file type. Upload a photo or video.',
