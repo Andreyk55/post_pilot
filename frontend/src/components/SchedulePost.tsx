@@ -60,10 +60,8 @@ interface SchedulePostProps {
 }
 
 const platforms = [
-  { id: 'twitter', name: 'Twitter/X', icon: '𝕏' },
-  { id: 'instagram', name: 'Instagram', icon: '📷' },
   { id: 'facebook', name: 'Facebook', icon: 'f' },
-  { id: 'linkedin', name: 'LinkedIn', icon: 'in' },
+  { id: 'instagram', name: 'Instagram', icon: '📷' },
 ]
 
 // Map platform IDs to AI platform types
@@ -73,10 +71,8 @@ function getAiPlatform(platformIds: string[]): AiPlatform | null {
   if (!first) return null
 
   const mapping: Record<string, AiPlatform> = {
-    twitter: 'X',
-    instagram: 'Instagram',
     facebook: 'Facebook',
-    linkedin: 'LinkedIn',
+    instagram: 'Instagram',
   }
   return mapping[first] || null
 }
@@ -634,25 +630,22 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
 
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label>Platform</label>
+          <label>Meta Channel</label>
           {MAX_PLATFORMS_PER_POST === 1 && (
             <span className="hint-text">Choose 1 platform</span>
           )}
-          <div className="platforms">
+          <div className={`platforms ${platforms.length === 2 ? 'platforms--meta-only' : ''}`}>
             {platforms.map(platform => {
-              const isNotImplemented = platform.id === 'twitter' || platform.id === 'linkedin'
               return (
                 <button
                   key={platform.id}
                   type="button"
-                  className={'platform-btn ' + (selectedPlatforms.includes(platform.id) ? 'selected' : '') + (isNotImplemented ? ' coming-soon' : '')}
-                  onClick={() => !isNotImplemented && selectPlatform(platform.id)}
-                  title={isNotImplemented ? `${platform.name} - Coming Soon` : platform.name}
-                  disabled={isNotImplemented}
+                  className={'platform-btn ' + (selectedPlatforms.includes(platform.id) ? 'selected' : '')}
+                  onClick={() => selectPlatform(platform.id)}
+                  title={platform.name}
                 >
                   <span className="platform-icon">{platform.icon}</span>
                   <span className="platform-name">{platform.name}</span>
-                  {isNotImplemented && <span className="coming-soon-badge">Coming Soon</span>}
                 </button>
               )
             })}

@@ -8,10 +8,8 @@ import { voiceProfileApi, type VoiceProfileSummary } from '../api/voiceProfiles'
 import './SchedulePostsPage.css'
 
 const platformMap: Record<string, Platform> = {
-  twitter: 'Twitter',
-  instagram: 'Instagram',
   facebook: 'Facebook',
-  linkedin: 'LinkedIn',
+  instagram: 'Instagram',
 }
 
 const PAGE_SIZE = 10
@@ -216,7 +214,7 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
   return (
     <div className="schedule-posts-page">
       <h1>Schedule Posts</h1>
-      <p className="page-subtitle">Plan and schedule your social media content</p>
+      <p className="page-subtitle">Plan and schedule Facebook and Instagram content</p>
 
       {error && <div className="error-message">{error}</div>}
 

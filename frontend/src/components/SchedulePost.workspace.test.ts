@@ -4,6 +4,8 @@ import { describe, it, expect } from 'vitest'
 import schedulePostSource from './SchedulePost.tsx?raw'
 import badgeSource from './WorkspaceContextBadge.tsx?raw'
 import connectedAccountsSource from '../pages/ConnectedAccountsPage.tsx?raw'
+import assetsPageSource from '../pages/AssetsPage.tsx?raw'
+import schedulePostsPageSource from '../pages/SchedulePostsPage.tsx?raw'
 import workspaceGuardSource from './WorkspaceGuard.tsx?raw'
 import workspaceSwitcherSource from './WorkspaceSwitcher.tsx?raw'
 import aiAssistPanelSource from './AiAssistPanel.tsx?raw'
@@ -44,6 +46,15 @@ describe('SchedulePost — workspace selection stays in the sidebar', () => {
     expect(schedulePostSource).toMatch(/<WorkspaceContextBadge\b[^>]*action="Posting to"/)
   })
 
+  it('only exposes Meta channels in the platform selector', () => {
+    expect(schedulePostSource).toMatch(/label>Meta Channel</)
+    expect(schedulePostSource).toMatch(/id: 'facebook'/)
+    expect(schedulePostSource).toMatch(/id: 'instagram'/)
+    expect(schedulePostSource).not.toMatch(/id: 'twitter'/)
+    expect(schedulePostSource).not.toMatch(/id: 'linkedin'/)
+    expect(schedulePostSource).not.toMatch(/Coming Soon/)
+  })
+
   it('does not render a Switch workspace button or open the selector', () => {
     // No "Switch workspace" affordance and no selector/switch wiring. (Plain
     // "switch"/"switching" in unrelated comments — e.g. platform switching — is
@@ -59,6 +70,15 @@ describe('SchedulePost — workspace selection stays in the sidebar', () => {
 describe('ConnectedAccountsPage — workspace selection stays in the sidebar', () => {
   it('renders the read-only workspace context badge ("Connecting for")', () => {
     expect(connectedAccountsSource).toMatch(/<WorkspaceContextBadge\b[^>]*action="Connecting for"/)
+  })
+
+  it('focuses provider connection UI on Meta only', () => {
+    expect(connectedAccountsSource).toMatch(/Connect your Meta account to manage Facebook Pages and linked Instagram accounts\./)
+    expect(connectedAccountsSource).toMatch(/Facebook Pages and linked Instagram accounts/)
+    expect(connectedAccountsSource).not.toMatch(/LinkedIn/)
+    expect(connectedAccountsSource).not.toMatch(/Twitter/)
+    expect(connectedAccountsSource).not.toMatch(/TikTok/)
+    expect(connectedAccountsSource).not.toMatch(/Coming Soon/)
   })
 
   it('does not render a Switch workspace button or open the selector', () => {
@@ -131,5 +151,17 @@ describe('SchedulePost AI sections', () => {
     expect(aiPanelIndex).toBeGreaterThan(-1)
     expect(mediaLabelIndex).toBeGreaterThan(aiPanelIndex)
     expect(formActionsIndex).toBeGreaterThan(aiPanelIndex)
+  })
+})
+
+describe('Meta-focused page copy', () => {
+  it('keeps the schedule page positioned around Facebook and Instagram only', () => {
+    expect(schedulePostsPageSource).toMatch(/Plan and schedule Facebook and Instagram content/)
+  })
+
+  it('describes assets as Facebook Pages plus linked Instagram professional accounts', () => {
+    expect(assetsPageSource).toMatch(/Manage your Facebook Pages and linked Instagram professional accounts/)
+    expect(assetsPageSource).toMatch(/Available through connected Facebook Pages/)
+    expect(assetsPageSource).toMatch(/Facebook Pages and linked Instagram accounts/)
   })
 })

@@ -10,7 +10,7 @@ export function PlaceholderPage({ title, icon }: PlaceholderPageProps) {
     <div className="placeholder-page">
       <span className="placeholder-icon">{icon}</span>
       <h1>{title}</h1>
-      <p>This feature is coming soon...</p>
+      <p>This area is not available yet.</p>
     </div>
   )
 }

@@ -114,21 +114,17 @@ export function computeComposerEnabled({
   let disabledReason: string | null = null
   let disabledMessage: string | null = null
 
-  // Check if selected platform is not yet implemented
-  // Twitter and LinkedIn are coming soon (Instagram is now implemented)
-  const isTwitterSelected = selectedPlatform === 'twitter'
-  const isLinkedInSelected = selectedPlatform === 'linkedin'
-  const isPlatformNotImplemented = isTwitterSelected || isLinkedInSelected
+  // Guard against unsupported/stale platform values without surfacing provider-specific copy.
+  const isUnsupportedPlatform = !!selectedPlatform && !['facebook', 'instagram'].includes(selectedPlatform)
 
   if (!hasPlatformSelected) {
     hasValidTarget = false
     disabledReason = 'no_platform'
     disabledMessage = 'Select a platform to start creating your post.'
-  } else if (isPlatformNotImplemented) {
+  } else if (isUnsupportedPlatform) {
     hasValidTarget = false
-    disabledReason = 'platform_not_implemented'
-    const platformName = isTwitterSelected ? 'Twitter/X' : 'LinkedIn'
-    disabledMessage = `${platformName} integration coming soon.`
+    disabledReason = 'platform_unavailable'
+    disabledMessage = 'This channel is not available in the current product experience.'
   } else if (selectedPlatform === 'instagram') {
     // Instagram requires an IG business account selection
     if (loadingPages) {
@@ -203,8 +199,6 @@ export function getPlatformNameForMessage(platformId: string): string {
   const names: Record<string, string> = {
     facebook: 'Facebook',
     instagram: 'Instagram',
-    twitter: 'Twitter/X',
-    linkedin: 'LinkedIn',
   }
   return names[platformId] || platformId
 }
