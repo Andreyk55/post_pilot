@@ -1,4 +1,5 @@
 import { useAuth } from '../hooks/useAuth'
+import { AvatarImage } from './AvatarImage'
 import { WorkspaceSwitcher } from './WorkspaceSwitcher'
 import './Sidebar.css'
 
@@ -54,11 +55,14 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
 
       <div className="sidebar-footer">
         <div className="user-info">
-          {user?.avatarUrl ? (
-            <img className="user-avatar user-avatar--img" src={user.avatarUrl} alt="" />
-          ) : (
-            <div className="user-avatar">{initial}</div>
-          )}
+          <div className="user-avatar">
+            <AvatarImage
+              src={user?.avatarUrl}
+              alt=""
+              className="user-avatar user-avatar--img"
+              fallback={initial}
+            />
+          </div>
           <div className="user-meta">
             <span className="user-name">{name}</span>
             {user?.email && <span className="user-email">{user.email}</span>}

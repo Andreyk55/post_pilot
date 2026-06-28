@@ -4,6 +4,7 @@ import { metaApi } from '../api/meta'
 import type { MetaConnection, FacebookPage, ConnectedPage, InstagramEligibilityDto } from '../types/meta'
 import { hasUnpromotedLinkedInstagram } from '../utils/instagramPromotion'
 import { instagramAssetRowView } from '../utils/instagramAssetRow'
+import { AvatarImage } from '../components/AvatarImage'
 
 interface AssetsPageProps {
   onNavigate: (page: string) => void
@@ -238,11 +239,11 @@ export function AssetsPage({ onNavigate }: AssetsPageProps) {
             {metaConnection.pages.map(page => (
               <div key={page.id} className="asset-item connected">
                 <div className="asset-avatar">
-                  {page.pictureUrl ? (
-                    <img src={page.pictureUrl} alt={page.name} />
-                  ) : (
-                    page.name.charAt(0).toUpperCase()
-                  )}
+                  <AvatarImage
+                    src={page.pictureUrl}
+                    alt={page.name}
+                    fallback={page.name.charAt(0).toUpperCase()}
+                  />
                 </div>
                 <div className="asset-details">
                   <span className="asset-name">{page.name}</span>
@@ -281,11 +282,11 @@ export function AssetsPage({ onNavigate }: AssetsPageProps) {
             {unconnectedPages.map(page => (
               <div key={page.id} className="asset-item">
                 <div className="asset-avatar">
-                  {page.pictureUrl ? (
-                    <img src={page.pictureUrl} alt={page.name} />
-                  ) : (
-                    page.name.charAt(0).toUpperCase()
-                  )}
+                  <AvatarImage
+                    src={page.pictureUrl}
+                    alt={page.name}
+                    fallback={page.name.charAt(0).toUpperCase()}
+                  />
                 </div>
                 <div className="asset-details">
                   <span className="asset-name">{page.name}</span>
@@ -346,11 +347,11 @@ export function AssetsPage({ onNavigate }: AssetsPageProps) {
               return (
                 <div key={ig.igBusinessId} className="asset-item connected">
                   <div className="asset-avatar instagram">
-                    {ig.profilePictureUrl ? (
-                      <img src={ig.profilePictureUrl} alt={ig.username} />
-                    ) : (
-                      (ig.username ?? ig.name ?? '?').charAt(0).toUpperCase()
-                    )}
+                    <AvatarImage
+                      src={ig.profilePictureUrl}
+                      alt={ig.username}
+                      fallback={(ig.username ?? ig.name ?? '?').charAt(0).toUpperCase()}
+                    />
                   </div>
                   <div className="asset-details">
                     <span className="asset-name">{row.displayName}</span>

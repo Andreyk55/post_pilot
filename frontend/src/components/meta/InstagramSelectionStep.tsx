@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { InstagramAccount } from '../../types/meta'
+import { AvatarImage } from '../AvatarImage'
 
 interface InstagramSelectionStepProps {
   instagramAccounts: InstagramAccount[]
@@ -106,13 +107,15 @@ export function InstagramSelectionStep({
                   onChange={() => toggleAccount(account.id)}
                 />
                 <div className="item-avatar instagram">
-                  {account.profilePictureUrl ? (
-                    <img src={account.profilePictureUrl} alt={account.username} />
-                  ) : (
-                    <span className="avatar-placeholder">
-                      {account.username.charAt(0).toUpperCase()}
-                    </span>
-                  )}
+                  <AvatarImage
+                    src={account.profilePictureUrl}
+                    alt={account.username}
+                    fallback={
+                      <span className="avatar-placeholder">
+                        {account.username.charAt(0).toUpperCase()}
+                      </span>
+                    }
+                  />
                 </div>
                 <div className="item-details">
                   <span className="item-name">@{account.username}</span>

@@ -7,6 +7,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Toast } from '../components/Toast'
 import { buildProviderDisconnectMessage } from '../components/providerDisconnectMessage'
 import { WorkspaceContextBadge } from '../components/WorkspaceContextBadge'
+import { AvatarImage } from '../components/AvatarImage'
 import { useAuth } from '../hooks/useAuth'
 import { guardWorkspaceAction, NO_WORKSPACE_ACTION_MESSAGE } from '../api/workspaceGuard'
 
@@ -409,11 +410,11 @@ export function ConnectedAccountsPage() {
             {connectedAccounts.map(account => (
               <div key={account.id} className="connected-account-item">
                 <div className="account-avatar">
-                  {account.avatarUrl ? (
-                    <img src={account.avatarUrl} alt={account.name} />
-                  ) : (
-                    account.name.charAt(0).toUpperCase()
-                  )}
+                  <AvatarImage
+                    src={account.avatarUrl}
+                    alt={account.name}
+                    fallback={account.name.charAt(0).toUpperCase()}
+                  />
                 </div>
                 <div className="account-details">
                   <span className="account-name">{account.name}</span>

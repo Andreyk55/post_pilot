@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { FacebookPage } from '../../types/meta'
+import { AvatarImage } from '../AvatarImage'
 
 interface PageSelectionStepProps {
   pages: FacebookPage[]
@@ -99,13 +100,15 @@ export function PageSelectionStep({
                   onChange={() => togglePage(page.id)}
                 />
                 <div className="item-avatar">
-                  {page.pictureUrl ? (
-                    <img src={page.pictureUrl} alt={page.name} />
-                  ) : (
-                    <span className="avatar-placeholder">
-                      {page.name.charAt(0).toUpperCase()}
-                    </span>
-                  )}
+                  <AvatarImage
+                    src={page.pictureUrl}
+                    alt={page.name}
+                    fallback={
+                      <span className="avatar-placeholder">
+                        {page.name.charAt(0).toUpperCase()}
+                      </span>
+                    }
+                  />
                 </div>
                 <div className="item-details">
                   <span className="item-name">{page.name}</span>
