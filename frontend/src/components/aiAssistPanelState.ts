@@ -2,25 +2,95 @@ import { type MediaType } from '../api/media'
 
 export type AiAssistTab = 'text' | 'media' | 'translate'
 
+export interface AiAssistMediaItem {
+  assetUrl?: string | null
+  mediaType?: MediaType | null
+}
+
+export type MediaAiUnsupportedReason = 'no-media' | 'multiple-media' | 'video' | 'unsupported'
+
 export interface AiAssistAvailability {
   showMediaTab: boolean
   showImageActions: boolean
+  unsupportedReason: MediaAiUnsupportedReason | null
 }
 
-export function getAiAssistAvailability(mediaType: MediaType | null | undefined): AiAssistAvailability {
+function normalizeMediaItems(mediaItems: AiAssistMediaItem[] | null | undefined): AiAssistMediaItem[] {
+  return (mediaItems ?? []).filter((item) => item != null)
+}
+
+function hasAssetUrl(item: AiAssistMediaItem): boolean {
+  return typeof item.assetUrl === 'string' && item.assetUrl.trim().length > 0
+}
+
+export function getMediaAiUnsupportedReason(
+  mediaItems: AiAssistMediaItem[] | null | undefined
+): MediaAiUnsupportedReason | null {
+  const normalizedMediaItems = normalizeMediaItems(mediaItems)
+
+  if (normalizedMediaItems.length === 0) {
+    return 'no-media'
+  }
+
+  if (normalizedMediaItems.length !== 1) {
+    return 'multiple-media'
+  }
+
+  const [mediaItem] = normalizedMediaItems
+
+  if (!hasAssetUrl(mediaItem)) {
+    return 'unsupported'
+  }
+
+  if (mediaItem.mediaType === 'Video') {
+    return 'video'
+  }
+
+  if (mediaItem.mediaType !== 'Image') {
+    return 'unsupported'
+  }
+
+  return null
+}
+
+export function isMediaAiSupported(mediaItems: AiAssistMediaItem[] | null | undefined): boolean {
+  return getMediaAiUnsupportedReason(mediaItems) === null
+}
+
+export function shouldShowMediaTab(mediaItems: AiAssistMediaItem[] | null | undefined): boolean {
+  return isMediaAiSupported(mediaItems)
+}
+
+export function getSupportedSingleImageMediaItem(
+  mediaItems: AiAssistMediaItem[] | null | undefined
+): AiAssistMediaItem | null {
+  if (!isMediaAiSupported(mediaItems)) {
+    return null
+  }
+
+  const [mediaItem] = normalizeMediaItems(mediaItems)
+  return mediaItem ?? null
+}
+
+export function getAiAssistAvailability(mediaItems: AiAssistMediaItem[] | null | undefined): AiAssistAvailability {
+  const isSupported = isMediaAiSupported(mediaItems)
+
   return {
-    showMediaTab: mediaType !== 'Video',
-    showImageActions: mediaType === 'Image',
+    showMediaTab: isSupported,
+    showImageActions: isSupported,
+    unsupportedReason: getMediaAiUnsupportedReason(mediaItems),
   }
 }
 
-export function getSupportedAiAssistTab(
+export function normalizeActiveAiTab(
   activeTab: AiAssistTab,
-  mediaType: MediaType | null | undefined
+  mediaItems: AiAssistMediaItem[] | null | undefined
 ): AiAssistTab {
-  if (activeTab === 'media' && mediaType === 'Video') {
+  if (activeTab === 'media' && !isMediaAiSupported(mediaItems)) {
     return 'text'
   }
 
   return activeTab
 }
+
+export const getSupportedAiAssistTab = normalizeActiveAiTab

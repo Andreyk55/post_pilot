@@ -339,13 +339,17 @@ export type AiMediaAction =
   | 'VideoCaptionIdeas'
   | 'ThumbnailSuggest'
 
-export type AiAssetType = 'image' | 'video'
+export type AiAssetType = 'image' | 'video' | 'unknown'
+
+export interface AiMediaItemReference {
+  assetUrl: string
+  assetType: AiAssetType
+}
 
 export interface AiMediaRequest {
   action: AiMediaAction
   platform: AiPlatform
-  assetUrl: string
-  assetType: AiAssetType
+  mediaItems: AiMediaItemReference[]
   text?: string
   language?: string
 }
@@ -424,60 +428,55 @@ export const aiMediaApi = {
 
   async imageCaptionIdeas(
     platform: AiPlatform,
-    assetUrl: string,
+    mediaItems: AiMediaItemReference[],
     text?: string
   ): Promise<AiMediaCaptionIdeasResponse> {
     const response = await this.processMedia({
       action: 'CaptionIdeas',
       platform,
-      assetUrl,
-      assetType: 'image',
+      mediaItems,
       text,
     })
     return response as AiMediaCaptionIdeasResponse
   },
 
-  async imageQualityCheck(assetUrl: string): Promise<AiImageQualityCheckResponse> {
+  async imageQualityCheck(mediaItems: AiMediaItemReference[]): Promise<AiImageQualityCheckResponse> {
     const response = await this.processMedia({
       action: 'ImageQualityCheck',
       platform: 'Facebook', // Platform doesn't matter for quality check
-      assetUrl,
-      assetType: 'image',
+      mediaItems,
     })
     return response as AiImageQualityCheckResponse
   },
 
-  async altText(assetUrl: string): Promise<AiAltTextResponse> {
+  async altText(mediaItems: AiMediaItemReference[]): Promise<AiAltTextResponse> {
     const response = await this.processMedia({
       action: 'AltText',
       platform: 'Facebook', // Platform doesn't matter for alt text
-      assetUrl,
-      assetType: 'image',
+      mediaItems,
     })
     return response as AiAltTextResponse
   },
 
   async videoCaptionIdeas(
     platform: AiPlatform,
-    assetUrl: string,
+    mediaItems: AiMediaItemReference[],
     text?: string
   ): Promise<AiMediaCaptionIdeasResponse> {
     const response = await this.processMedia({
       action: 'VideoCaptionIdeas',
       platform,
-      assetUrl,
-      assetType: 'video',
+      mediaItems,
       text,
     })
     return response as AiMediaCaptionIdeasResponse
   },
 
-  async thumbnailSuggest(assetUrl: string): Promise<AiThumbnailSuggestResponse> {
+  async thumbnailSuggest(mediaItems: AiMediaItemReference[]): Promise<AiThumbnailSuggestResponse> {
     const response = await this.processMedia({
       action: 'ThumbnailSuggest',
       platform: 'Facebook', // Platform doesn't matter for thumbnails
-      assetUrl,
-      assetType: 'video',
+      mediaItems,
     })
     return response as AiThumbnailSuggestResponse
   },

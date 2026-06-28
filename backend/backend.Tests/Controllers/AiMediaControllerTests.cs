@@ -47,7 +47,11 @@ public class AiMediaControllerTests
             .ReturnsAsync(expected);
 
         var result = await _controller.ProcessMedia(
-            new AiMediaRequest(AiMediaAction.CaptionIdeas, AiPlatform.Facebook, "media/image.jpg", "image", "hello"),
+            new AiMediaRequest(
+                AiMediaAction.CaptionIdeas,
+                AiPlatform.Facebook,
+                new List<AiMediaItemReference> { new("media/image.jpg", "image") },
+                "hello"),
             CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result);
@@ -63,7 +67,11 @@ public class AiMediaControllerTests
     public async Task ProcessMedia_VideoCaptionIdeas_ReturnsEmptyResponseWithoutCallingService()
     {
         var result = await _controller.ProcessMedia(
-            new AiMediaRequest(AiMediaAction.VideoCaptionIdeas, AiPlatform.Facebook, "media/video.mp4", "video", "hello"),
+            new AiMediaRequest(
+                AiMediaAction.VideoCaptionIdeas,
+                AiPlatform.Facebook,
+                new List<AiMediaItemReference> { new("media/video.mp4", "video") },
+                "hello"),
             CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result);
@@ -74,6 +82,94 @@ public class AiMediaControllerTests
         _mediaAiServiceMock.Verify(
             x => x.GenerateVideoCaptionIdeasAsync(It.IsAny<string>(), It.IsAny<AiPlatform>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    [Fact]
+    public async Task ProcessMedia_VideoImageAction_ReturnsUnsupportedResponseWithoutCallingService()
+    {
+        var result = await _controller.ProcessMedia(
+            new AiMediaRequest(
+                AiMediaAction.CaptionIdeas,
+                AiPlatform.Facebook,
+                new List<AiMediaItemReference> { new("media/video.mp4", "video") },
+                "hello"),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var response = Assert.IsType<AiMediaUnsupportedResponse>(ok.Value);
+        Assert.Equal("Media AI supports a single image only.", response.Message);
+
+        _rateLimiterMock.Verify(x => x.TryAcquireAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _mediaAiServiceMock.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task ProcessMedia_MultipleImages_ReturnsUnsupportedResponseWithoutCallingService()
+    {
+        var result = await _controller.ProcessMedia(
+            new AiMediaRequest(
+                AiMediaAction.AltText,
+                AiPlatform.Facebook,
+                new List<AiMediaItemReference>
+                {
+                    new("media/image-1.jpg", "image", 0),
+                    new("media/image-2.jpg", "image", 1),
+                }),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var response = Assert.IsType<AiMediaUnsupportedResponse>(ok.Value);
+        Assert.Equal("Media AI supports a single image only.", response.Message);
+
+        _rateLimiterMock.Verify(x => x.TryAcquireAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _mediaAiServiceMock.Verify(
+            x => x.GenerateAltTextAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _mediaAiServiceMock.Verify(
+            x => x.GenerateImageCaptionIdeasAsync(It.IsAny<string>(), It.IsAny<AiPlatform>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ProcessMedia_NoMedia_ReturnsValidationProblemWithoutCallingService()
+    {
+        var result = await _controller.ProcessMedia(
+            new AiMediaRequest(
+                AiMediaAction.ImageQualityCheck,
+                AiPlatform.Facebook,
+                new List<AiMediaItemReference>()),
+            CancellationToken.None);
+
+        var objectResult = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal(400, objectResult.StatusCode);
+        var details = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
+        Assert.Contains("mediaItems", details.Errors.Keys);
+
+        _rateLimiterMock.Verify(x => x.TryAcquireAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _mediaAiServiceMock.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task ProcessMedia_MixedMedia_ReturnsUnsupportedResponseWithoutCallingService()
+    {
+        var result = await _controller.ProcessMedia(
+            new AiMediaRequest(
+                AiMediaAction.CaptionIdeas,
+                AiPlatform.Facebook,
+                new List<AiMediaItemReference>
+                {
+                    new("media/image.jpg", "image", 0),
+                    new("media/video.mp4", "video", 1),
+                },
+                "hello"),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var response = Assert.IsType<AiMediaUnsupportedResponse>(ok.Value);
+        Assert.Equal("Media AI supports a single image only.", response.Message);
+
+        _rateLimiterMock.Verify(x => x.TryAcquireAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _mediaAiServiceMock.VerifyNoOtherCalls();
     }
 
     [Fact]

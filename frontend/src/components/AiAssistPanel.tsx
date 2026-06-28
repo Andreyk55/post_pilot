@@ -20,8 +20,11 @@ import { type VoiceProfileSummary } from '../api/voiceProfiles'
 import { type MediaType } from '../api/media'
 import {
   getAiAssistAvailability,
-  getSupportedAiAssistTab,
+  getMediaAiUnsupportedReason,
+  getSupportedSingleImageMediaItem,
+  normalizeActiveAiTab,
   type AiAssistTab,
+  type AiAssistMediaItem,
 } from './aiAssistPanelState'
 import { stripHashtags } from '../utils/textUtils'
 import './AiAssistPanel.css'
@@ -50,6 +53,7 @@ interface AiAssistPanelProps {
   // Media props
   mediaUrl?: string | null
   mediaType?: MediaType | null
+  mediaItems?: AiAssistMediaItem[]
   onSelectThumbnail?: (thumbnailUrl: string) => void
   // Voice Profile props
   voiceProfiles: VoiceProfileSummary[]
@@ -120,6 +124,8 @@ interface ThumbnailsResult {
 
 type MediaResult = MediaCaptionsResult | QualityResult | AltTextResult | ThumbnailsResult
 
+const MEDIA_AI_UNSUPPORTED_MESSAGE = 'Media AI supports a single image only. Video and multi-photo posts are not supported yet.'
+
 const toneOptions: { value: AiTone; label: string }[] = [
   { value: 'Professional', label: 'Professional' },
   { value: 'Casual', label: 'Casual' },
@@ -167,6 +173,7 @@ export function AiAssistPanel({
   platform: platformProp,
   mediaUrl,
   mediaType,
+  mediaItems,
   onSelectThumbnail,
   voiceProfiles,
   onVoiceProfileModalOpen,
@@ -238,8 +245,18 @@ export function AiAssistPanel({
   }
 
   const isTextEmpty = !text.trim()
-  const hasMedia = !!mediaUrl && mediaType && mediaType !== 'None'
-  const { showMediaTab, showImageActions } = getAiAssistAvailability(mediaType)
+  const resolvedMediaItems: AiAssistMediaItem[] = mediaItems && mediaItems.length > 0
+    ? mediaItems
+    : (mediaUrl && mediaType && mediaType !== 'None'
+        ? [{ assetUrl: mediaUrl, mediaType }]
+        : [])
+  const mediaSelectionKey = resolvedMediaItems
+    .map((item) => `${item.assetUrl ?? ''}:${item.mediaType ?? 'unknown'}`)
+    .join('|')
+  const mediaAiUnsupportedReason = getMediaAiUnsupportedReason(resolvedMediaItems)
+  const supportedMediaItem = getSupportedSingleImageMediaItem(resolvedMediaItems)
+  const hasUploadedMedia = resolvedMediaItems.length > 0
+  const { showMediaTab, showImageActions } = getAiAssistAvailability(resolvedMediaItems)
 
   const generatedVariantCount =
     textResult?.type === 'generated'
@@ -247,13 +264,21 @@ export function AiAssistPanel({
       : 0
 
   useEffect(() => {
-    const nextActiveTab = getSupportedAiAssistTab(activeTab, mediaType)
+    const nextActiveTab = normalizeActiveAiTab(activeTab, resolvedMediaItems)
     if (nextActiveTab !== activeTab) {
       setActiveTab(nextActiveTab)
       setMediaResult(null)
       setError(null)
     }
-  }, [activeTab, mediaType])
+  }, [activeTab, mediaSelectionKey])
+
+  useEffect(() => {
+    setMediaResult(null)
+
+    if (mediaAiUnsupportedReason !== null || activeTab === 'media') {
+      setError(null)
+    }
+  }, [activeTab, mediaSelectionKey, mediaAiUnsupportedReason])
 
   // Text tab handlers
   const handleTextAction = async (action: () => Promise<void>) => {
@@ -276,7 +301,7 @@ export function AiAssistPanel({
   // Media tab handlers
   const handleMediaAction = async (action: () => Promise<void>) => {
     // Block all AI actions when disabled (no connected account/page)
-    if (isDisabled || !hasMedia || !showImageActions) return
+    if (isDisabled || !supportedMediaItem || !showImageActions) return
 
     setLoading(true)
     setError(null)
@@ -458,19 +483,33 @@ export function AiAssistPanel({
   const handleImageCaptionIdeas = () =>
     handleMediaAction(async () => {
       if (!platform) return // TypeScript guard - platform is required
-      const response = await aiMediaApi.imageCaptionIdeas(platform, mediaUrl!, text || undefined)
+      const mediaAssetUrl = supportedMediaItem?.assetUrl
+      if (!mediaAssetUrl) return
+      const response = await aiMediaApi.imageCaptionIdeas(
+        platform,
+        [{ assetUrl: mediaAssetUrl, assetType: 'image' }],
+        text || undefined
+      )
       setMediaResult({ type: 'captions', variants: response.variants })
     })
 
   const handleImageQualityCheck = () =>
     handleMediaAction(async () => {
-      const response = await aiMediaApi.imageQualityCheck(mediaUrl!)
+      const mediaAssetUrl = supportedMediaItem?.assetUrl
+      if (!mediaAssetUrl) return
+      const response = await aiMediaApi.imageQualityCheck([
+        { assetUrl: mediaAssetUrl, assetType: 'image' },
+      ])
       setMediaResult({ type: 'quality', score: response.score, issues: response.issues })
     })
 
   const handleAltText = () =>
     handleMediaAction(async () => {
-      const response = await aiMediaApi.altText(mediaUrl!)
+      const mediaAssetUrl = supportedMediaItem?.assetUrl
+      if (!mediaAssetUrl) return
+      const response = await aiMediaApi.altText([
+        { assetUrl: mediaAssetUrl, assetType: 'image' },
+      ])
       setMediaResult({ type: 'alttext', altText: response.altText })
     })
 
@@ -544,8 +583,8 @@ export function AiAssistPanel({
 
   // Get media filename for display
   const getMediaFileName = (): string => {
-    if (!mediaUrl) return ''
-    const parts = mediaUrl.split('/')
+    if (!supportedMediaItem?.assetUrl) return ''
+    const parts = supportedMediaItem.assetUrl.split('/')
     return parts[parts.length - 1] || 'media'
   }
 
@@ -640,6 +679,10 @@ export function AiAssistPanel({
               </div>
             </div>
           </div>
+
+          {!isDisabled && mediaAiUnsupportedReason !== null && mediaAiUnsupportedReason !== 'no-media' && (
+            <div className="ai-empty-state">{MEDIA_AI_UNSUPPORTED_MESSAGE}</div>
+          )}
 
           {/* Text Tab Content */}
           {activeTab === 'text' && (
@@ -879,10 +922,10 @@ export function AiAssistPanel({
         <>
           {/* disabled state message handled by top-level banner */}
           {!disabled && noPlatform && <div className="ai-empty-state">Select a platform to enable media AI features</div>}
-          {!isDisabled && hasMedia && (
+          {!isDisabled && supportedMediaItem && (
             <div className="ai-media-info">
-              <span className={`media-type-indicator ${showImageActions ? 'image' : 'video'}`}>
-                {showImageActions ? 'Photo' : 'Video'}
+              <span className="media-type-indicator image">
+                Photo
               </span>
               <span className="media-filename">{getMediaFileName()}</span>
             </div>
@@ -895,7 +938,7 @@ export function AiAssistPanel({
                 type="button"
                 className="ai-action-btn"
                 onClick={handleImageCaptionIdeas}
-                disabled={isDisabled || !hasMedia || loading}
+                disabled={isDisabled || !supportedMediaItem || loading}
                 title="Generate caption ideas based on image"
               >
                 Caption ideas
@@ -904,7 +947,7 @@ export function AiAssistPanel({
                 type="button"
                 className="ai-action-btn"
                 onClick={handleImageQualityCheck}
-                disabled={isDisabled || !hasMedia || loading}
+                disabled={isDisabled || !supportedMediaItem || loading}
                 title="Check image quality for social media"
               >
                 Quality check
@@ -913,7 +956,7 @@ export function AiAssistPanel({
                 type="button"
                 className="ai-action-btn"
                 onClick={handleAltText}
-                disabled={isDisabled || !hasMedia || loading}
+                disabled={isDisabled || !supportedMediaItem || loading}
                 title="Generate accessibility alt text"
               >
                 Alt text
@@ -921,7 +964,7 @@ export function AiAssistPanel({
             </div>
           )}
 
-          {!isDisabled && !hasMedia && (
+          {!isDisabled && !hasUploadedMedia && (
             <div className="ai-empty-state">Upload an image to enable media AI features</div>
           )}
         </>

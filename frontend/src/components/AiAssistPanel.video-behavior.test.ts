@@ -1,25 +1,72 @@
 import { describe, expect, it } from 'vitest'
 import aiAssistPanelSource from './AiAssistPanel.tsx?raw'
-import { getAiAssistAvailability, getSupportedAiAssistTab } from './aiAssistPanelState'
+import {
+  getAiAssistAvailability,
+  getMediaAiUnsupportedReason,
+  getSupportedSingleImageMediaItem,
+  normalizeActiveAiTab,
+  shouldShowMediaTab,
+} from './aiAssistPanelState'
+
+const singleImage = [{ assetUrl: 'media/photo.jpg', mediaType: 'Image' as const }]
+const multipleImages = [
+  { assetUrl: 'media/photo-1.jpg', mediaType: 'Image' as const },
+  { assetUrl: 'media/photo-2.jpg', mediaType: 'Image' as const },
+]
+const singleVideo = [{ assetUrl: 'media/video.mp4', mediaType: 'Video' as const }]
+const mixedMedia = [
+  { assetUrl: 'media/photo.jpg', mediaType: 'Image' as const },
+  { assetUrl: 'media/video.mp4', mediaType: 'Video' as const },
+]
 
 describe('AiAssistPanel video media behavior', () => {
-  it('shows the Media tab and image actions for image uploads', () => {
-    expect(getAiAssistAvailability('Image')).toEqual({
-      showMediaTab: true,
-      showImageActions: true,
-    })
-  })
-
-  it('hides the Media tab and media actions for video uploads', () => {
-    expect(getAiAssistAvailability('Video')).toEqual({
+  it('hides the Media tab when no media is uploaded', () => {
+    expect(getAiAssistAvailability([])).toEqual({
       showMediaTab: false,
       showImageActions: false,
+      unsupportedReason: 'no-media',
     })
   })
 
-  it('moves the active tab back to Text when video replaces image media', () => {
-    expect(getSupportedAiAssistTab('media', 'Video')).toBe('text')
-    expect(getSupportedAiAssistTab('translate', 'Video')).toBe('translate')
+  it('shows the Media tab and image actions for one uploaded image', () => {
+    expect(getAiAssistAvailability(singleImage)).toEqual({
+      showMediaTab: true,
+      showImageActions: true,
+      unsupportedReason: null,
+    })
+    expect(shouldShowMediaTab(singleImage)).toBe(true)
+    expect(getSupportedSingleImageMediaItem(singleImage)).toEqual(singleImage[0])
+  })
+
+  it('hides the Media tab and media actions for multiple images', () => {
+    expect(getAiAssistAvailability(multipleImages)).toEqual({
+      showMediaTab: false,
+      showImageActions: false,
+      unsupportedReason: 'multiple-media',
+    })
+    expect(getMediaAiUnsupportedReason(multipleImages)).toBe('multiple-media')
+  })
+
+  it('hides the Media tab and media actions for a single video upload', () => {
+    expect(getAiAssistAvailability(singleVideo)).toEqual({
+      showMediaTab: false,
+      showImageActions: false,
+      unsupportedReason: 'video',
+    })
+    expect(getMediaAiUnsupportedReason(singleVideo)).toBe('video')
+  })
+
+  it('moves the active tab back to Text when media becomes unsupported', () => {
+    expect(normalizeActiveAiTab('media', multipleImages)).toBe('text')
+    expect(normalizeActiveAiTab('media', singleVideo)).toBe('text')
+    expect(normalizeActiveAiTab('translate', singleVideo)).toBe('translate')
+    expect(normalizeActiveAiTab('media', mixedMedia)).toBe('text')
+  })
+
+  it('keeps unsupported media helper copy and action guards in the panel source', () => {
+    expect(aiAssistPanelSource).toMatch(/Media AI supports a single image only\. Video and multi-photo posts are not supported yet\./)
+    expect(aiAssistPanelSource).toMatch(/if \(isDisabled \|\| !supportedMediaItem \|\| !showImageActions\) return/)
+    expect(aiAssistPanelSource).toMatch(/setMediaResult\(null\)/)
   })
 
   it('does not retain frontend video AI processing paths or video media errors', () => {

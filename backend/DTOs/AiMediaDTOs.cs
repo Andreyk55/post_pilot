@@ -13,13 +13,21 @@ public enum AiMediaAction
 }
 
 /// <summary>
+/// A referenced media item for AI assistance.
+/// </summary>
+public record AiMediaItemReference(
+    string AssetUrl,
+    string AssetType,
+    int? Order = null
+);
+
+/// <summary>
 /// Request for AI media assistance.
 /// </summary>
 public record AiMediaRequest(
     AiMediaAction Action,
     AiPlatform Platform,
-    string AssetUrl,
-    string AssetType,
+    List<AiMediaItemReference> MediaItems,
     string? Text = null,
     string Language = "en"
 );
@@ -28,6 +36,14 @@ public record AiMediaRequest(
 /// Base response for media AI actions.
 /// </summary>
 public abstract record AiMediaResponseBase(AiMediaAction Action);
+
+/// <summary>
+/// Response returned when media AI is not available for the requested media selection.
+/// </summary>
+public record AiMediaUnsupportedResponse(
+    AiMediaAction Action,
+    string Message
+) : AiMediaResponseBase(Action);
 
 /// <summary>
 /// A single caption variant suggestion for media.

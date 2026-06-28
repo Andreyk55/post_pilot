@@ -7,6 +7,7 @@ import { MediaUpload } from './MediaUpload'
 import { MultiMediaUpload, type UploadedMediaItem } from './MultiMediaUpload'
 import type { CreatePostMediaItem, PostType, InstagramUserTag } from '../api/posts'
 import { AiAssistPanel, type StickyLanguageState } from './AiAssistPanel'
+import { type AiAssistMediaItem } from './aiAssistPanelState'
 import { SuggestedTimes } from './SuggestedTimes'
 import { type VoiceProfileSummary } from '../api/voiceProfiles'
 import { InstagramMention } from './InstagramMention'
@@ -136,6 +137,15 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
   // Use ref to hold latest content to avoid stale closures
   const contentRef = useRef<string>(content)
   contentRef.current = content
+
+  const aiAssistMediaItems: AiAssistMediaItem[] = carouselItems.length > 0
+    ? carouselItems.map((item) => ({
+        assetUrl: item.storageKey,
+        mediaType: item.mediaType,
+      }))
+    : (mediaUrl && mediaType && mediaType !== 'None'
+        ? [{ assetUrl: mediaUrl, mediaType }]
+        : [])
 
   // Ref for caption textarea (used by InstagramMention for cursor position)
   const captionTextareaRef = useRef<HTMLTextAreaElement>(null)
@@ -810,6 +820,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
               onAppendText={(text) => setContent((prev) => prev + text)}
               mediaUrl={mediaUrl}
               mediaType={mediaType}
+              mediaItems={aiAssistMediaItems}
               onSelectThumbnail={(url) => setSelectedThumbnailUrl(url)}
               voiceProfiles={voiceProfiles}
               onVoiceProfileModalOpen={onVoiceProfileModalOpen}

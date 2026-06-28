@@ -138,6 +138,11 @@ describe('SchedulePost AI sections', () => {
     expect(aiAssistPanelSource).toMatch(/Regenerate/)
   })
 
+  it('passes the selected media collection into AiAssistPanel so Media AI can reject multi-photo and video states', () => {
+    expect(schedulePostSource).toMatch(/const aiAssistMediaItems: AiAssistMediaItem\[\] = carouselItems.length > 0/)
+    expect(schedulePostSource).toMatch(/mediaItems=\{aiAssistMediaItems\}/)
+  })
+
   it('renames Suggest Best Time to AI Best Time', () => {
     expect(suggestedTimesSource).toMatch(/AI Best Time/)
     expect(suggestedTimesSource).not.toMatch(/Suggest Best Time/)

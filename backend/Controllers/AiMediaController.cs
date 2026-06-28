@@ -36,6 +36,7 @@ public class AiMediaController : ControllerBase
     [ProducesResponseType(typeof(AiImageQualityCheckResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(AiAltTextResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(AiThumbnailSuggestResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AiMediaUnsupportedResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status413PayloadTooLarge)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
@@ -52,11 +53,24 @@ public class AiMediaController : ControllerBase
             return ValidationProblem(new ValidationProblemDetails(validationErrors));
         }
 
-        if (IsVideoAiDisabled(request.AssetType, request.Action))
+        var mediaSupport = ValidateMediaAiSupported(request);
+        if (!mediaSupport.IsSupported)
         {
-            _logger.LogInformation("Video AI action {Action} is disabled for asset {AssetUrl}", request.Action, request.AssetUrl);
-            return Ok(CreateDisabledVideoResponse(request.Action));
+            if (mediaSupport.ReturnDisabledVideoResponse)
+            {
+                _logger.LogInformation("Video AI action {Action} is disabled for asset {AssetUrl}", request.Action, mediaSupport.MediaItem?.AssetUrl);
+                return Ok(CreateDisabledVideoResponse(request.Action));
+            }
+
+            _logger.LogInformation(
+                "Media AI is unsupported for action {Action}. Reason={Reason}",
+                request.Action,
+                mediaSupport.Reason);
+
+            return Ok(new AiMediaUnsupportedResponse(request.Action, "Media AI supports a single image only."));
         }
+
+        var mediaItem = mediaSupport.MediaItem!;
 
         // Check rate limit (thumbnail suggest is free, doesn't use AI)
         if (request.Action != AiMediaAction.ThumbnailSuggest)
@@ -79,7 +93,7 @@ public class AiMediaController : ControllerBase
             {
                 AiMediaAction.CaptionIdeas =>
                     Ok(await _mediaAiService.GenerateImageCaptionIdeasAsync(
-                        request.AssetUrl,
+                        mediaItem.AssetUrl,
                         request.Platform,
                         request.Text,
                         request.Language,
@@ -87,17 +101,17 @@ public class AiMediaController : ControllerBase
 
                 AiMediaAction.ImageQualityCheck =>
                     Ok(await _mediaAiService.CheckImageQualityAsync(
-                        request.AssetUrl,
+                        mediaItem.AssetUrl,
                         cancellationToken)),
 
                 AiMediaAction.AltText =>
                     Ok(await _mediaAiService.GenerateAltTextAsync(
-                        request.AssetUrl,
+                        mediaItem.AssetUrl,
                         cancellationToken)),
 
                 AiMediaAction.VideoCaptionIdeas =>
                     Ok(await _mediaAiService.GenerateVideoCaptionIdeasAsync(
-                        request.AssetUrl,
+                        mediaItem.AssetUrl,
                         request.Platform,
                         request.Text,
                         request.Language,
@@ -105,7 +119,7 @@ public class AiMediaController : ControllerBase
 
                 AiMediaAction.ThumbnailSuggest =>
                     Ok(await _mediaAiService.SuggestThumbnailsAsync(
-                        request.AssetUrl,
+                        mediaItem.AssetUrl,
                         cancellationToken)),
 
                 _ => BadRequest(new { error = $"Unknown action: {request.Action}" })
@@ -121,7 +135,7 @@ public class AiMediaController : ControllerBase
         catch (GeminiApiException ex) when (ex.StatusCode == 413 || ex.StatusCode == 400)
         {
             _logger.LogWarning(ex, "Gemini media error for asset {AssetUrl}: Status={StatusCode}, Message={Message}",
-                request.AssetUrl, ex.StatusCode, ex.Message);
+                mediaItem.AssetUrl, ex.StatusCode, ex.Message);
 
             return Problem(
                 title: "Media processing error",
@@ -155,7 +169,7 @@ public class AiMediaController : ControllerBase
         }
         catch (FileNotFoundException ex)
         {
-            _logger.LogWarning(ex, "Asset not found: {AssetUrl}", request.AssetUrl);
+            _logger.LogWarning(ex, "Asset not found: {AssetUrl}", mediaItem.AssetUrl);
 
             return Problem(
                 title: "Asset not found",
@@ -213,37 +227,31 @@ public class AiMediaController : ControllerBase
     {
         var errors = new Dictionary<string, string[]>();
 
-        if (string.IsNullOrWhiteSpace(request.AssetUrl))
+        if (request.MediaItems is null || request.MediaItems.Count == 0)
         {
-            errors["assetUrl"] = new[] { "Asset URL is required." };
+            errors["mediaItems"] = new[] { "At least one media item is required." };
         }
 
-        if (string.IsNullOrWhiteSpace(request.AssetType))
+        if (request.MediaItems is not null)
         {
-            errors["assetType"] = new[] { "Asset type is required." };
-        }
-        else if (request.AssetType.ToLower() != "image" && request.AssetType.ToLower() != "video")
-        {
-            errors["assetType"] = new[] { "Asset type must be 'image' or 'video'." };
-        }
-
-        // Validate action is appropriate for asset type
-        if (!string.IsNullOrWhiteSpace(request.AssetType))
-        {
-            var isImage = request.AssetType.ToLower() == "image";
-            var isVideo = request.AssetType.ToLower() == "video";
-
-            var imageOnlyActions = new[] { AiMediaAction.CaptionIdeas, AiMediaAction.ImageQualityCheck, AiMediaAction.AltText };
-            var videoOnlyActions = new[] { AiMediaAction.VideoCaptionIdeas, AiMediaAction.ThumbnailSuggest };
-
-            if (isImage && videoOnlyActions.Contains(request.Action))
+            for (var index = 0; index < request.MediaItems.Count; index++)
             {
-                errors["action"] = new[] { $"Action '{request.Action}' is only available for videos." };
-            }
+                var mediaItem = request.MediaItems[index];
 
-            if (isVideo && imageOnlyActions.Contains(request.Action))
-            {
-                errors["action"] = new[] { $"Action '{request.Action}' is only available for images." };
+                if (string.IsNullOrWhiteSpace(mediaItem.AssetUrl))
+                {
+                    errors[$"mediaItems[{index}].assetUrl"] = new[] { "Asset URL is required." };
+                }
+
+                if (string.IsNullOrWhiteSpace(mediaItem.AssetType))
+                {
+                    errors[$"mediaItems[{index}].assetType"] = new[] { "Asset type is required." };
+                }
+                else if (!mediaItem.AssetType.Equals("image", StringComparison.OrdinalIgnoreCase)
+                    && !mediaItem.AssetType.Equals("video", StringComparison.OrdinalIgnoreCase))
+                {
+                    errors[$"mediaItems[{index}].assetType"] = new[] { "Asset type must be 'image' or 'video'." };
+                }
             }
         }
 
@@ -266,10 +274,35 @@ public class AiMediaController : ControllerBase
         return errors;
     }
 
-    private static bool IsVideoAiDisabled(string assetType, AiMediaAction action)
+    private static MediaAiSupportResult ValidateMediaAiSupported(AiMediaRequest request)
     {
-        return assetType.Equals("video", StringComparison.OrdinalIgnoreCase)
-            && (action == AiMediaAction.VideoCaptionIdeas || action == AiMediaAction.ThumbnailSuggest);
+        if (request.MediaItems.Count != 1)
+        {
+            return MediaAiSupportResult.Unsupported("Media AI requires exactly one media item.");
+        }
+
+        var mediaItem = request.MediaItems[0];
+        if (mediaItem.AssetType.Equals("video", StringComparison.OrdinalIgnoreCase))
+        {
+            if (request.Action == AiMediaAction.VideoCaptionIdeas || request.Action == AiMediaAction.ThumbnailSuggest)
+            {
+                return MediaAiSupportResult.DisabledVideo(mediaItem);
+            }
+
+            return MediaAiSupportResult.Unsupported("Media AI does not support video media.");
+        }
+
+        if (!mediaItem.AssetType.Equals("image", StringComparison.OrdinalIgnoreCase))
+        {
+            return MediaAiSupportResult.Unsupported("Media AI only supports image media.");
+        }
+
+        if (request.Action == AiMediaAction.VideoCaptionIdeas || request.Action == AiMediaAction.ThumbnailSuggest)
+        {
+            return MediaAiSupportResult.Unsupported("Video AI actions are disabled.");
+        }
+
+        return MediaAiSupportResult.Supported(mediaItem);
     }
 
     private static AiMediaResponseBase CreateDisabledVideoResponse(AiMediaAction action)
@@ -280,5 +313,21 @@ public class AiMediaController : ControllerBase
             AiMediaAction.ThumbnailSuggest => new AiThumbnailSuggestResponse(action, new List<AiVideoFrame>()),
             _ => throw new ArgumentOutOfRangeException(nameof(action), action, "Action is not a disabled video action.")
         };
+    }
+
+    private sealed record MediaAiSupportResult(
+        bool IsSupported,
+        bool ReturnDisabledVideoResponse,
+        AiMediaItemReference? MediaItem,
+        string Reason)
+    {
+        public static MediaAiSupportResult Supported(AiMediaItemReference mediaItem)
+            => new(true, false, mediaItem, string.Empty);
+
+        public static MediaAiSupportResult DisabledVideo(AiMediaItemReference mediaItem)
+            => new(false, true, mediaItem, "Video AI is disabled.");
+
+        public static MediaAiSupportResult Unsupported(string reason)
+            => new(false, false, null, reason);
     }
 }
