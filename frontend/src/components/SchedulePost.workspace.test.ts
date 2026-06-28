@@ -10,6 +10,7 @@ import workspaceGuardSource from './WorkspaceGuard.tsx?raw'
 import workspaceSwitcherSource from './WorkspaceSwitcher.tsx?raw'
 import aiAssistPanelSource from './AiAssistPanel.tsx?raw'
 import suggestedTimesSource from './SuggestedTimes.tsx?raw'
+import composerEnabledSource from '../hooks/useComposerEnabled.ts?raw'
 
 /**
  * Product rule: workspace switching/creation/management is centralized in the
@@ -44,6 +45,23 @@ describe('WorkspaceContextBadge — read-only by default', () => {
 describe('SchedulePost — workspace selection stays in the sidebar', () => {
   it('renders the read-only workspace context badge ("Posting to")', () => {
     expect(schedulePostSource).toMatch(/<WorkspaceContextBadge\b[^>]*action="Posting to"/)
+  })
+
+  it('renders the page or account selector before Post Type', () => {
+    const metaChannelIndex = schedulePostSource.indexOf('<label>Meta Channel</label>')
+    const postTypeIndex = schedulePostSource.indexOf('<label>Post Type</label>')
+    const facebookPageIndex = schedulePostSource.indexOf('<label htmlFor="facebookPage">Facebook Page</label>')
+    const instagramAccountIndex = schedulePostSource.indexOf('<label htmlFor="instagramAccount">Instagram Account</label>')
+
+    expect(metaChannelIndex).toBeGreaterThan(-1)
+    expect(facebookPageIndex).toBeGreaterThan(metaChannelIndex)
+    expect(instagramAccountIndex).toBeGreaterThan(metaChannelIndex)
+    expect(postTypeIndex).toBeGreaterThan(facebookPageIndex)
+    expect(postTypeIndex).toBeGreaterThan(instagramAccountIndex)
+  })
+
+  it('keeps the Facebook target-selection warning copy aligned with the selector', () => {
+    expect(composerEnabledSource).toMatch(/Select a Facebook Page above to enable scheduling and AI features\./)
   })
 
   it('only exposes Meta channels in the platform selector', () => {

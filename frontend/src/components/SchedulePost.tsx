@@ -270,6 +270,8 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
   const isFacebookSelected = selectedPlatforms.includes('facebook')
   const isInstagramSelected = selectedPlatforms.includes('instagram')
   const isStory = postType === 'Story'
+  const showFacebookPageSelector = isFacebookSelected && connectedPages.length > 0
+  const showInstagramAccountSelector = isInstagramSelected && connectedInstagramAccounts.length > 0
 
   // Stories are only supported on Facebook and Instagram
   const isStoryPlatformSelected = isFacebookSelected || isInstagramSelected
@@ -659,7 +661,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
       )}
 
       <form onSubmit={handleSubmit}>
-        <div className="form-group">
+        <div className="form-group form-group--platform-select">
           <label>Meta Channel</label>
           {MAX_PLATFORMS_PER_POST === 1 && (
             <span className="hint-text">Choose 1 platform</span>
@@ -681,6 +683,57 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
             })}
           </div>
         </div>
+
+        {/* Facebook Page Selector - shown when Facebook is selected */}
+        {showFacebookPageSelector && (
+          <div className="form-group form-group--target-select">
+            <label htmlFor="facebookPage">Facebook Page</label>
+            {loadingPages ? (
+              <div className="loading-pages">Loading pages...</div>
+            ) : (
+              <select
+                id="facebookPage"
+                value={selectedPageId}
+                onChange={(e) => setSelectedPageId(e.target.value)}
+                className="page-select"
+                disabled={loadingPages}
+              >
+                <option value="">Select a page...</option>
+                {connectedPages.map(page => (
+                  <option key={page.id} value={page.id}>
+                    {page.name} {page.category && `(${page.category})`}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        )}
+
+        {/* Instagram Account Selector - shown when Instagram is selected */}
+        {showInstagramAccountSelector && (
+          <div className="form-group form-group--target-select">
+            <label htmlFor="instagramAccount">Instagram Account</label>
+            <span className="hint-text">Instagram {isStory ? 'Story' : 'Feed'}</span>
+            {loadingPages ? (
+              <div className="loading-pages">Loading accounts...</div>
+            ) : (
+              <select
+                id="instagramAccount"
+                value={selectedInstagramAccountId}
+                onChange={(e) => setSelectedInstagramAccountId(e.target.value)}
+                className="page-select"
+                disabled={loadingPages}
+              >
+                <option value="">Select an account...</option>
+                {connectedInstagramAccounts.map(account => (
+                  <option key={account.id} value={account.id}>
+                    @{account.username} {account.pageName && `(${account.pageName})`}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        )}
 
         {/* Post Type Toggle - Feed/Story (only for FB/IG) */}
         {isStoryPlatformSelected && (
@@ -718,57 +771,6 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
                 Story
               </button>
             </div>
-          </div>
-        )}
-
-        {/* Facebook Page Selector - shown when Facebook is selected */}
-        {isFacebookSelected && connectedPages.length > 0 && (
-          <div className="form-group">
-            <label htmlFor="facebookPage">Facebook Page</label>
-            {loadingPages ? (
-              <div className="loading-pages">Loading pages...</div>
-            ) : (
-              <select
-                id="facebookPage"
-                value={selectedPageId}
-                onChange={(e) => setSelectedPageId(e.target.value)}
-                className="page-select"
-                disabled={loadingPages}
-              >
-                <option value="">Select a page...</option>
-                {connectedPages.map(page => (
-                  <option key={page.id} value={page.id}>
-                    {page.name} {page.category && `(${page.category})`}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-        )}
-
-        {/* Instagram Account Selector - shown when Instagram is selected */}
-        {isInstagramSelected && connectedInstagramAccounts.length > 0 && (
-          <div className="form-group">
-            <label htmlFor="instagramAccount">Instagram Account</label>
-            <span className="hint-text">Instagram {isStory ? 'Story' : 'Feed'}</span>
-            {loadingPages ? (
-              <div className="loading-pages">Loading accounts...</div>
-            ) : (
-              <select
-                id="instagramAccount"
-                value={selectedInstagramAccountId}
-                onChange={(e) => setSelectedInstagramAccountId(e.target.value)}
-                className="page-select"
-                disabled={loadingPages}
-              >
-                <option value="">Select an account...</option>
-                {connectedInstagramAccounts.map(account => (
-                  <option key={account.id} value={account.id}>
-                    @{account.username} {account.pageName && `(${account.pageName})`}
-                  </option>
-                ))}
-              </select>
-            )}
           </div>
         )}
 

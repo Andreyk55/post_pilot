@@ -414,13 +414,20 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   opacity: 1;
 }
 
-/* Dim and disable the content area (everything except platform selection) */
-.schedule-post.composer-disabled .form-group:not(:first-child) {
+/* Dim and disable the content area by default; selectively re-enable the
+   platform and target selectors so users can finish setup. */
+.schedule-post.composer-disabled .form-group {
   opacity: 0.5;
   pointer-events: none;
 }
 
 /* Keep platform selector fully interactive */
+.schedule-post.composer-disabled .form-group--platform-select,
+.schedule-post.composer-disabled .form-group--target-select {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .schedule-post.composer-disabled .platforms {
   opacity: 1;
   pointer-events: auto;
