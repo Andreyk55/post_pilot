@@ -21,6 +21,8 @@ import {
   shouldRenderSchedulePostMediaValidationError,
   type SchedulePostMediaValidationState,
 } from '../utils/schedulePostMediaValidation'
+import { isMetaChannelSwitch, isComposerDraftDirty } from '../utils/schedulePostChannelSwitch'
+import { ConfirmDialog } from './ConfirmDialog'
 import {
   getPostTextMaxChars,
   getPlatformDisplayName,
@@ -92,6 +94,10 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
   const [scheduledDate, setScheduledDate] = useState('')
   const [scheduledTime, setScheduledTime] = useState('')
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([])
+  // Pending Meta-channel switch awaiting confirmation. Holds the target platform id
+  // while the "this will clear your draft" dialog is open; null when no switch is
+  // pending. See handlePlatformClick / applyChannelSwitch.
+  const [pendingChannelSwitch, setPendingChannelSwitch] = useState<string | null>(null)
   const [connectedPages, setConnectedPages] = useState<ConnectedPage[]>([])
   const [connectedInstagramAccounts, setConnectedInstagramAccounts] = useState<ConnectedInstagramAccount[]>([])
   const [isAccountConnected, setIsAccountConnected] = useState(false)
@@ -354,6 +360,68 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
     setIsUploading(uploading)
   }
 
+  // Reset every field that belongs to the composer *draft* while leaving the
+  // connected accounts/pages/IG assets, the workspace, and the published posts list
+  // untouched. Bumping the child keys remounts MediaUpload / MultiMediaUpload /
+  // AiAssistPanel / SuggestedTimes, which invalidates their in-flight
+  // upload/validation ownership tokens — so a late response from the previous draft
+  // can't re-populate the cleared state after the remount. Does NOT change
+  // selectedPlatforms; callers decide what the new selection should be.
+  const resetComposerDraft = () => {
+    setContent('')
+    setPostType('Feed')
+    setScheduledDate('')
+    setScheduledTime('')
+    setSelectedPageId('')
+    setSelectedInstagramAccountId('')
+    setMediaUrl(null)
+    setMediaType(null)
+    setUploadError(null)
+    setUploadKey(k => k + 1)
+    setAiPanelKey(k => k + 1)
+    setSuggestedTimesKey(k => k + 1)
+    setSelectedThumbnailUrl(null)
+    clearSingleMediaValidationState()
+    setCarouselItems([])
+    setMediaTags([])
+    setCarouselMediaTags(new Map())
+    setSelectedCarouselItemIndex(0)
+    setStickyLanguage({ languageCode: 'unknown', confidence: 0, isReliable: false })
+  }
+
+  // Apply a (confirmed or clean) Meta-channel switch: clear the previous channel's
+  // draft, then make the newly chosen channel the sole selection.
+  const applyChannelSwitch = (platformId: string) => {
+    resetComposerDraft()
+    setSelectedPlatforms([platformId])
+  }
+
+  // Platform button entrypoint. Switching the Meta channel (Facebook <-> Instagram)
+  // clears the draft so media/text never carries over to the other channel; if the
+  // draft has unsaved work we confirm first. First selection and deselect keep the
+  // existing selectPlatform behavior (no draft reset).
+  const handlePlatformClick = (platformId: string) => {
+    if (isMetaChannelSwitch(selectedPlatforms, platformId)) {
+      const isDirty = isComposerDraftDirty({
+        content,
+        mediaUrl,
+        carouselItemCount: carouselItems.length,
+        mediaTagCount: mediaTags.length,
+        scheduledDate,
+        scheduledTime,
+        postType,
+        selectedThumbnailUrl,
+      })
+      if (isDirty) {
+        setPendingChannelSwitch(platformId)
+        return
+      }
+      applyChannelSwitch(platformId)
+      return
+    }
+    selectPlatform(platformId)
+  }
+
   // Instagram media validation: single image/video OR carousel (2+ images)
   const isInstagramMediaValid = !isInstagramSelected ||
     isInstagramCarousel ||
@@ -573,24 +641,8 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
   const hasFormData = content || mediaUrl || carouselItems.length > 0 || mediaTags.length > 0 || scheduledDate || scheduledTime || selectedPlatforms.length > 0 || isStory
 
   const handleReset = () => {
-    setContent('')
-    setPostType('Feed')
-    setScheduledDate('')
-    setScheduledTime('')
+    resetComposerDraft()
     setSelectedPlatforms([])
-    setSelectedPageId('')
-    setSelectedInstagramAccountId('')
-    setMediaUrl(null)
-    setMediaType(null)
-    setUploadError(null)
-    setUploadKey(k => k + 1)
-    setAiPanelKey(k => k + 1)
-    setSuggestedTimesKey(k => k + 1)
-    setSelectedThumbnailUrl(null)
-    clearSingleMediaValidationState()
-    setCarouselItems([])
-    setMediaTags([])
-    setStickyLanguage({ languageCode: 'unknown', confidence: 0, isReliable: false })
   }
 
   // Handle media validation changes from MediaUpload. The owner key ties each result
@@ -657,7 +709,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
                   key={platform.id}
                   type="button"
                   className={'platform-btn ' + (selectedPlatforms.includes(platform.id) ? 'selected' : '')}
-                  onClick={() => selectPlatform(platform.id)}
+                  onClick={() => handlePlatformClick(platform.id)}
                   title={platform.name}
                 >
                   <span className="platform-icon">{platform.icon}</span>
@@ -1080,6 +1132,25 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
           )}
         </div>
       </form>
+
+      {/* Confirm before discarding a dirty draft on a Meta-channel switch. Canceling
+          keeps the current channel and draft untouched; confirming clears the draft
+          and moves to the chosen channel. */}
+      <ConfirmDialog
+        isOpen={pendingChannelSwitch !== null}
+        title="Switch channel?"
+        message="Switching channels will clear your current draft. Continue?"
+        confirmText="Switch & clear"
+        cancelText="Keep draft"
+        confirmVariant="danger"
+        onConfirm={() => {
+          if (pendingChannelSwitch) {
+            applyChannelSwitch(pendingChannelSwitch)
+          }
+          setPendingChannelSwitch(null)
+        }}
+        onCancel={() => setPendingChannelSwitch(null)}
+      />
     </div>
   )
 }
