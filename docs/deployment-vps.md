@@ -286,6 +286,7 @@ that exact path). The build/push job should:
 
 - Build the image with `docker build --target api -t ghcr.io/<owner>/postpilot-api:<tag>` (and the same for `--target publisher` → `postpilot-worker`).
 - Use the shared `build/Dockerfile` at the repo root as the build context root.
+- The shared runtime stage in `build/Dockerfile` installs `ffmpeg`, which provides `ffprobe`, so both backend images carry that dependency. Do not install FFmpeg manually on the VPS host.
 - Push to GHCR.
 - SSH to the VPS and run `/opt/postpilot/prod/scripts/deploy.sh`.
 
@@ -294,6 +295,13 @@ Paths the workflow will need to know:
 - Build context: `backend/`
 - Compose file (on VPS): `/opt/postpilot/prod/docker-compose.yml`
 - Deploy script: `/opt/postpilot/prod/scripts/deploy.sh`
+
+After deployment, verify the binaries inside the running containers:
+
+```bash
+docker exec postpilot-api sh -lc 'which ffprobe && ffprobe -version'
+docker exec postpilot-worker sh -lc 'which ffprobe && ffprobe -version'
+```
 
 ## 12. Local development is separate
 

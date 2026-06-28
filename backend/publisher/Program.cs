@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Console;
 using PostPilot.Api.Data;
 using PostPilot.Api.Extensions;
 using PostPilot.Api.Services.Scheduling;
+using PostPilot.Api.Services.Validation;
 using PostPilot.Api.Settings;
 
 // ── PostPilot Worker — Generic Host, background-only process ──────────────
@@ -67,5 +68,16 @@ startupLogger.LogInformation(
 DatabaseStartup.LogDatabaseInfo(
     host.Services.GetRequiredService<IConfiguration>(),
     startupLogger);
+
+var videoMetadataExtractor = host.Services.GetRequiredService<IVideoMetadataExtractor>();
+var ffprobeAvailable = await videoMetadataExtractor.IsAvailableAsync();
+if (ffprobeAvailable)
+{
+    startupLogger.LogInformation("Video metadata extraction tool check passed: ffprobe is available on PATH or via Ffprobe:Path.");
+}
+else
+{
+    startupLogger.LogWarning("Video metadata extraction tool check failed: ffprobe is not available on PATH and Ffprobe:Path did not resolve.");
+}
 
 await host.RunAsync();

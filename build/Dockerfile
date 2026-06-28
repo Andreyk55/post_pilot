@@ -17,9 +17,16 @@ RUN dotnet publish PostPilot.Api.csproj               -c Release -o /app/publish
 # assets consistently (packages are already in the NuGet cache from restore above).
 RUN dotnet publish publisher/PostPilot.Publisher.csproj -c Release -o /app/publish/publisher
 
-# ── Stage 2 (target: api) ───────────────────────────────────────────────────
+# ── Stage 2: runtime base ───────────────────────────────────────────────────
+# Shared runtime base for both API and publisher images.
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime-base
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends ffmpeg \
+	&& rm -rf /var/lib/apt/lists/*
+
+# ── Stage 3 (target: api) ───────────────────────────────────────────────────
 # Runs the ASP.NET Core web server — controllers only, no background loop.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS api
+FROM runtime-base AS api
 WORKDIR /app
 
 COPY --from=build /app/publish/api ./
@@ -35,9 +42,9 @@ ENV ASPNETCORE_URLS=http://0.0.0.0:5122
 
 ENTRYPOINT ["dotnet", "PostPilot.Api.dll"]
 
-# ── Stage 3 (target: publisher) ─────────────────────────────────────────────
+# ── Stage 4 (target: publisher) ─────────────────────────────────────────────
 # Runs the publishing background loop only — no HTTP endpoints, no migrations.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS publisher
+FROM runtime-base AS publisher
 WORKDIR /app
 
 COPY --from=build /app/publish/publisher ./

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Console;
 using Microsoft.Extensions.Options;
 using PostPilot.Api;
 using PostPilot.Api.Data;
+using PostPilot.Api.Services.Validation;
 using PostPilot.Api.Services.Ai;
 using PostPilot.Api.Settings;
 
@@ -74,6 +75,17 @@ var app = builder.Build();
         storageOpts.UseSSL,
         !string.IsNullOrEmpty(storageOpts.AccessKey),
         !string.IsNullOrEmpty(storageOpts.SecretKey));
+
+    var videoMetadataExtractor = app.Services.GetRequiredService<IVideoMetadataExtractor>();
+    var ffprobeAvailable = await videoMetadataExtractor.IsAvailableAsync();
+    if (ffprobeAvailable)
+    {
+        logger.LogInformation("Video metadata extraction tool check passed: ffprobe is available on PATH or via Ffprobe:Path.");
+    }
+    else
+    {
+        logger.LogWarning("Video metadata extraction tool check failed: ffprobe is not available on PATH and Ffprobe:Path did not resolve.");
+    }
 }
 
 // Configure the middleware pipeline

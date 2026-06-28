@@ -84,6 +84,10 @@ chmod +x /opt/postpilot/prod/scripts/*.sh
 docker compose -f /opt/postpilot/prod/docker-compose.yml logs -f postpilot-api
 docker compose -f /opt/postpilot/prod/docker-compose.yml logs -f postpilot-worker
 
+# Verify ffprobe is present inside the deployed containers
+docker exec postpilot-api sh -lc 'which ffprobe && ffprobe -version'
+docker exec postpilot-worker sh -lc 'which ffprobe && ffprobe -version'
+
 # Shell into Postgres
 docker compose -f /opt/postpilot/prod/docker-compose.yml exec postpilot-postgres \
     psql -U postpilot postpilot
@@ -95,3 +99,4 @@ docker compose -f /opt/postpilot/prod/docker-compose.yml exec postpilot-postgres
 - **Port exposure**: only `127.0.0.1:5122` is bound. Postgres has no host port at all.
 - **CORS**: allowlist comes from `Cors__AllowedOrigins__*` env vars. Production allows only `https://post-auto-pilot.vercel.app`.
 - **Forwarded headers**: API trusts `X-Forwarded-For` + `X-Forwarded-Proto` from any proxy IP, since nginx and the API share localhost.
+- **FFmpeg/ffprobe**: baked into both backend images via the shared runtime stage in `build/Dockerfile`. Do not install FFmpeg manually on the VPS host for PostPilot uploads.
