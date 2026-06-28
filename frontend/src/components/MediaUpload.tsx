@@ -45,6 +45,13 @@ export function MediaUpload({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
 
+  const setNeutralValidationState = () => {
+    setValidationStatus('Pending')
+    setValidationErrors([])
+    setValidationWarnings([])
+    onValidationChange?.('Pending', [], [])
+  }
+
   // Validate/re-validate when platform changes (including first selection after upload)
   useEffect(() => {
     if (uploadedStorageKey && uploadedMimeType && selectedPlatform) {
@@ -57,7 +64,7 @@ export function MediaUpload({
 
     try {
       setValidating(true)
-      setValidationStatus('Pending')
+      setNeutralValidationState()
 
       const platformMap: Record<string, Platform> = {
         facebook: 'Facebook',
@@ -138,10 +145,8 @@ export function MediaUpload({
       return
     }
 
-    // Reset validation state
-    setValidationStatus('Pending')
-    setValidationErrors([])
-    setValidationWarnings([])
+    // Clear any result from the previously selected media before the new file validates.
+    setNeutralValidationState()
     setUploadedStorageKey(null)
     setUploadedMimeType(null)
 

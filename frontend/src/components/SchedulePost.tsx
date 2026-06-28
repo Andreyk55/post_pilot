@@ -15,6 +15,11 @@ import { InstagramMediaTags, type MediaTag } from './InstagramMediaTags'
 import { canShowCarouselTags, buildCarouselMediaTags } from '../utils/instagramTagging'
 import { hasUnpromotedLinkedInstagram } from '../utils/instagramPromotion'
 import {
+  clearSchedulePostMediaValidation,
+  hasBlockingSchedulePostMediaValidation,
+  startSchedulePostMediaValidation,
+} from '../utils/schedulePostMediaValidation'
+import {
   getPostTextMaxChars,
   getPlatformDisplayName,
   type PlatformId,
@@ -349,6 +354,28 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
   const isFacebookMultiPhoto = isFacebookSelected && !isStory && carouselItems.length >= 2 && carouselItems.every(i => i.mediaType === 'Image')
   const isMultiMedia = isInstagramCarousel || isFacebookMultiPhoto
 
+  const applySingleMediaValidationState = (status: ValidationStatus | null, errors: MediaValidationError[]) => {
+    setMediaValidationStatus(status)
+    setMediaValidationErrors(errors)
+  }
+
+  const clearSingleMediaValidationState = () => {
+    const nextState = clearSchedulePostMediaValidation()
+    applySingleMediaValidationState(nextState.status, nextState.errors)
+  }
+
+  const startSingleMediaValidationState = () => {
+    const nextState = startSchedulePostMediaValidation()
+    applySingleMediaValidationState(nextState.status, nextState.errors)
+  }
+
+  const handleSingleMediaUploadingChange = (uploading: boolean) => {
+    setIsUploading(uploading)
+    if (uploading) {
+      startSingleMediaValidationState()
+    }
+  }
+
   // Instagram media validation: single image/video OR carousel (2+ images)
   const isInstagramMediaValid = !isInstagramSelected ||
     isInstagramCarousel ||
@@ -427,8 +454,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
     setUploadError(null)
     setUploadKey(k => k + 1)
     setSelectedThumbnailUrl(null)
-    setMediaValidationStatus(null)
-    setMediaValidationErrors([])
+    clearSingleMediaValidationState()
     setCarouselItems([])
     setMediaTags([])
     setCarouselMediaTags(new Map())
@@ -443,6 +469,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
   const platformDisplayName = selectedPlatformId ? getPlatformDisplayName(selectedPlatformId) : ''
 
   // Media validation status check - invalid media blocks submission
+  const hasBlockingMediaValidation = hasBlockingSchedulePostMediaValidation(mediaUrl, mediaValidationStatus)
   const hasInvalidMedia = mediaUrl && mediaValidationStatus === 'Invalid'
   const hasInvalidCarouselItems = carouselItems.some(item => item.validationStatus === 'Invalid')
 
@@ -503,13 +530,13 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
        selectedPlatforms.length > 0 && isStoryPlatformSelected &&
        (!isFacebookSelected || selectedPageId) &&
        (!isInstagramSelected || selectedInstagramAccountId) &&
-       !isUploading && !isTextTooLong && !hasInvalidMedia)
+       !isUploading && !isTextTooLong && !hasBlockingMediaValidation)
     : ((content || mediaUrl || isMultiMedia) && scheduledDate && scheduledTime &&
        selectedPlatforms.length > 0 &&
        (!isFacebookSelected || selectedPageId) &&
        (!isInstagramSelected || selectedInstagramAccountId) &&
        isInstagramMediaValid &&
-       !isUploading && !isTextTooLong && !hasInvalidMedia && !hasInvalidCarouselItems && !hasUnplacedTags)
+       !isUploading && !isTextTooLong && !hasBlockingMediaValidation && !hasInvalidCarouselItems && !hasUnplacedTags)
 
   // Publish Now valid: same as isFormValid but without requiring date/time
   const isPublishNowValid = isStory
@@ -517,13 +544,13 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
        selectedPlatforms.length > 0 && isStoryPlatformSelected &&
        (!isFacebookSelected || selectedPageId) &&
        (!isInstagramSelected || selectedInstagramAccountId) &&
-       !isUploading && !isPublishingNow && !isTextTooLong && !hasInvalidMedia)
+       !isUploading && !isPublishingNow && !isTextTooLong && !hasBlockingMediaValidation)
     : ((content || mediaUrl || isMultiMedia) &&
        selectedPlatforms.length > 0 &&
        (!isFacebookSelected || selectedPageId) &&
        (!isInstagramSelected || selectedInstagramAccountId) &&
        isInstagramMediaValid &&
-       !isUploading && !isPublishingNow && !isTextTooLong && !hasInvalidMedia && !hasInvalidCarouselItems && !hasUnplacedTags)
+       !isUploading && !isPublishingNow && !isTextTooLong && !hasBlockingMediaValidation && !hasInvalidCarouselItems && !hasUnplacedTags)
 
   const handlePublishNow = async () => {
     if (!onPublishNow || !isPublishNowValid) return
@@ -582,8 +609,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
     setAiPanelKey(k => k + 1)
     setSuggestedTimesKey(k => k + 1)
     setSelectedThumbnailUrl(null)
-    setMediaValidationStatus(null)
-    setMediaValidationErrors([])
+    clearSingleMediaValidationState()
     setCarouselItems([])
     setMediaTags([])
     setStickyLanguage({ languageCode: 'unknown', confidence: 0, isReliable: false })
@@ -595,8 +621,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
     errors: MediaValidationError[],
     _warnings: MediaValidationWarning[]
   ) => {
-    setMediaValidationStatus(status)
-    setMediaValidationErrors(errors)
+    applySingleMediaValidationState(status, errors)
   }
 
   // Destructure for easier access
@@ -675,6 +700,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
                   // Clear single media when switching (carousel may need different setup)
                   setMediaUrl(null)
                   setMediaType(null)
+                  clearSingleMediaValidationState()
                   setUploadKey(k => k + 1)
                   setCarouselItems([])
                 }}
@@ -689,6 +715,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
                   // Clear carousel when switching to story (stories are single media)
                   setMediaUrl(null)
                   setMediaType(null)
+                  clearSingleMediaValidationState()
                   setUploadKey(k => k + 1)
                   setCarouselItems([])
                 }}
@@ -865,10 +892,9 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
               onClear={() => {
                 setMediaUrl(null)
                 setMediaType(null)
-                setMediaValidationStatus(null)
-                setMediaValidationErrors([])
+                clearSingleMediaValidationState()
               }}
-              onUploadingChange={setIsUploading}
+              onUploadingChange={handleSingleMediaUploadingChange}
               onValidationChange={handleMediaValidationChange}
               selectedPlatform={selectedPlatformId}
               placement="Story"
@@ -880,6 +906,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
               items={carouselItems}
               onItemsChange={(items) => {
                 setCarouselItems(items)
+                clearSingleMediaValidationState()
                 // If user goes from multi to single (1 item), keep it in carousel state
                 // but also set legacy media for AI panel preview
                 if (items.length === 1) {
@@ -910,10 +937,9 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
               onClear={() => {
                 setMediaUrl(null)
                 setMediaType(null)
-                setMediaValidationStatus(null)
-                setMediaValidationErrors([])
+                clearSingleMediaValidationState()
               }}
-              onUploadingChange={setIsUploading}
+              onUploadingChange={handleSingleMediaUploadingChange}
               onValidationChange={handleMediaValidationChange}
               selectedPlatform={selectedPlatformId}
               disabled={!isComposerEnabled}
