@@ -1,22 +1,16 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { MediaValidationBadge, MediaValidationPanel } from './MediaValidationStatus'
+import { MediaValidationBadge, MediaValidationCard, MediaRequirementHint } from './MediaValidationStatus'
 import { getMediaValidationBadgeDescriptor } from '../utils/mediaValidationBadge'
-import type { MediaValidationError, MediaValidationWarning } from '../api/media'
+import type { MediaValidationView } from '../utils/mediaValidationView'
 
-const error = (message: string): MediaValidationError => ({
-  code: 'invalid',
-  field: 'aspectRatio',
-  message,
-  expected: null,
-  actual: null,
-})
-
-const warning = (message: string): MediaValidationWarning => ({
-  code: 'soft',
-  field: 'duration',
-  message,
-  recommendation: null,
+const view = (overrides: Partial<MediaValidationView>): MediaValidationView => ({
+  status: 'valid',
+  blocking: false,
+  title: 'Media is ready',
+  messages: [],
+  recommendations: [],
+  ...overrides,
 })
 
 describe('getMediaValidationBadgeDescriptor', () => {
@@ -83,27 +77,56 @@ describe('MediaValidationBadge', () => {
   })
 })
 
-describe('MediaValidationPanel', () => {
-  it('renders the error panel and hides warnings when media is invalid', () => {
+describe('MediaValidationCard', () => {
+  it('renders nothing for a null view', () => {
+    expect(renderToStaticMarkup(<MediaValidationCard view={null} />)).toBe('')
+  })
+
+  it('renders the neutral/green ready state', () => {
+    const markup = renderToStaticMarkup(<MediaValidationCard view={view({ status: 'valid' })} />)
+    expect(markup).toContain('class="media-validation-card valid"')
+    expect(markup).toContain('Media is ready')
+    expect(markup).toContain('role="status"')
+  })
+
+  it('renders a non-blocking yellow warning card with recommendations (not an alert)', () => {
     const markup = renderToStaticMarkup(
-      <MediaValidationPanel errors={[error('Too small'), error('Wrong ratio')]} warnings={[warning('Long video')]} />,
+      <MediaValidationCard
+        view={view({
+          status: 'warning',
+          title: 'Media can be published, but there are recommendations',
+          recommendations: ['Quality may be reduced.'],
+        })}
+      />,
     )
-    expect(markup).toContain('class="validation-errors"')
-    expect(markup).toContain('Too small')
-    expect(markup).toContain('Wrong ratio')
-    // Errors take precedence — softer warnings are suppressed.
-    expect(markup).not.toContain('validation-warnings')
-    expect(markup).not.toContain('Long video')
+    expect(markup).toContain('class="media-validation-card warning"')
+    expect(markup).toContain('Media can be published, but there are recommendations')
+    expect(markup).toContain('Quality may be reduced.')
+    // A warning is a status, never a blocking alert.
+    expect(markup).toContain('role="status"')
+    expect(markup).not.toContain('role="alert"')
   })
 
-  it('renders the warning panel when there are warnings but no errors', () => {
-    const markup = renderToStaticMarkup(<MediaValidationPanel warnings={[warning('Long video')]} />)
-    expect(markup).toContain('class="validation-warnings"')
-    expect(markup).toContain('Long video')
+  it('renders the red invalid card as an alert listing the blocking messages', () => {
+    const markup = renderToStaticMarkup(
+      <MediaValidationCard
+        view={view({ status: 'invalid', title: 'Media cannot be published', blocking: true, messages: ['Story media should be vertical 9:16.'] })}
+      />,
+    )
+    expect(markup).toContain('class="media-validation-card invalid"')
+    expect(markup).toContain('Media cannot be published')
+    expect(markup).toContain('Story media should be vertical 9:16.')
+    expect(markup).toContain('role="alert"')
   })
+})
 
-  it('renders nothing when there is no error or warning', () => {
-    expect(renderToStaticMarkup(<MediaValidationPanel />)).toBe('')
-    expect(renderToStaticMarkup(<MediaValidationPanel errors={[]} warnings={[]} />)).toBe('')
+describe('MediaRequirementHint', () => {
+  it('renders the placement-driven requirement copy through one shared component', () => {
+    expect(renderToStaticMarkup(<MediaRequirementHint platform="facebook" placement="Story" />)).toBe(
+      '<div class="media-requirement-hint">1 photo or 1 video — vertical 9:16 recommended</div>',
+    )
+    expect(renderToStaticMarkup(<MediaRequirementHint platform="instagram" placement="Feed" />)).toContain(
+      'Photo or video supported',
+    )
   })
 })

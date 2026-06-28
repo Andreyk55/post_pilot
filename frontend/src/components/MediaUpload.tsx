@@ -1,8 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
 import { mediaApi, type MediaType, type ValidationStatus, type MediaValidationError, type MediaValidationWarning, type Platform, type Placement } from '../api/media'
-import { preValidateFile, preValidateImageDimensions, getImageDimensions, getClientValidationRule } from '../constants/mediaValidationRules'
+import { getImageDimensions, getClientValidationRule } from '../constants/mediaValidationRules'
 import type { PlatformId } from '../constants/validationLimits'
-import { MediaValidationBadge, MediaValidationPanel } from './MediaValidationStatus'
+import { MediaValidationBadge, MediaValidationCard } from './MediaValidationStatus'
+import { resolveClientMediaError, resolveClientDimensionError } from '../utils/mediaRequirements'
+import { resolveMediaValidationView } from '../utils/mediaValidationView'
+import { getUploadErrorMessage } from '../utils/uploadError'
 import { createUploadClientId } from '../utils/uploadClientId'
 import './MediaUpload.css'
 
@@ -129,20 +132,22 @@ export function MediaUpload({
   }
 
   const validateFile = async (file: File): Promise<string | null> => {
-    // Platform-specific pre-validation if platform is selected
+    // Platform-specific pre-validation if platform is selected. Friendly, specific
+    // copy ("Story media should be vertical 9:16.", "Images must be JPG or PNG.")
+    // so a client rejection never bottoms out at a generic message.
     if (selectedPlatform) {
-      const errors = preValidateFile(file, selectedPlatform, placement)
-      if (errors.length > 0) {
-        return errors[0]
+      const typeOrSizeError = resolveClientMediaError(file, selectedPlatform, placement)
+      if (typeOrSizeError) {
+        return typeOrSizeError
       }
 
-      // For images, also check dimensions
+      // For images, also check dimensions/aspect ratio.
       if (file.type.startsWith('image/')) {
         const dims = await getImageDimensions(file)
         if (dims) {
-          const dimErrors = preValidateImageDimensions(dims.width, dims.height, selectedPlatform, placement)
-          if (dimErrors.length > 0) {
-            return dimErrors[0]
+          const dimError = resolveClientDimensionError(dims.width, dims.height, selectedPlatform, placement)
+          if (dimError) {
+            return dimError
           }
         }
       }
@@ -282,7 +287,7 @@ export function MediaUpload({
     } catch (err) {
       if (isStaleUploadOwner(uploadOwnerKey)) return
       console.error('Upload failed:', err)
-      onUploadError(err instanceof Error ? err.message : 'Failed to upload file. Please try again.')
+      onUploadError(getUploadErrorMessage(err))
       setProgress(0)
       setPreview(null)
       setFileName(null)
@@ -394,9 +399,12 @@ export function MediaUpload({
             </div>
           </div>
 
-          {/* Validation errors/warnings - outside preview for proper display.
-              Errors take precedence over warnings (handled in the shared panel). */}
-          <MediaValidationPanel errors={validationErrors} warnings={validationWarnings} />
+          {/* Shared validation card — same ready/warning/error look as every other
+              media surface. Driven by the normalized view (errors take precedence over
+              warnings; warnings render as non-blocking recommendations). */}
+          <MediaValidationCard
+            view={resolveMediaValidationView(validationStatus, validationErrors, validationWarnings, { validating })}
+          />
         </>
       ) : (
         <div

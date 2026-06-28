@@ -5,6 +5,7 @@ import type { MediaType, ValidationStatus, MediaValidationError, MediaValidation
 import type { ConnectedPage, ConnectedInstagramAccount } from '../types/meta'
 import { MediaUpload } from './MediaUpload'
 import { MultiMediaUpload, type UploadedMediaItem } from './MultiMediaUpload'
+import { MediaRequirementHint } from './MediaValidationStatus'
 import type { CreatePostMediaItem, PostType, InstagramUserTag } from '../api/posts'
 import { AiAssistPanel, type StickyLanguageState } from './AiAssistPanel'
 import { type AiAssistMediaItem } from './aiAssistPanelState'
@@ -18,7 +19,6 @@ import {
   applySchedulePostMediaValidationUpdate,
   clearSchedulePostMediaValidation,
   hasBlockingSchedulePostMediaValidation,
-  shouldRenderSchedulePostMediaValidationError,
   type SchedulePostMediaValidationState,
 } from '../utils/schedulePostMediaValidation'
 import { isMetaChannelSwitch, isComposerDraftDirty } from '../utils/schedulePostChannelSwitch'
@@ -514,9 +514,10 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
   const isTextTooLong = content.length > maxChars
   const platformDisplayName = selectedPlatformId ? getPlatformDisplayName(selectedPlatformId) : ''
 
-  // Media validation status check - invalid media blocks submission
+  // Media validation status check - invalid media blocks submission. The error/warning
+  // detail itself is rendered by the uploader's shared MediaValidationCard (single
+  // source of truth); here we only need the blocking flags to gate the buttons.
   const hasBlockingMediaValidation = hasBlockingSchedulePostMediaValidation(mediaUrl, mediaValidation.status)
-  const showMediaValidationError = shouldRenderSchedulePostMediaValidationError(mediaValidation, mediaUrl)
   const hasInvalidCarouselItems = carouselItems.some(item => item.validationStatus === 'Invalid')
 
   // Instagram media tags: show for IG Feed + single image or single video (not carousel)
@@ -906,22 +907,10 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
           <label>
             {isStory ? 'Media (required)' : isInstagramSelected ? 'Media (required)' : 'Media (optional)'}
           </label>
-          {isStory && !mediaUrl && (
-            <div className="ig-media-hint">
-              <strong>Story:</strong> 1 photo (JPG/PNG) or 1 video (MP4) — vertical 9:16 recommended
-            </div>
-          )}
-          {!isStory && isInstagramSelected && !mediaUrl && carouselItems.length === 0 && (
-            <div className="ig-media-hint">
-              <strong>Single:</strong> 1 photo (JPG/PNG) or 1 video (MP4, published as Reel)<br />
-              <strong>Carousel:</strong> 2–10 photos, videos, or mix of both
-            </div>
-          )}
-          {!isStory && isFacebookSelected && !mediaUrl && carouselItems.length === 0 && (
-            <div className="ig-media-hint">
-              <strong>Single:</strong> 1 photo (JPG/PNG) or 1 video (MP4)<br />
-              <strong>Carousel:</strong> 2–10 photos only. Mixed photos + videos not supported.
-            </div>
+          {/* Shared pre-upload requirement hint — same component/styling for every
+              platform + placement (see MediaRequirementHint). */}
+          {!mediaUrl && carouselItems.length === 0 && (isStory || isInstagramSelected || isFacebookSelected) && (
+            <MediaRequirementHint platform={selectedPlatformId} placement={isStory ? 'Story' : 'Feed'} />
           )}
           {isStory ? (
             /* Stories: single media upload with Story placement for validation */
@@ -989,20 +978,11 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
               disabled={!isComposerEnabled}
             />
           )}
+          {/* Client-side pre-validation messages (e.g. an invalid Story aspect ratio
+              that never reaches server validation) surface here. Server validation
+              error/warning detail is rendered by the uploader's shared
+              MediaValidationCard, so it is not duplicated here. */}
           {uploadError && <div className="upload-error">{uploadError}</div>}
-          {/* Show validation error summary near submit button — only for a
-              current-session Invalid result, never a stale one left over from a
-              previous upload (see shouldRenderSchedulePostMediaValidationError). */}
-          {showMediaValidationError && (
-            <div className="media-validation-summary">
-              <strong>Media cannot be published:</strong>
-              <ul>
-                {mediaValidation.errors.map((err, i) => (
-                  <li key={i}>{err.message}</li>
-                ))}
-              </ul>
-            </div>
-          )}
         </div>
 
         {/* Instagram Media Tags — tag people (IG Feed + single image or video) */}

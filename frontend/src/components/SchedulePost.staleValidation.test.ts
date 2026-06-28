@@ -26,13 +26,20 @@ describe('SchedulePost — a new upload start clears the previous media error', 
     )
   })
 
-  it('renders the server validation summary only through the strict, owner-aware gate', () => {
-    // Never render off raw `mediaValidation.status === 'Invalid'`; the gate
-    // (shouldRenderSchedulePostMediaValidationError) only passes a current-session
-    // Invalid result, so a stale error can never sit under a new pending upload.
-    expect(schedulePostSource).toMatch(/const showMediaValidationError = shouldRenderSchedulePostMediaValidationError\(mediaValidation, mediaUrl\)/)
-    expect(schedulePostSource).toMatch(/\{showMediaValidationError && \(\s*<div className="media-validation-summary">/)
+  it('delegates server validation detail to the uploader card (no duplicate summary)', () => {
+    // The server validation error/warning detail is now rendered once, by the
+    // uploader's shared MediaValidationCard. SchedulePost must not hand-roll its own
+    // duplicate summary, and must not render off raw `mediaValidation.status`.
+    expect(schedulePostSource).not.toMatch(/media-validation-summary/)
     expect(schedulePostSource).not.toMatch(/mediaValidation\.status === 'Invalid' &&\s*\(/)
+    // It still derives the owner-aware blocking flag to gate the buttons.
+    expect(schedulePostSource).toMatch(/const hasBlockingMediaValidation = hasBlockingSchedulePostMediaValidation\(mediaUrl, mediaValidation\.status\)/)
+  })
+
+  it('shows the pre-upload requirement via the one shared component', () => {
+    expect(schedulePostSource).toMatch(/<MediaRequirementHint platform=\{selectedPlatformId\} placement=\{isStory \? 'Story' : 'Feed'\} \/>/)
+    // The three bespoke per-platform hint blocks are gone.
+    expect(schedulePostSource).not.toMatch(/ig-media-hint/)
   })
 
   it('wires both single-media uploaders (Story + generic feed) to the validation + error handlers', () => {

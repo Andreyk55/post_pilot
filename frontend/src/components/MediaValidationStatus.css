@@ -44,48 +44,75 @@
   50% { opacity: 0.5; }
 }
 
-/* Validation errors and warnings */
-.validation-errors,
-.validation-warnings {
+/* Shared validation card — one look for every media surface (FB/IG × Feed/Story ×
+   single/multi). Color is driven only by the normalized status so warnings can never
+   be mistaken for a blocking failure. */
+.media-validation-card {
   padding: 0.75rem 1rem;
   margin-top: 0.75rem;
   border-radius: 6px;
   font-size: 0.85rem;
   line-height: 1.4;
+  border: 1px solid transparent;
 }
 
-.validation-errors {
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.4);
+.media-validation-card.valid {
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.35);
+  color: #86efac;
 }
 
-.validation-warnings {
-  background: rgba(234, 179, 8, 0.15);
-  border: 1px solid rgba(234, 179, 8, 0.4);
-}
-
-.validation-error,
-.validation-warning {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
-  padding: 0.25rem 0;
-}
-
-.validation-error {
-  color: #fca5a5;
-}
-
-.validation-error:before {
-  content: "⚠";
-  flex-shrink: 0;
-}
-
-.validation-warning {
+.media-validation-card.warning {
+  background: rgba(234, 179, 8, 0.12);
+  border-color: rgba(234, 179, 8, 0.4);
   color: #fde047;
 }
 
-.validation-warning:before {
-  content: "⚠";
+.media-validation-card.invalid {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+}
+
+.media-validation-card.pending {
+  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.35);
+  color: #cbd5e1;
+}
+
+.media-validation-card__title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+
+.media-validation-card__icon {
   flex-shrink: 0;
+}
+
+.media-validation-card__list {
+  margin: 0.4rem 0 0;
+  padding-left: 1.4rem;
+}
+
+.media-validation-card__list li {
+  padding: 0.1rem 0;
+}
+
+/* Recommendations are always yellow even on a card whose status differs, so the
+   "advisory vs. blocking" distinction stays clear. */
+.media-validation-card__list--recommendation li {
+  color: #fde047;
+}
+
+/* Pre-upload requirement hint — same component/styling for every platform. */
+.media-requirement-hint {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
 }

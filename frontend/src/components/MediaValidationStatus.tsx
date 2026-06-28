@@ -1,20 +1,19 @@
-import type {
-  ValidationStatus,
-  MediaValidationError,
-  MediaValidationWarning,
-} from '../api/media'
+import type { ValidationStatus } from '../api/media'
+import type { MediaValidationView, MediaValidationViewStatus } from '../utils/mediaValidationView'
 import { getMediaValidationBadgeDescriptor } from '../utils/mediaValidationBadge'
+import { getMediaRequirementHint } from '../utils/mediaRequirements'
+import type { Placement } from '../constants/mediaValidationRules'
+import type { PlatformId } from '../constants/validationLimits'
 import './MediaValidationStatus.css'
 
 /**
- * Shared media-validation status UI.
- *
- * Originally only the single-media uploader (used by Facebook/Instagram Stories)
- * rendered a clear "Validating…" → "Valid"/"Invalid"/"Warning" progression. Feed
- * and carousel surfaces showed validation inconsistently. These pieces are the one
- * source of truth so every surface looks and behaves the same — see MediaUpload and
- * MultiMediaUpload for the consumers. Stale-result gating stays in the consumers;
- * this module is purely presentational. The pure state→badge mapping lives in
+ * Shared media-validation status UI — the single source of truth for how every
+ * Schedule Post media surface presents validation. The single-media uploader
+ * (Facebook/Instagram Stories + generic single feed) and the carousel/multi-photo
+ * uploader both render these pieces, so the badge, the status card, and the
+ * requirement hint look and behave identically across platform, placement, and media
+ * type. Stale-result gating stays in the consumers; this module is purely
+ * presentational. The pure state→view mapping lives in utils/mediaValidationView and
  * utils/mediaValidationBadge so it can be unit-tested on its own.
  */
 
@@ -51,43 +50,64 @@ export function MediaValidationBadge({
   )
 }
 
-interface MediaValidationPanelProps {
-  errors?: MediaValidationError[]
-  warnings?: MediaValidationWarning[]
+const CARD_ICONS: Record<MediaValidationViewStatus, string> = {
+  valid: '✓',
+  warning: '⚠',
+  invalid: '✕',
+  pending: '⏳',
+}
+
+interface MediaValidationCardProps {
+  view: MediaValidationView | null
 }
 
 /**
- * Shared error/warning detail panel. Errors take precedence over warnings, matching
- * the long-standing single-media behavior (media that fails outright shouldn't also
- * nag about softer warnings).
+ * Shared validation card rendered below the media area. One look for every surface:
+ * green/neutral "Media is ready", yellow "…recommendations" (non-blocking, never
+ * confused with a failure), red "Media cannot be published". Driven entirely by the
+ * normalized MediaValidationView so Facebook and Instagram are byte-for-byte identical.
  */
-export function MediaValidationPanel({
-  errors = [],
-  warnings = [],
-}: MediaValidationPanelProps) {
-  if (errors.length > 0) {
-    return (
-      <div className="validation-errors">
-        {errors.map((err, i) => (
-          <div key={i} className="validation-error">
-            {err.message}
-          </div>
-        ))}
-      </div>
-    )
-  }
+export function MediaValidationCard({ view }: MediaValidationCardProps) {
+  if (!view) return null
 
-  if (warnings.length > 0) {
-    return (
-      <div className="validation-warnings">
-        {warnings.map((warn, i) => (
-          <div key={i} className="validation-warning">
-            {warn.message}
-          </div>
-        ))}
+  return (
+    <div
+      className={`media-validation-card ${view.status}`}
+      role={view.status === 'invalid' ? 'alert' : 'status'}
+    >
+      <div className="media-validation-card__title">
+        <span className="media-validation-card__icon" aria-hidden="true">
+          {CARD_ICONS[view.status]}
+        </span>
+        {view.title}
       </div>
-    )
-  }
+      {view.messages.length > 0 && (
+        <ul className="media-validation-card__list">
+          {view.messages.map((message, i) => (
+            <li key={i}>{message}</li>
+          ))}
+        </ul>
+      )}
+      {view.recommendations.length > 0 && (
+        <ul className="media-validation-card__list media-validation-card__list--recommendation">
+          {view.recommendations.map((recommendation, i) => (
+            <li key={i}>{recommendation}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
 
-  return null
+interface MediaRequirementHintProps {
+  platform?: PlatformId | string | null
+  placement?: Placement | string
+}
+
+/**
+ * Shared "what's allowed here" hint shown before upload. Same component + styling for
+ * every platform/placement so Facebook Story and Instagram Story (etc.) read alike.
+ */
+export function MediaRequirementHint({ platform = null, placement = 'Feed' }: MediaRequirementHintProps) {
+  return <div className="media-requirement-hint">{getMediaRequirementHint(platform, placement)}</div>
 }

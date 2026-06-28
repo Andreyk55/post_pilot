@@ -216,12 +216,17 @@ export const mediaApi = {
         if (xhr.status >= 200 && xhr.status < 300) {
           resolve()
         } else {
-          reject(new Error('Failed to upload file'))
+          // Surface the storage server's response when it carries a usable message,
+          // instead of a generic string — so callers can show *why* the upload failed.
+          // Skip HTML bodies (error pages) and anything too long to be a message.
+          const detail = (xhr.responseText || '').trim()
+          const snippet = detail && detail.length <= 300 && !detail.startsWith('<') ? `: ${detail}` : ''
+          reject(new Error(`Upload failed (HTTP ${xhr.status})${snippet}`))
         }
       })
 
       xhr.addEventListener('error', () => {
-        reject(new Error('Failed to upload file'))
+        reject(new Error('Upload failed. Check your connection and try again.'))
       })
 
       xhr.addEventListener('abort', () => {

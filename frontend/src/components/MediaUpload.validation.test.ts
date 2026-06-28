@@ -6,9 +6,9 @@ import { describe, expect, it } from 'vitest'
 import mediaUploadSource from './MediaUpload.tsx?raw'
 
 describe('MediaUpload — shared validation UI', () => {
-  it('imports the shared validation badge + panel', () => {
+  it('imports the shared validation badge + card', () => {
     expect(mediaUploadSource).toMatch(
-      /import \{ MediaValidationBadge, MediaValidationPanel \} from '\.\/MediaValidationStatus'/,
+      /import \{ MediaValidationBadge, MediaValidationCard \} from '\.\/MediaValidationStatus'/,
     )
   })
 
@@ -16,8 +16,23 @@ describe('MediaUpload — shared validation UI', () => {
     expect(mediaUploadSource).toMatch(/<MediaValidationBadge\s+validating=\{validating\}\s+status=\{validationStatus\}\s+showPending=\{!!selectedPlatform\}/)
   })
 
-  it('renders errors and warnings through the shared panel', () => {
-    expect(mediaUploadSource).toMatch(/<MediaValidationPanel errors=\{validationErrors\} warnings=\{validationWarnings\} \/>/)
+  it('renders errors and warnings through the shared card driven by the normalized view', () => {
+    expect(mediaUploadSource).toMatch(
+      /<MediaValidationCard\s+view=\{resolveMediaValidationView\(validationStatus, validationErrors, validationWarnings, \{ validating \}\)\}/,
+    )
+  })
+
+  it('uses the friendly, specific client pre-validation copy (not the technical strings)', () => {
+    expect(mediaUploadSource).toMatch(/resolveClientMediaError\(file, selectedPlatform, placement\)/)
+    expect(mediaUploadSource).toMatch(/resolveClientDimensionError\(dims\.width, dims\.height, selectedPlatform, placement\)/)
+    // The old technical pre-validation helpers are no longer used here.
+    expect(mediaUploadSource).not.toMatch(/preValidateFile\(/)
+    expect(mediaUploadSource).not.toMatch(/preValidateImageDimensions\(/)
+  })
+
+  it('surfaces the real upload/API error message instead of a generic string', () => {
+    expect(mediaUploadSource).toMatch(/onUploadError\(getUploadErrorMessage\(err\)\)/)
+    expect(mediaUploadSource).not.toMatch(/Failed to upload file/)
   })
 
   it('no longer hand-rolls the inline validation badge or panel markup', () => {

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { mediaApi, type MediaType, type ValidationStatus, type MediaValidationError, type MediaValidationWarning, type Platform } from '../api/media'
-import { preValidateFile, preValidateImageDimensions, getImageDimensions } from '../constants/mediaValidationRules'
+import { getImageDimensions } from '../constants/mediaValidationRules'
 import {
   validateInstagramSelection,
   getInstagramMediaMode,
@@ -14,7 +14,10 @@ import {
   getFacebookFormatHint,
 } from '../utils/facebookMediaValidation'
 import type { PlatformId } from '../constants/validationLimits'
-import { MediaValidationBadge } from './MediaValidationStatus'
+import { MediaValidationBadge, MediaValidationCard } from './MediaValidationStatus'
+import { resolveClientMediaError, resolveClientDimensionError } from '../utils/mediaRequirements'
+import { aggregateMediaValidationViews } from '../utils/mediaValidationView'
+import { getUploadErrorMessage } from '../utils/uploadError'
 import { createUploadClientId } from '../utils/uploadClientId'
 import './MultiMediaUpload.css'
 
@@ -212,12 +215,13 @@ export function MultiMediaUpload({
 
     const newItems: UploadedMediaItem[] = []
     for (const [fileIndex, file] of filesToUpload.entries()) {
-      // Pre-validate
+      // Pre-validate with friendly, specific copy (shared with the single-media
+      // uploader) so a client rejection never bottoms out at a generic message.
       if (selectedPlatform) {
-        const errors = preValidateFile(file, selectedPlatform, 'Feed')
+        const typeOrSizeError = resolveClientMediaError(file, selectedPlatform, 'Feed')
         if (isStaleUploadOwner(uploadOwnerKey)) return
-        if (errors.length > 0) {
-          setUploadError(`${file.name}: ${errors[0]}`)
+        if (typeOrSizeError) {
+          setUploadError(`${file.name}: ${typeOrSizeError}`)
           setProgress(0)
           continue
         }
@@ -225,9 +229,9 @@ export function MultiMediaUpload({
           const dims = await getImageDimensions(file)
           if (isStaleUploadOwner(uploadOwnerKey)) return
           if (dims) {
-            const dimErrors = preValidateImageDimensions(dims.width, dims.height, selectedPlatform, 'Feed')
-            if (dimErrors.length > 0) {
-              setUploadError(`${file.name}: ${dimErrors[0]}`)
+            const dimError = resolveClientDimensionError(dims.width, dims.height, selectedPlatform, 'Feed')
+            if (dimError) {
+              setUploadError(`${file.name}: ${dimError}`)
               setProgress(0)
               continue
             }
@@ -303,7 +307,9 @@ export function MultiMediaUpload({
       } catch (err) {
         if (isStaleUploadOwner(uploadOwnerKey)) return
         console.error(`Upload failed for ${file.name}:`, err)
-        setUploadError(`Failed to upload ${file.name}`)
+        // Preserve the server/API/network message when present; only fall back to a
+        // per-file generic when there is genuinely no detail.
+        setUploadError(getUploadErrorMessage(err, `Couldn't upload ${file.name}. Please try again.`))
         setProgress(0)
       }
     }
@@ -357,14 +363,25 @@ export function MultiMediaUpload({
     }
   }
 
-  const invalidItems = items.filter(item => item.validationStatus === 'Invalid')
-  const hasInvalidItems = invalidItems.length > 0
   const itemCount = items.length
+
+  // One normalized view for every item — the same shared card the single-media
+  // uploader renders, so warnings get a visible explanation (not just a bare badge)
+  // and Facebook/Instagram look identical. Worst status wins; each message is
+  // prefixed with its item label.
+  const aggregatedValidationView = aggregateMediaValidationViews(
+    items.map((item, index) => ({
+      status: item.validationStatus,
+      errors: item.validationErrors,
+      warnings: item.validationWarnings,
+      label: `${item.mediaType === 'Video' ? 'Video' : 'Image'} ${index + 1}`,
+    })),
+  )
 
   // While media is uploading/validating we suppress the previous validation
   // results so a stale error never sits below a freshly added (pending) item.
   const isUploadingMedia = uploading || pendingUploads.length > 0
-  const showValidationErrors = !isUploadingMedia && hasInvalidItems
+  const showValidationCard = !isUploadingMedia
 
   // Determine accepted file types for the <input>
   const getAcceptTypes = (): string => {
@@ -573,33 +590,14 @@ export function MultiMediaUpload({
           {getStatusHint() && (
             <span className="carousel-hint">{getStatusHint()}</span>
           )}
-          {showValidationErrors && (
-            <span className="carousel-warning">
-              {invalidItems.length} item{invalidItems.length !== 1 ? 's' : ''} failed validation
-            </span>
-          )}
         </div>
       )}
 
-      {/* Validation error details — hidden while a new upload is in flight so a
-          stale error never sits below a freshly added (pending) item. */}
-      {showValidationErrors && (
-        <div className="carousel-validation-errors">
-          {invalidItems.map(item => (
-            <div key={item.id} className="carousel-validation-error-item">
-              <span className="carousel-validation-error-name">
-                {item.mediaType === 'Video' ? 'Reel' : item.fileName}:
-              </span>
-              {item.validationErrors.length > 0
-                ? item.validationErrors.map((err, i) => (
-                    <span key={i} className="carousel-validation-error-msg">{err.message}</span>
-                  ))
-                : <span className="carousel-validation-error-msg">Validation failed</span>
-              }
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Shared validation card — identical ready/warning/error look to the
+          single-media uploader, now surfacing warnings (with an explanation) too.
+          Hidden while a new upload is in flight so a stale result never sits below a
+          freshly added (pending) item. */}
+      {showValidationCard && <MediaValidationCard view={aggregatedValidationView} />}
 
       {uploading && (
         <div className="upload-progress">
