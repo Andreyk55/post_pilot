@@ -8,6 +8,12 @@ export interface AiAssistMediaItem {
 }
 
 export type MediaAiUnsupportedReason = 'no-media' | 'multiple-media' | 'video' | 'unsupported'
+export type AiAssistVoiceProfileAction =
+  | 'text-content-generation'
+  | 'media-caption-generation'
+  | 'translate'
+  | 'media-analysis'
+  | 'unavailable'
 
 export interface AiAssistAvailability {
   showMediaTab: boolean
@@ -91,6 +97,32 @@ export function normalizeActiveAiTab(
   }
 
   return activeTab
+}
+
+export function aiActionSupportsVoiceProfile(action: AiAssistVoiceProfileAction): boolean {
+  return action === 'text-content-generation' || action === 'media-caption-generation'
+}
+
+export function getVoiceProfileAction(
+  activeTab: AiAssistTab,
+  mediaItems: AiAssistMediaItem[] | null | undefined
+): AiAssistVoiceProfileAction {
+  if (activeTab === 'translate') {
+    return 'translate'
+  }
+
+  if (activeTab === 'media') {
+    return isMediaAiSupported(mediaItems) ? 'media-caption-generation' : 'unavailable'
+  }
+
+  return 'text-content-generation'
+}
+
+export function shouldShowVoiceProfileControl(
+  activeTab: AiAssistTab,
+  mediaItems: AiAssistMediaItem[] | null | undefined
+): boolean {
+  return aiActionSupportsVoiceProfile(getVoiceProfileAction(activeTab, mediaItems))
 }
 
 export const getSupportedAiAssistTab = normalizeActiveAiTab

@@ -1,4 +1,5 @@
 using PostPilot.Api.DTOs;
+using PostPilot.Api.Entities;
 
 namespace PostPilot.Api.Services.Ai;
 
@@ -15,6 +16,7 @@ public interface IMediaAiService
         AiPlatform platform,
         string? existingText,
         string language,
+        AiVoiceProfile? voiceProfile = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -39,6 +41,7 @@ public interface IMediaAiService
         AiPlatform platform,
         string? existingText,
         string language,
+        AiVoiceProfile? voiceProfile = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -69,5 +72,6 @@ public interface IMediaAiService
         AiPlatform platform,
         string? existingText,
         string language,
+        AiVoiceProfile? voiceProfile = null,
         CancellationToken cancellationToken = default);
 }

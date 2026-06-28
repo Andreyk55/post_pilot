@@ -39,6 +39,7 @@ public interface IGeminiClient
         AiPlatform platform,
         string? existingText,
         string language,
+        AiVoiceProfile? voiceProfile = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

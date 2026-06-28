@@ -131,9 +131,10 @@ public class GoogleAiClientRouter : IGeminiClient
         AiPlatform platform,
         string? existingText,
         string language,
+        AiVoiceProfile? voiceProfile = null,
         CancellationToken cancellationToken = default)
     {
-        return _visionClient.GenerateImageCaptionIdeasAsync(imageBytes, imageMimeType, platform, existingText, language, cancellationToken);
+        return _visionClient.GenerateImageCaptionIdeasAsync(imageBytes, imageMimeType, platform, existingText, language, voiceProfile, cancellationToken);
     }
 
     public Task<AiImageQualityCheckResponse> CheckImageQualityAsync(

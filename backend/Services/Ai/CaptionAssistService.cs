@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Caching.Memory;
 using PostPilot.Api.DTOs;
-using PostPilot.Api.Entities;
 using PostPilot.Api.Settings;
 
 namespace PostPilot.Api.Services.Ai;
@@ -48,8 +47,6 @@ public class CaptionAssistService
         string? outputLanguage,
         int variants,
         bool strictMeaning,
-        bool keepBrandVoice,
-        AiVoiceProfile? voiceProfile,
         string? sourceLanguage = null,
         CancellationToken cancellationToken = default)
     {
@@ -73,7 +70,7 @@ public class CaptionAssistService
             : outputLanguage;
 
         // Build cache key
-        var cacheKey = BuildCacheKey(text, detection.LanguageCode, targetLanguage, platform, strictMeaning, keepBrandVoice, variants, voiceProfile);
+        var cacheKey = BuildCacheKey(text, detection.LanguageCode, targetLanguage, platform, strictMeaning, variants);
 
         if (_cache.TryGetValue(cacheKey, out (string[], string[])? cached) && cached.HasValue)
         {
@@ -88,9 +85,7 @@ public class CaptionAssistService
             targetLanguage,
             platform,
             variants,
-            strictMeaning,
-            keepBrandVoice,
-            voiceProfile);
+            strictMeaning);
 
         var result = await _captionGenerator.GenerateAsync(request, cancellationToken);
 
@@ -106,8 +101,6 @@ public class CaptionAssistService
                 detection.LanguageCode,
                 targetLanguage,
                 platform,
-                keepBrandVoice,
-                voiceProfile,
                 cancellationToken);
 
             validatedCaptions = validationResult.captions;
@@ -126,8 +119,6 @@ public class CaptionAssistService
         string sourceLanguage,
         string targetLanguage,
         AiPlatform platform,
-        bool keepBrandVoice,
-        AiVoiceProfile? voiceProfile,
         CancellationToken cancellationToken)
     {
         var sourceNumbers = ExtractNumbers(sourceText);
@@ -180,8 +171,6 @@ public class CaptionAssistService
                     sourceLanguage,
                     targetLanguage,
                     platform,
-                    keepBrandVoice,
-                    voiceProfile,
                     cancellationToken);
 
                 // Validate again
@@ -226,8 +215,6 @@ public class CaptionAssistService
         string sourceLanguage,
         string targetLanguage,
         AiPlatform platform,
-        bool keepBrandVoice,
-        AiVoiceProfile? voiceProfile,
         CancellationToken cancellationToken)
     {
         try
@@ -260,9 +247,7 @@ Respond with ONLY the corrected caption text, no JSON, no explanations.";
                 targetLanguage,
                 platform,
                 1,
-                true, // strictMeaning
-                keepBrandVoice,
-                voiceProfile);
+                true); // strictMeaning
 
             // For repair, we call the generator but parse plain text response
             var repairRequest = await _captionGenerator.GenerateAsync(request, cancellationToken);
@@ -328,14 +313,11 @@ Respond with ONLY the corrected caption text, no JSON, no explanations.";
         string targetLanguage,
         AiPlatform platform,
         bool strictMeaning,
-        bool keepBrandVoice,
-        int variants,
-        AiVoiceProfile? voiceProfile)
+        int variants)
     {
         var textHash = ComputeHash(text);
-        var voiceProfileId = voiceProfile?.Id.ToString() ?? "none";
 
-        return $"Caption:{textHash}:{sourceLanguage}:{targetLanguage}:{platform}:{strictMeaning}:{keepBrandVoice}:{variants}:{voiceProfileId}";
+        return $"Caption:{textHash}:{sourceLanguage}:{targetLanguage}:{platform}:{strictMeaning}:{variants}";
     }
 
     private string ComputeHash(string input)

@@ -42,7 +42,6 @@ public class GeminiCaptionGenerator : GoogleAiClientBase, ICaptionGenerator
     private string BuildCaptionPrompt(Services.Ai.CaptionGenerateRequest request)
     {
         var isSameLanguage = request.SourceLanguage.Equals(request.OutputLanguage, StringComparison.OrdinalIgnoreCase);
-        var action = isSameLanguage ? "rewrite and improve" : "translate";
 
         var strictInstructions = request.StrictMeaning
             ? @"
@@ -61,8 +60,6 @@ CRITICAL PRESERVATION RULES (MUST FOLLOW):
 If any of these elements appear in the source text, they MUST appear unchanged in the output."
             : "Try to preserve numbers, URLs, hashtags, @mentions, and brand names when possible.";
 
-        var voiceContext = BuildVoiceProfileContext(request.VoiceProfile, request.KeepBrandVoice);
-
         var platformContext = request.Platform switch
         {
             AiPlatform.Facebook => "Facebook post",
@@ -76,18 +73,20 @@ If any of these elements appear in the source text, they MUST appear unchanged i
             ? $"Generate {request.Variants} different variants."
             : "Generate 1 variant.";
 
-        return $@"You are a professional social media content {action} specialist.
+        var translationTask = isSameLanguage
+            ? $"The source and target language are both {GetLanguageName(request.OutputLanguage)}. Return a meaning-preserving same-language version for {platformContext}; do not rewrite for style, improve, or embellish."
+            : $"Translate this text from {GetLanguageName(request.SourceLanguage)} to {GetLanguageName(request.OutputLanguage)} for {platformContext}. Preserve the original meaning strictly; do not rewrite for style or embellish.";
+
+        return $@"You are a professional social media translation specialist.
 
 SOURCE TEXT (in {GetLanguageName(request.SourceLanguage)}):
 {request.Text}
 
 TASK:
-{(isSameLanguage ? $"Rewrite and improve this text in {GetLanguageName(request.OutputLanguage)}, making it more engaging for {platformContext}." : $"Translate this text from {GetLanguageName(request.SourceLanguage)} to {GetLanguageName(request.OutputLanguage)} for {platformContext}.")}
+{translationTask}
 {variantsInstruction}
 
 {strictInstructions}
-
-{voiceContext}
 
 Respond with a JSON object containing:
 - captions: An array of {request.Variants} string(s)
@@ -104,38 +103,6 @@ Example response:
 
 If you detect any issues (e.g., ambiguous text, difficult-to-preserve elements), add them to the warnings array.
 If you cannot preserve a required element exactly, add a warning explaining what was changed.";
-    }
-
-    private string BuildVoiceProfileContext(AiVoiceProfile? profile, bool keepBrandVoice)
-    {
-        if (profile == null || !keepBrandVoice)
-            return "";
-
-        var context = "BRAND VOICE PROFILE:\n";
-
-        if (!string.IsNullOrWhiteSpace(profile.ExamplePosts))
-        {
-            context += $"\nExample posts:\n{profile.ExamplePosts}\n";
-        }
-
-        if (!string.IsNullOrWhiteSpace(profile.DoRules))
-        {
-            context += $"\nDO:\n{profile.DoRules}\n";
-        }
-
-        if (!string.IsNullOrWhiteSpace(profile.DontRules))
-        {
-            context += $"\nDON'T:\n{profile.DontRules}\n";
-        }
-
-        if (!string.IsNullOrWhiteSpace(profile.BannedWords))
-        {
-            context += $"\nBanned words/phrases: {profile.BannedWords}\n";
-        }
-
-        context += "\nApply this brand voice to the generated captions.\n";
-
-        return context;
     }
 
     private string GetLanguageName(string languageCode)

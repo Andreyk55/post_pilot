@@ -186,6 +186,7 @@ public class GemmaTextClient : GoogleAiClientBase, IGeminiClient
         AiPlatform platform,
         string? existingText,
         string language,
+        AiVoiceProfile? voiceProfile = null,
         CancellationToken cancellationToken = default)
     {
         throw new GeminiApiException(

@@ -1,5 +1,4 @@
 using PostPilot.Api.DTOs;
-using PostPilot.Api.Entities;
 
 namespace PostPilot.Api.Services.Ai;
 
@@ -25,9 +24,7 @@ public record CaptionGenerateRequest(
     string OutputLanguage,
     AiPlatform Platform,
     int Variants,
-    bool StrictMeaning,
-    bool KeepBrandVoice,
-    AiVoiceProfile? VoiceProfile);
+    bool StrictMeaning);
 
 /// <summary>
 /// Result of caption generation from the AI provider.

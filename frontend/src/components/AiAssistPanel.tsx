@@ -23,6 +23,7 @@ import {
   getMediaAiUnsupportedReason,
   getSupportedSingleImageMediaItem,
   normalizeActiveAiTab,
+  shouldShowVoiceProfileControl,
   type AiAssistTab,
   type AiAssistMediaItem,
 } from './aiAssistPanelState'
@@ -212,7 +213,6 @@ export function AiAssistPanel({
   const [outputLanguage, setOutputLanguage] = useState<string>('en')
   const [captionVariants, setCaptionVariants] = useState<number>(1)
   const [strictMeaning, setStrictMeaning] = useState<boolean>(true)
-  const [keepBrandVoice, setKeepBrandVoice] = useState<boolean>(true)
 
   // Media tab state
   const [mediaResult, setMediaResult] = useState<MediaResult | null>(null)
@@ -257,6 +257,7 @@ export function AiAssistPanel({
   const supportedMediaItem = getSupportedSingleImageMediaItem(resolvedMediaItems)
   const hasUploadedMedia = resolvedMediaItems.length > 0
   const { showMediaTab, showImageActions } = getAiAssistAvailability(resolvedMediaItems)
+  const showVoiceProfileControl = shouldShowVoiceProfileControl(activeTab, resolvedMediaItems)
 
   const generatedVariantCount =
     textResult?.type === 'generated'
@@ -462,9 +463,7 @@ export function AiAssistPanel({
         platform,
         outputLanguage: outputLanguage, // Use selected target language
         variants: captionVariants,
-        keepBrandVoice,
         strictMeaning,
-        voiceProfileId: selectedVoiceProfileId,
         // Pass sticky language to backend so it skips detection
         sourceLanguage: langState.languageCode,
       })
@@ -488,7 +487,8 @@ export function AiAssistPanel({
       const response = await aiMediaApi.imageCaptionIdeas(
         platform,
         [{ assetUrl: mediaAssetUrl, assetType: 'image' }],
-        text || undefined
+        text || undefined,
+        selectedVoiceProfileId
       )
       setMediaResult({ type: 'captions', variants: response.variants })
     })
@@ -647,6 +647,7 @@ export function AiAssistPanel({
             </div>
           </div>
 
+          {showVoiceProfileControl && (
           <div className="ai-controls">
             <div className="ai-control-group ai-voice-profile-control">
               <label htmlFor="ai-voice-profile">Voice Profile</label>
@@ -679,6 +680,7 @@ export function AiAssistPanel({
               </div>
             </div>
           </div>
+          )}
 
           {!isDisabled && mediaAiUnsupportedReason !== null && mediaAiUnsupportedReason !== 'no-media' && (
             <div className="ai-empty-state">{MEDIA_AI_UNSUPPORTED_MESSAGE}</div>
@@ -889,15 +891,6 @@ export function AiAssistPanel({
                     disabled={loading}
                   />
                   <span>Keep original meaning (strict)</span>
-                </label>
-                <label className="ai-toggle">
-                  <input
-                    type="checkbox"
-                    checked={keepBrandVoice}
-                    onChange={(e) => setKeepBrandVoice(e.target.checked)}
-                    disabled={loading || !selectedVoiceProfileId}
-                  />
-                  <span>Keep brand voice{!selectedVoiceProfileId && ' (select profile)'}</span>
                 </label>
               </div>
 

@@ -185,9 +185,7 @@ public record CaptionGenerateRequest(
     AiPlatform Platform,
     string? OutputLanguage = null,
     int Variants = 1,
-    bool KeepBrandVoice = true,
     bool StrictMeaning = true,
-    Guid? VoiceProfileId = null,
     /// <summary>
     /// If provided, the backend will skip language detection and use this value.
     /// This allows the frontend to cache detection results and avoid duplicate API calls.

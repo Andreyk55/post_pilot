@@ -517,6 +517,27 @@ Rules:
 - Output ONLY the JSON, no other text";
     }
 
+    protected static string BuildImageCaptionPromptWithVoice(
+        AiPlatform platform,
+        string? existingText,
+        string language,
+        AiVoiceProfile? profile)
+    {
+        var basePrompt = BuildImageCaptionPrompt(platform, existingText, language);
+        if (profile == null)
+            return basePrompt;
+
+        var voiceSection = BuildVoiceProfileSection(profile);
+        var priorityRule = "\n\nPRIORITY RULE: Follow the Voice Profile strictly when generating captions from the image. Match its audience, style, and banned-word rules while staying faithful to visible image content.\n";
+        var insertPoint = basePrompt.IndexOf("\n\nPlatform:", StringComparison.Ordinal);
+        if (insertPoint > 0)
+        {
+            return basePrompt.Insert(insertPoint, priorityRule + voiceSection);
+        }
+
+        return priorityRule + voiceSection + basePrompt;
+    }
+
     protected static string BuildImageQualityPrompt()
     {
         return @"You are an image quality analyst for social media. Analyze this image for quality issues that might affect its performance on social media.

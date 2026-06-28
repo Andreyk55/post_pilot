@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using PostPilot.Api.Data;
 using PostPilot.Api.DTOs;
+using PostPilot.Api.Entities;
 using PostPilot.Api.Services.Ai;
 using PostPilot.Api.Services.Auth;
 
@@ -13,18 +16,24 @@ public class AiMediaController : ControllerBase
 {
     private readonly IMediaAiService _mediaAiService;
     private readonly IAiRateLimiter _rateLimiter;
+    private readonly AppDbContext _db;
     private readonly ICurrentUserProvider _currentUser;
+    private readonly ICurrentWorkspaceProvider _currentWorkspace;
     private readonly ILogger<AiMediaController> _logger;
 
     public AiMediaController(
         IMediaAiService mediaAiService,
         IAiRateLimiter rateLimiter,
+        AppDbContext db,
         ICurrentUserProvider currentUser,
+        ICurrentWorkspaceProvider currentWorkspace,
         ILogger<AiMediaController> logger)
     {
         _mediaAiService = mediaAiService;
         _rateLimiter = rateLimiter;
+        _db = db;
         _currentUser = currentUser;
+        _currentWorkspace = currentWorkspace;
         _logger = logger;
     }
 
@@ -89,6 +98,8 @@ public class AiMediaController : ControllerBase
 
         try
         {
+            var voiceProfile = await LoadVoiceProfileForMediaActionAsync(request, userId, cancellationToken);
+
             return request.Action switch
             {
                 AiMediaAction.CaptionIdeas =>
@@ -97,6 +108,7 @@ public class AiMediaController : ControllerBase
                         request.Platform,
                         request.Text,
                         request.Language,
+                        voiceProfile,
                         cancellationToken)),
 
                 AiMediaAction.ImageQualityCheck =>
@@ -115,6 +127,7 @@ public class AiMediaController : ControllerBase
                         request.Platform,
                         request.Text,
                         request.Language,
+                        voiceProfile,
                         cancellationToken)),
 
                 AiMediaAction.ThumbnailSuggest =>
@@ -185,6 +198,35 @@ public class AiMediaController : ControllerBase
                 detail: "An unexpected error occurred. Please try again.",
                 statusCode: StatusCodes.Status500InternalServerError);
         }
+    }
+
+    private async Task<AiVoiceProfile?> LoadVoiceProfileForMediaActionAsync(
+        AiMediaRequest request,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        if (!MediaActionSupportsVoiceProfile(request.Action) || !request.VoiceProfileId.HasValue)
+        {
+            return null;
+        }
+
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(cancellationToken);
+        var voiceProfile = await _db.AiVoiceProfiles
+            .FirstOrDefaultAsync(
+                p => p.Id == request.VoiceProfileId.Value && p.WorkspaceId == workspaceId && !p.IsDeleted,
+                cancellationToken);
+
+        if (voiceProfile == null)
+        {
+            _logger.LogWarning("Voice profile {ProfileId} not found for user {UserId}", request.VoiceProfileId, userId);
+        }
+
+        return voiceProfile;
+    }
+
+    private static bool MediaActionSupportsVoiceProfile(AiMediaAction action)
+    {
+        return action is AiMediaAction.CaptionIdeas or AiMediaAction.VideoCaptionIdeas;
     }
 
     /// <summary>

@@ -29,7 +29,8 @@ public record AiMediaRequest(
     AiPlatform Platform,
     List<AiMediaItemReference> MediaItems,
     string? Text = null,
-    string Language = "en"
+    string Language = "en",
+    Guid? VoiceProfileId = null
 );
 
 /// <summary>

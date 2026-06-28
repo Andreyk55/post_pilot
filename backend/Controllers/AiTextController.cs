@@ -395,7 +395,6 @@ public class AiTextController : ControllerBase
         CancellationToken cancellationToken)
     {
         var userId = _currentUser.GetCurrentUserId();
-        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(cancellationToken);
 
         // Validate request
         var errors = ValidateCaptionRequest(request);
@@ -417,20 +416,6 @@ public class AiTextController : ControllerBase
 
         try
         {
-            // Load voice profile if provided
-            AiVoiceProfile? voiceProfile = null;
-            if (request.VoiceProfileId.HasValue)
-            {
-                voiceProfile = await _db.AiVoiceProfiles
-                    .FirstOrDefaultAsync(p => p.Id == request.VoiceProfileId.Value && p.WorkspaceId == workspaceId && !p.IsDeleted, cancellationToken);
-
-                if (voiceProfile == null)
-                {
-                    _logger.LogWarning("Voice profile {ProfileId} not found for user {UserId}", request.VoiceProfileId, userId);
-                    // Continue without voice profile
-                }
-            }
-
             // Generate captions
             var (detection, captions, warnings) = await _captionAssistService.GenerateCaptionsAsync(
                 request.Text,
@@ -438,8 +423,6 @@ public class AiTextController : ControllerBase
                 request.OutputLanguage,
                 request.Variants,
                 request.StrictMeaning,
-                request.KeepBrandVoice,
-                voiceProfile,
                 request.SourceLanguage,
                 cancellationToken);
 

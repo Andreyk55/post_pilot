@@ -1,4 +1,5 @@
 using PostPilot.Api.DTOs;
+using PostPilot.Api.Entities;
 using PostPilot.Api.Services.Media;
 using PostPilot.Api.Settings;
 
@@ -44,6 +45,7 @@ public class MediaAiService : IMediaAiService
         AiPlatform platform,
         string? existingText,
         string language,
+        AiVoiceProfile? voiceProfile = null,
         CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Generating image caption ideas for {AssetUrl}, Platform: {Platform}", assetUrl, platform);
@@ -61,6 +63,7 @@ public class MediaAiService : IMediaAiService
             platform,
             existingText,
             language,
+            voiceProfile,
             cancellationToken);
     }
 
@@ -107,6 +110,7 @@ public class MediaAiService : IMediaAiService
         AiPlatform platform,
         string? existingText,
         string language,
+        AiVoiceProfile? voiceProfile = null,
         CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Generating video caption ideas for {AssetUrl}, Platform: {Platform}", assetUrl, platform);
@@ -131,6 +135,7 @@ public class MediaAiService : IMediaAiService
                 platform,
                 existingText,
                 language,
+                voiceProfile,
                 cancellationToken);
 
             // Return with correct action type
@@ -314,6 +319,7 @@ public class MediaAiService : IMediaAiService
         AiPlatform platform,
         string? existingText,
         string language,
+        AiVoiceProfile? voiceProfile = null,
         CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Generating video caption ideas from client-extracted frame, Platform: {Platform}", platform);
@@ -339,6 +345,7 @@ public class MediaAiService : IMediaAiService
             platform,
             existingText,
             language,
+            voiceProfile,
             cancellationToken);
 
         // Return with correct action type

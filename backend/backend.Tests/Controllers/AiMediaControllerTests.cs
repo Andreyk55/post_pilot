@@ -1,8 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using PostPilot.Api.Controllers;
+using PostPilot.Api.Data;
 using PostPilot.Api.DTOs;
+using PostPilot.Api.Entities;
+using PostPilot.Api.Enums;
 using PostPilot.Api.Services.Ai;
 using PostPilot.Api.Services.Auth;
 using Xunit;
@@ -14,21 +18,33 @@ public class AiMediaControllerTests
     private readonly Mock<IMediaAiService> _mediaAiServiceMock;
     private readonly Mock<IAiRateLimiter> _rateLimiterMock;
     private readonly Mock<ICurrentUserProvider> _currentUserMock;
+    private readonly Mock<ICurrentWorkspaceProvider> _currentWorkspaceMock;
+    private readonly AppDbContext _db;
     private readonly AiMediaController _controller;
+    private static readonly Guid UserId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+    private static readonly Guid WorkspaceId = Guid.Parse("00000000-0000-0000-0000-0000000000aa");
 
     public AiMediaControllerTests()
     {
         _mediaAiServiceMock = new Mock<IMediaAiService>();
         _rateLimiterMock = new Mock<IAiRateLimiter>();
         _currentUserMock = new Mock<ICurrentUserProvider>();
+        _currentWorkspaceMock = new Mock<ICurrentWorkspaceProvider>();
+        _db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options);
 
         _currentUserMock.Setup(x => x.GetCurrentUserId())
-            .Returns(Guid.Parse("00000000-0000-0000-0000-000000000001"));
+            .Returns(UserId);
+        _currentWorkspaceMock.Setup(x => x.GetCurrentWorkspaceIdAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(WorkspaceId);
 
         _controller = new AiMediaController(
             _mediaAiServiceMock.Object,
             _rateLimiterMock.Object,
+            _db,
             _currentUserMock.Object,
+            _currentWorkspaceMock.Object,
             NullLogger<AiMediaController>.Instance);
     }
 
@@ -43,7 +59,7 @@ public class AiMediaControllerTests
             new List<AiMediaCaptionVariant> { new("Option 1", "Image caption") });
 
         _mediaAiServiceMock
-            .Setup(x => x.GenerateImageCaptionIdeasAsync("media/image.jpg", AiPlatform.Facebook, "hello", "en", It.IsAny<CancellationToken>()))
+            .Setup(x => x.GenerateImageCaptionIdeasAsync("media/image.jpg", AiPlatform.Facebook, "hello", "en", null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(expected);
 
         var result = await _controller.ProcessMedia(
@@ -59,7 +75,63 @@ public class AiMediaControllerTests
         Assert.Single(response.Variants);
 
         _mediaAiServiceMock.Verify(
-            x => x.GenerateImageCaptionIdeasAsync("media/image.jpg", AiPlatform.Facebook, "hello", "en", It.IsAny<CancellationToken>()),
+            x => x.GenerateImageCaptionIdeasAsync("media/image.jpg", AiPlatform.Facebook, "hello", "en", null, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ProcessMedia_ImageCaptionIdeas_LoadsVoiceProfileFromCurrentWorkspace()
+    {
+        _rateLimiterMock.Setup(x => x.TryAcquireAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var profile = new AiVoiceProfile
+        {
+            Id = Guid.Parse("00000000-0000-0000-0000-000000000123"),
+            WorkspaceId = WorkspaceId,
+            UserId = UserId,
+            Name = "Brand",
+            Description = "Helpful voice",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        _db.AiVoiceProfiles.Add(profile);
+        await _db.SaveChangesAsync();
+
+        var expected = new AiMediaCaptionIdeasResponse(
+            AiMediaAction.CaptionIdeas,
+            new List<AiMediaCaptionVariant> { new("Option 1", "Image caption") });
+
+        _mediaAiServiceMock
+            .Setup(x => x.GenerateImageCaptionIdeasAsync(
+                "media/image.jpg",
+                AiPlatform.Facebook,
+                "hello",
+                "en",
+                It.Is<AiVoiceProfile?>(p => p != null && p.Id == profile.Id),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expected);
+
+        var result = await _controller.ProcessMedia(
+            new AiMediaRequest(
+                AiMediaAction.CaptionIdeas,
+                AiPlatform.Facebook,
+                new List<AiMediaItemReference> { new("media/image.jpg", "image") },
+                "hello",
+                VoiceProfileId: profile.Id),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.IsType<AiMediaCaptionIdeasResponse>(ok.Value);
+
+        _mediaAiServiceMock.Verify(
+            x => x.GenerateImageCaptionIdeasAsync(
+                "media/image.jpg",
+                AiPlatform.Facebook,
+                "hello",
+                "en",
+                It.Is<AiVoiceProfile?>(p => p != null && p.Id == profile.Id),
+                It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -80,7 +152,7 @@ public class AiMediaControllerTests
 
         _rateLimiterMock.Verify(x => x.TryAcquireAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
         _mediaAiServiceMock.Verify(
-            x => x.GenerateVideoCaptionIdeasAsync(It.IsAny<string>(), It.IsAny<AiPlatform>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            x => x.GenerateVideoCaptionIdeasAsync(It.IsAny<string>(), It.IsAny<AiPlatform>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<AiVoiceProfile?>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -126,7 +198,7 @@ public class AiMediaControllerTests
             x => x.GenerateAltTextAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
         _mediaAiServiceMock.Verify(
-            x => x.GenerateImageCaptionIdeasAsync(It.IsAny<string>(), It.IsAny<AiPlatform>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            x => x.GenerateImageCaptionIdeasAsync(It.IsAny<string>(), It.IsAny<AiPlatform>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<AiVoiceProfile?>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -201,7 +273,7 @@ public class AiMediaControllerTests
 
         _rateLimiterMock.Verify(x => x.TryAcquireAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
         _mediaAiServiceMock.Verify(
-            x => x.GenerateVideoCaptionIdeasFromFrameAsync(It.IsAny<string>(), It.IsAny<AiPlatform>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            x => x.GenerateVideoCaptionIdeasFromFrameAsync(It.IsAny<string>(), It.IsAny<AiPlatform>(), It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<AiVoiceProfile?>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 }

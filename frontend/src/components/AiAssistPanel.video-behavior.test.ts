@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import aiAssistPanelSource from './AiAssistPanel.tsx?raw'
 import {
+  aiActionSupportsVoiceProfile,
   getAiAssistAvailability,
   getMediaAiUnsupportedReason,
   getSupportedSingleImageMediaItem,
+  getVoiceProfileAction,
   normalizeActiveAiTab,
+  shouldShowVoiceProfileControl,
   shouldShowMediaTab,
 } from './aiAssistPanelState'
 
@@ -61,6 +64,43 @@ describe('AiAssistPanel video media behavior', () => {
     expect(normalizeActiveAiTab('media', singleVideo)).toBe('text')
     expect(normalizeActiveAiTab('translate', singleVideo)).toBe('translate')
     expect(normalizeActiveAiTab('media', mixedMedia)).toBe('text')
+  })
+
+  it('uses action capabilities, not tab names alone, for voice profile visibility', () => {
+    expect(aiActionSupportsVoiceProfile('text-content-generation')).toBe(true)
+    expect(aiActionSupportsVoiceProfile('media-caption-generation')).toBe(true)
+    expect(aiActionSupportsVoiceProfile('translate')).toBe(false)
+    expect(aiActionSupportsVoiceProfile('media-analysis')).toBe(false)
+  })
+
+  it('shows Voice Profile for Text generation and hides it for Translate', () => {
+    expect(getVoiceProfileAction('text', [])).toBe('text-content-generation')
+    expect(shouldShowVoiceProfileControl('text', [])).toBe(true)
+    expect(getVoiceProfileAction('translate', singleImage)).toBe('translate')
+    expect(shouldShowVoiceProfileControl('translate', singleImage)).toBe(false)
+  })
+
+  it('shows Voice Profile for supported Media caption generation only', () => {
+    expect(getVoiceProfileAction('media', singleImage)).toBe('media-caption-generation')
+    expect(shouldShowVoiceProfileControl('media', singleImage)).toBe(true)
+    expect(getVoiceProfileAction('media', singleVideo)).toBe('unavailable')
+    expect(shouldShowVoiceProfileControl('media', singleVideo)).toBe(false)
+    expect(shouldShowVoiceProfileControl('media', multipleImages)).toBe(false)
+    expect(aiAssistPanelSource).toMatch(/showVoiceProfileControl && \(/)
+  })
+
+  it('keeps the Translate payload free of voice profile and brand voice fields', () => {
+    const generateCaptionsCall = aiAssistPanelSource.match(/aiApi\.generateCaptions\(\{[\s\S]*?\n\s*\}\)/)?.[0] ?? ''
+
+    expect(generateCaptionsCall).toContain('sourceLanguage: langState.languageCode')
+    expect(generateCaptionsCall).not.toMatch(/voiceProfileId|keepBrandVoice|brandVoice/)
+    expect(aiAssistPanelSource).not.toMatch(/Keep brand voice/)
+  })
+
+  it('passes the selected Voice Profile to supported Media caption generation', () => {
+    const imageCaptionCall = aiAssistPanelSource.match(/aiMediaApi\.imageCaptionIdeas\([\s\S]*?\n\s*\)/)?.[0] ?? ''
+
+    expect(imageCaptionCall).toContain('selectedVoiceProfileId')
   })
 
   it('keeps unsupported media helper copy and action guards in the panel source', () => {

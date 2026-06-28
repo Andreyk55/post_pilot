@@ -180,10 +180,11 @@ public class GeminiTextClient : GoogleAiClientBase, IGeminiClient
         AiPlatform platform,
         string? existingText,
         string language,
+        AiVoiceProfile? voiceProfile = null,
         CancellationToken cancellationToken = default)
     {
         var imageHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(imageBytes))[..16];
-        var cacheKey = BuildCacheKey("ImageCaption", platform.ToString(), "", language, $"{imageHash}:{existingText ?? ""}");
+        var cacheKey = BuildCacheKeyWithVoiceProfile("ImageCaption", platform.ToString(), "", language, $"{imageHash}:{existingText ?? ""}", voiceProfile);
 
         if (Cache.TryGetValue(cacheKey, out AiMediaCaptionIdeasResponse? cached) && cached != null)
         {
@@ -191,7 +192,7 @@ public class GeminiTextClient : GoogleAiClientBase, IGeminiClient
             return cached;
         }
 
-        var prompt = BuildImageCaptionPrompt(platform, existingText, language);
+        var prompt = BuildImageCaptionPromptWithVoice(platform, existingText, language, voiceProfile);
         var responseText = await CallVisionAsync(prompt, imageBytes, imageMimeType, maxOutputTokens: 1024, cancellationToken: cancellationToken);
 
         Logger.LogDebug("Image caption raw response ({Length} chars): {Response}",

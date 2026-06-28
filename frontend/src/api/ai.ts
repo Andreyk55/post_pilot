@@ -89,9 +89,7 @@ export interface CaptionGenerateRequest {
   platform: AiPlatform
   outputLanguage?: string | null
   variants?: number
-  keepBrandVoice?: boolean
   strictMeaning?: boolean
-  voiceProfileId?: string | null
   // If provided, backend will skip language detection and use this value
   sourceLanguage?: string | null
 }
@@ -266,10 +264,19 @@ export const aiApi = {
    * Generate multilingual captions with translation or rewriting support.
    */
   async generateCaptions(request: CaptionGenerateRequest): Promise<CaptionGenerateResponse> {
+    const payload: CaptionGenerateRequest = {
+      text: request.text,
+      platform: request.platform,
+      outputLanguage: request.outputLanguage,
+      variants: request.variants,
+      strictMeaning: request.strictMeaning,
+      sourceLanguage: request.sourceLanguage,
+    }
+
     const response = await fetch(`${API_URL}/ai/captions/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
+      body: JSON.stringify(payload),
     })
 
     if (!response.ok) {
@@ -352,6 +359,7 @@ export interface AiMediaRequest {
   mediaItems: AiMediaItemReference[]
   text?: string
   language?: string
+  voiceProfileId?: string | null
 }
 
 export interface AiMediaCaptionVariant {
@@ -429,13 +437,15 @@ export const aiMediaApi = {
   async imageCaptionIdeas(
     platform: AiPlatform,
     mediaItems: AiMediaItemReference[],
-    text?: string
+    text?: string,
+    voiceProfileId?: string | null
   ): Promise<AiMediaCaptionIdeasResponse> {
     const response = await this.processMedia({
       action: 'CaptionIdeas',
       platform,
       mediaItems,
       text,
+      voiceProfileId,
     })
     return response as AiMediaCaptionIdeasResponse
   },
@@ -461,13 +471,15 @@ export const aiMediaApi = {
   async videoCaptionIdeas(
     platform: AiPlatform,
     mediaItems: AiMediaItemReference[],
-    text?: string
+    text?: string,
+    voiceProfileId?: string | null
   ): Promise<AiMediaCaptionIdeasResponse> {
     const response = await this.processMedia({
       action: 'VideoCaptionIdeas',
       platform,
       mediaItems,
       text,
+      voiceProfileId,
     })
     return response as AiMediaCaptionIdeasResponse
   },
