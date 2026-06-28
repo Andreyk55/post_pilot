@@ -17,7 +17,8 @@
       "PowerShell(dotnet build backend/PostPilot.Api.csproj --nologo -clp:ErrorsOnly 2>&1)",
       "PowerShell(dotnet test backend/PostPilot.Api.Tests/PostPilot.Api.Tests.csproj --nologo --filter \"FullyQualifiedName~InstagramAutoPromotionTests\" 2>&1)",
       "PowerShell(npx --prefix D:\\\\dev\\\\projects\\\\post_pilot\\\\frontend tsc --noEmit -p D:\\\\dev\\\\projects\\\\post_pilot\\\\frontend\\\\tsconfig.app.json 2>&1)",
-      "PowerShell(Set-Location D:\\\\dev\\\\projects\\\\post_pilot\\\\frontend; npx tsc --noEmit -p tsconfig.app.json 2>&1 | Select-Object -First 30; Write-Output \"EXIT: $LASTEXITCODE\")"
+      "PowerShell(Set-Location D:\\\\dev\\\\projects\\\\post_pilot\\\\frontend; npx tsc --noEmit -p tsconfig.app.json 2>&1 | Select-Object -First 30; Write-Output \"EXIT: $LASTEXITCODE\")",
+      "PowerShell(npx vitest run 2>&1)"
     ]
   }
 }

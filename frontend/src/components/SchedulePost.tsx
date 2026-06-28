@@ -15,9 +15,11 @@ import { InstagramMediaTags, type MediaTag } from './InstagramMediaTags'
 import { canShowCarouselTags, buildCarouselMediaTags } from '../utils/instagramTagging'
 import { hasUnpromotedLinkedInstagram } from '../utils/instagramPromotion'
 import {
+  applySchedulePostMediaValidationUpdate,
   clearSchedulePostMediaValidation,
   hasBlockingSchedulePostMediaValidation,
-  startSchedulePostMediaValidation,
+  shouldRenderSchedulePostMediaValidationError,
+  type SchedulePostMediaValidationState,
 } from '../utils/schedulePostMediaValidation'
 import {
   getPostTextMaxChars,
@@ -105,8 +107,12 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
   const [aiPanelKey, setAiPanelKey] = useState(0)
   const [suggestedTimesKey, setSuggestedTimesKey] = useState(0)
   const [selectedThumbnailUrl, setSelectedThumbnailUrl] = useState<string | null>(null)
-  const [mediaValidationStatus, setMediaValidationStatus] = useState<ValidationStatus | null>(null)
-  const [mediaValidationErrors, setMediaValidationErrors] = useState<MediaValidationError[]>([])
+  // Single-media validation, stored together with the upload-session owner key so a
+  // stale validation can never re-render an old error over the current media. See
+  // schedulePostMediaValidation.ts for the owner-key semantics.
+  const [mediaValidation, setMediaValidation] = useState<SchedulePostMediaValidationState>(
+    clearSchedulePostMediaValidation(),
+  )
 
   // Carousel (multi-image) state for Instagram
   const [carouselItems, setCarouselItems] = useState<UploadedMediaItem[]>([])
@@ -354,26 +360,12 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
   const isFacebookMultiPhoto = isFacebookSelected && !isStory && carouselItems.length >= 2 && carouselItems.every(i => i.mediaType === 'Image')
   const isMultiMedia = isInstagramCarousel || isFacebookMultiPhoto
 
-  const applySingleMediaValidationState = (status: ValidationStatus | null, errors: MediaValidationError[]) => {
-    setMediaValidationStatus(status)
-    setMediaValidationErrors(errors)
-  }
-
   const clearSingleMediaValidationState = () => {
-    const nextState = clearSchedulePostMediaValidation()
-    applySingleMediaValidationState(nextState.status, nextState.errors)
-  }
-
-  const startSingleMediaValidationState = () => {
-    const nextState = startSchedulePostMediaValidation()
-    applySingleMediaValidationState(nextState.status, nextState.errors)
+    setMediaValidation(clearSchedulePostMediaValidation())
   }
 
   const handleSingleMediaUploadingChange = (uploading: boolean) => {
     setIsUploading(uploading)
-    if (uploading) {
-      startSingleMediaValidationState()
-    }
   }
 
   // Instagram media validation: single image/video OR carousel (2+ images)
@@ -469,8 +461,8 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
   const platformDisplayName = selectedPlatformId ? getPlatformDisplayName(selectedPlatformId) : ''
 
   // Media validation status check - invalid media blocks submission
-  const hasBlockingMediaValidation = hasBlockingSchedulePostMediaValidation(mediaUrl, mediaValidationStatus)
-  const hasInvalidMedia = mediaUrl && mediaValidationStatus === 'Invalid'
+  const hasBlockingMediaValidation = hasBlockingSchedulePostMediaValidation(mediaUrl, mediaValidation.status)
+  const showMediaValidationError = shouldRenderSchedulePostMediaValidationError(mediaValidation, mediaUrl)
   const hasInvalidCarouselItems = carouselItems.some(item => item.validationStatus === 'Invalid')
 
   // Instagram media tags: show for IG Feed + single image or single video (not carousel)
@@ -615,13 +607,16 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
     setStickyLanguage({ languageCode: 'unknown', confidence: 0, isReliable: false })
   }
 
-  // Handle media validation changes from MediaUpload
+  // Handle media validation changes from MediaUpload. The owner key ties each result
+  // to the upload session that produced it; the reducer drops results from a
+  // superseded upload so a late "Invalid" can't reappear over newer media.
   const handleMediaValidationChange = (
     status: ValidationStatus,
     errors: MediaValidationError[],
-    _warnings: MediaValidationWarning[]
+    _warnings: MediaValidationWarning[],
+    ownerKey: string,
   ) => {
-    applySingleMediaValidationState(status, errors)
+    setMediaValidation(prev => applySchedulePostMediaValidationUpdate(prev, status, errors, ownerKey))
   }
 
   // Destructure for easier access
@@ -946,12 +941,14 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
             />
           )}
           {uploadError && <div className="upload-error">{uploadError}</div>}
-          {/* Show validation error summary near submit button */}
-          {hasInvalidMedia && mediaValidationErrors.length > 0 && (
+          {/* Show validation error summary near submit button — only for a
+              current-session Invalid result, never a stale one left over from a
+              previous upload (see shouldRenderSchedulePostMediaValidationError). */}
+          {showMediaValidationError && (
             <div className="media-validation-summary">
               <strong>Media cannot be published:</strong>
               <ul>
-                {mediaValidationErrors.map((err, i) => (
+                {mediaValidation.errors.map((err, i) => (
                   <li key={i}>{err.message}</li>
                 ))}
               </ul>

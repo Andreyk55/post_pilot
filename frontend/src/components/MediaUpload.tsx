@@ -9,7 +9,7 @@ interface MediaUploadProps {
   onUploadError: (error: string) => void
   onClear: () => void
   onUploadingChange?: (isUploading: boolean) => void
-  onValidationChange?: (status: ValidationStatus, errors: MediaValidationError[], warnings: MediaValidationWarning[]) => void
+  onValidationChange?: (status: ValidationStatus, errors: MediaValidationError[], warnings: MediaValidationWarning[], ownerKey: string) => void
   selectedPlatform?: PlatformId | null
   placement?: Placement
   /** When true, disables all upload functionality (no connected account/page) */
@@ -45,11 +45,27 @@ export function MediaUpload({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
 
-  const setNeutralValidationState = () => {
+  // Identifies the in-flight upload/validation session. Each new file selection or
+  // re-validation begins a fresh session; an async validation that resolves after a
+  // newer session has started carries a stale key and is dropped instead of writing
+  // an old result back over the current media (and the parent's error panel).
+  const sessionInstanceRef = useRef(Math.random().toString(36).slice(2))
+  const sessionCounterRef = useRef(0)
+  const activeSessionRef = useRef<string>('')
+
+  const beginValidationSession = (): string => {
+    const sessionId = `${sessionInstanceRef.current}:${++sessionCounterRef.current}`
+    activeSessionRef.current = sessionId
+    return sessionId
+  }
+
+  const isStaleSession = (sessionId: string) => activeSessionRef.current !== sessionId
+
+  const setNeutralValidationState = (ownerKey: string) => {
     setValidationStatus('Pending')
     setValidationErrors([])
     setValidationWarnings([])
-    onValidationChange?.('Pending', [], [])
+    onValidationChange?.('Pending', [], [], ownerKey)
   }
 
   // Validate/re-validate when platform changes (including first selection after upload)
@@ -62,9 +78,10 @@ export function MediaUpload({
   const revalidateMedia = async () => {
     if (!uploadedStorageKey || !uploadedMimeType || !selectedPlatform) return
 
+    const sessionId = beginValidationSession()
     try {
       setValidating(true)
-      setNeutralValidationState()
+      setNeutralValidationState(sessionId)
 
       const platformMap: Record<string, Platform> = {
         facebook: 'Facebook',
@@ -80,14 +97,19 @@ export function MediaUpload({
         placement: placement,
       })
 
+      // A newer upload/re-validation superseded this one — ignore the stale result.
+      if (isStaleSession(sessionId)) return
+
       setValidationStatus(result.status)
       setValidationErrors(result.errors)
       setValidationWarnings(result.warnings)
-      onValidationChange?.(result.status, result.errors, result.warnings)
+      onValidationChange?.(result.status, result.errors, result.warnings, sessionId)
     } catch (err) {
       console.error('Re-validation failed:', err)
     } finally {
-      setValidating(false)
+      if (!isStaleSession(sessionId)) {
+        setValidating(false)
+      }
     }
   }
 
@@ -145,8 +167,11 @@ export function MediaUpload({
       return
     }
 
-    // Clear any result from the previously selected media before the new file validates.
-    setNeutralValidationState()
+    // Start a fresh validation session and clear any result from the previously
+    // selected media *before* the new file validates. This drops the old error
+    // panel synchronously, the instant a new upload starts — not after it finishes.
+    const sessionId = beginValidationSession()
+    setNeutralValidationState(sessionId)
     setUploadedStorageKey(null)
     setUploadedMimeType(null)
 
@@ -215,15 +240,20 @@ export function MediaUpload({
             platform: platformMap[selectedPlatform] as Platform,
             placement: placement,
           })
-          setValidationStatus(validationResult.status)
-          setValidationErrors(validationResult.errors)
-          setValidationWarnings(validationResult.warnings)
-          onValidationChange?.(validationResult.status, validationResult.errors, validationResult.warnings)
+          // A newer upload superseded this one — ignore the stale result.
+          if (!isStaleSession(sessionId)) {
+            setValidationStatus(validationResult.status)
+            setValidationErrors(validationResult.errors)
+            setValidationWarnings(validationResult.warnings)
+            onValidationChange?.(validationResult.status, validationResult.errors, validationResult.warnings, sessionId)
+          }
         } catch (err) {
           console.error('Validation failed:', err)
           // Keep upload but show as pending
         } finally {
-          setValidating(false)
+          if (!isStaleSession(sessionId)) {
+            setValidating(false)
+          }
         }
       }
 
