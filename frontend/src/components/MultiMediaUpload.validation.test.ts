@@ -26,9 +26,33 @@ describe('MultiMediaUpload — shared validation UI', () => {
     expect(multiMediaUploadSource).toMatch(/pendingUploads\.map\(pending =>/)
     // Pending cards render the shared MediaValidationBadge in its validating state,
     // matching the single-media (Story) "Validating…" visual.
-    expect(multiMediaUploadSource).toMatch(/<MediaValidationBadge validating \/>/)
-    // Pending placeholders must clear once the upload settles.
-    expect(multiMediaUploadSource).toMatch(/setPendingUploads\(\[\]\)/)
+    expect(multiMediaUploadSource).toMatch(/<MediaValidationBadge validating className="carousel-item-badge" \/>/)
+    // Pending previews must clear once the upload settles.
+    expect(multiMediaUploadSource).toMatch(/replacePendingUploads\(\[\]\)/)
+  })
+
+  it('renders pending Feed image uploads as real previews with the validating badge overlaid', () => {
+    expect(multiMediaUploadSource).toMatch(/previewUrl: URL\.createObjectURL\(file\)/)
+    expect(multiMediaUploadSource).toMatch(/mediaType: getPendingUploadMediaType\(file\)/)
+    expect(multiMediaUploadSource).toMatch(
+      /pending\.mediaType === 'image'[\s\S]*<img src=\{pending\.previewUrl\} alt=\{pending\.fileName\} className="carousel-thumbnail" \/>/,
+    )
+    expect(multiMediaUploadSource).toMatch(/<MediaValidationBadge validating className="carousel-item-badge" \/>/)
+    expect(multiMediaUploadSource).not.toMatch(
+      /<div className="carousel-thumbnail carousel-thumbnail--pending">\s*<MediaValidationBadge validating/,
+    )
+  })
+
+  it('renders pending Feed video uploads as compact video previews with the play overlay', () => {
+    expect(multiMediaUploadSource).toMatch(
+      /pending\.mediaType === 'video'[\s\S]*<video[\s\S]*src=\{pending\.previewUrl\}[\s\S]*className="carousel-thumbnail"[\s\S]*preload="metadata"[\s\S]*<span className="carousel-video-indicator" aria-hidden="true">/,
+    )
+  })
+
+  it('uses the same pending preview path for Facebook Feed and Instagram Feed', () => {
+    expect(multiMediaUploadSource).toMatch(/if \(isInstagram\) \{[\s\S]*await uploadFiles\(filesToUpload\)[\s\S]*return\s*\}/)
+    expect(multiMediaUploadSource).toMatch(/if \(isFacebook\) \{[\s\S]*await uploadFiles\(filesToUpload\)[\s\S]*return\s*\}/)
+    expect(multiMediaUploadSource).toMatch(/platform: isFacebook \? 'Facebook' : 'Instagram'/)
   })
 
   it("shows each item's validation status with the shared badge", () => {

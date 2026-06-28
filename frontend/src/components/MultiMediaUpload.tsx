@@ -44,6 +44,21 @@ interface MultiMediaUploadProps {
 
 const MAX_CAROUSEL_IMAGES = 10
 
+type PendingUploadMediaType = 'image' | 'video' | null
+
+type PendingUpload = {
+  id: string
+  fileName: string
+  mediaType: PendingUploadMediaType
+  previewUrl: string
+}
+
+const getPendingUploadMediaType = (file: File): PendingUploadMediaType => {
+  if (file.type.startsWith('image/')) return 'image'
+  if (file.type.startsWith('video/')) return 'video'
+  return null
+}
+
 export function MultiMediaUpload({
   items,
   onItemsChange,
@@ -58,11 +73,23 @@ export function MultiMediaUpload({
   const [progress, setProgress] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Optimistic placeholders for files currently uploading/validating. They render
-  // as "Validating…" cards so the new media shows immediately, and the previous
-  // validation-error panel stays hidden until the new result is finalized — never
-  // leaving a stale error visible while a new upload is in flight.
-  const [pendingUploads, setPendingUploads] = useState<{ id: string; fileName: string; isVideo: boolean }[]>([])
+  // Optimistic media tiles for files currently uploading/validating. They keep the
+  // selected media visible immediately, with the validating badge layered on top.
+  // The previous validation-error panel stays hidden until the new result is
+  // finalized so stale errors do not sit under fresh media.
+  const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([])
+  const pendingPreviewUrlsRef = useRef<string[]>([])
+
+  const replacePendingUploads = (nextPendingUploads: PendingUpload[]) => {
+    pendingPreviewUrlsRef.current.forEach(url => URL.revokeObjectURL(url))
+    pendingPreviewUrlsRef.current = nextPendingUploads.map(pending => pending.previewUrl)
+    setPendingUploads(nextPendingUploads)
+  }
+
+  useEffect(() => () => {
+    pendingPreviewUrlsRef.current.forEach(url => URL.revokeObjectURL(url))
+    pendingPreviewUrlsRef.current = []
+  }, [])
 
   // Latest committed items, read at upload-completion time so an item removed while
   // a new upload is in flight is never resurrected by the append below. Synced in an
@@ -205,11 +232,12 @@ export function MultiMediaUpload({
 
     // Show the incoming files as pending cards right away and hide any prior
     // validation error while the new media is uploading/validating.
-    setPendingUploads(
+    replacePendingUploads(
       filesToUpload.map(file => ({
         id: createUploadClientId(),
         fileName: file.name,
-        isVideo: file.type.startsWith('video/'),
+        mediaType: getPendingUploadMediaType(file),
+        previewUrl: URL.createObjectURL(file),
       })),
     )
 
@@ -325,7 +353,7 @@ export function MultiMediaUpload({
       setProgress(0)
     }
 
-    setPendingUploads([])
+    replacePendingUploads([])
     setUploading(false)
     onUploadingChange?.(false)
   }
@@ -537,12 +565,26 @@ export function MultiMediaUpload({
             </div>
           ))}
 
-          {/* Pending (uploading/validating) placeholder cards */}
+          {/* Pending (uploading/validating) media preview cards */}
           {pendingUploads.map(pending => (
             <div key={pending.id} className="carousel-item pending">
-              <div className="carousel-thumbnail carousel-thumbnail--pending">
-                <MediaValidationBadge validating />
-              </div>
+              {pending.mediaType === 'video' ? (
+                <>
+                  <video
+                    src={pending.previewUrl}
+                    className="carousel-thumbnail"
+                    muted
+                    playsInline
+                    preload="metadata"
+                  />
+                  <span className="carousel-video-indicator" aria-hidden="true">&#9654;</span>
+                </>
+              ) : pending.mediaType === 'image' ? (
+                <img src={pending.previewUrl} alt={pending.fileName} className="carousel-thumbnail" />
+              ) : (
+                <div className="carousel-thumbnail carousel-thumbnail--pending" />
+              )}
+              <MediaValidationBadge validating className="carousel-item-badge" />
               <div className="carousel-item-filename">{pending.fileName}</div>
             </div>
           ))}

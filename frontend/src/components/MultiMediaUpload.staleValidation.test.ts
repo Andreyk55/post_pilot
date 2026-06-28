@@ -19,7 +19,7 @@ describe('MultiMediaUpload — stale per-item validation never survives a new up
     expect(multiMediaUploadSource).toMatch(/const uploadFiles = async \(filesToUpload: File\[\]\) => \{\s*const uploadOwnerKey = beginUploadSession\(\)/)
     // Optimistic pending cards render immediately so the incoming media is visible
     // while the previous card is hidden.
-    expect(multiMediaUploadSource).toMatch(/setPendingUploads\(\s*filesToUpload\.map/)
+    expect(multiMediaUploadSource).toMatch(/replacePendingUploads\(\s*filesToUpload\.map/)
   })
 
   it('keeps validation state per item so removing/replacing one drops only that state', () => {
