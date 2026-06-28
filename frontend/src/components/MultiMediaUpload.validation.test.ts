@@ -21,12 +21,23 @@ describe('MultiMediaUpload — stale validation does not survive a new upload', 
     expect(multiMediaUploadSource).toMatch(/const showValidationErrors = !isUploadingMedia && hasInvalidItems/)
   })
 
-  it('renders optimistic pending cards for in-flight uploads', () => {
+  it('renders optimistic pending cards using the shared validating badge', () => {
     expect(multiMediaUploadSource).toMatch(/setPendingUploads\(/)
     expect(multiMediaUploadSource).toMatch(/pendingUploads\.map\(pending =>/)
-    expect(multiMediaUploadSource).toMatch(/carousel-validating-badge/)
+    // Pending cards render the shared MediaValidationBadge in its validating state,
+    // matching the single-media (Story) "Validating…" visual.
+    expect(multiMediaUploadSource).toMatch(/<MediaValidationBadge validating \/>/)
     // Pending placeholders must clear once the upload settles.
     expect(multiMediaUploadSource).toMatch(/setPendingUploads\(\[\]\)/)
+  })
+
+  it('shows each item\'s validation status with the shared badge', () => {
+    // Same Validating/Valid/Invalid/Warning component the single-media uploader uses,
+    // so carousel items get the clear valid/success state too — not just errors.
+    expect(multiMediaUploadSource).toMatch(/import \{ MediaValidationBadge \} from '\.\/MediaValidationStatus'/)
+    expect(multiMediaUploadSource).toMatch(/<MediaValidationBadge\s+status=\{item\.validationStatus\}/)
+    // The old bespoke invalid-only marker is gone in favor of the shared badge.
+    expect(multiMediaUploadSource).not.toMatch(/carousel-item-error/)
   })
 
   it('merges completed uploads against the latest items so a removal is not clobbered', () => {

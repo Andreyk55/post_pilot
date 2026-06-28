@@ -14,6 +14,8 @@ import {
   getFacebookFormatHint,
 } from '../utils/facebookMediaValidation'
 import type { PlatformId } from '../constants/validationLimits'
+import { MediaValidationBadge } from './MediaValidationStatus'
+import { createUploadClientId } from '../utils/uploadClientId'
 import './MultiMediaUpload.css'
 
 export interface UploadedMediaItem {
@@ -60,16 +62,24 @@ export function MultiMediaUpload({
   const [pendingUploads, setPendingUploads] = useState<{ id: string; fileName: string; isVideo: boolean }[]>([])
 
   // Latest committed items, read at upload-completion time so an item removed while
-  // a new upload is in flight is never resurrected by the append below.
+  // a new upload is in flight is never resurrected by the append below. Synced in an
+  // effect rather than during render (the only reader runs after async awaits, well
+  // after commit, so the timing is equivalent) which also keeps the ref write out of
+  // the render path.
   const itemsRef = useRef(items)
-  itemsRef.current = items
+  useEffect(() => {
+    itemsRef.current = items
+  }, [items])
 
-  const uploadSessionInstanceRef = useRef(Math.random().toString(36).slice(2))
+  // Per-component session prefix for upload-ownership keys. Created once via the
+  // lazy useState initializer (React calls it a single time) so it is never
+  // regenerated on re-render and no impure call runs in the render path.
+  const [uploadSessionInstance] = useState(createUploadClientId)
   const uploadSessionCounterRef = useRef(0)
   const activeUploadOwnerKeyRef = useRef<string>('')
 
   const beginUploadSession = (): string => {
-    const uploadOwnerKey = `${uploadSessionInstanceRef.current}:${++uploadSessionCounterRef.current}`
+    const uploadOwnerKey = `${uploadSessionInstance}:${++uploadSessionCounterRef.current}`
     activeUploadOwnerKeyRef.current = uploadOwnerKey
     return uploadOwnerKey
   }
@@ -194,7 +204,7 @@ export function MultiMediaUpload({
     // validation error while the new media is uploading/validating.
     setPendingUploads(
       filesToUpload.map(file => ({
-        id: crypto.randomUUID(),
+        id: createUploadClientId(),
         fileName: file.name,
         isVideo: file.type.startsWith('video/'),
       })),
@@ -281,7 +291,7 @@ export function MultiMediaUpload({
         }
 
         newItems.push({
-          id: crypto.randomUUID(),
+          id: createUploadClientId(),
           storageKey,
           mediaType: mediaType as MediaType,
           fileName: file.name,
@@ -499,11 +509,14 @@ export function MultiMediaUpload({
                   </button>
                 </div>
               </div>
-              {item.validationStatus === 'Invalid' && (
-                <div className="carousel-item-error" title={item.validationErrors.map(e => e.message).join(', ')}>
-                  ⚠
-                </div>
-              )}
+              {/* Shared validation badge — same Validating/Valid/Invalid/Warning
+                  visual as the single-media (Story) uploader. The full error text
+                  stays available on hover via the tooltip. */}
+              <MediaValidationBadge
+                status={item.validationStatus}
+                title={item.validationErrors.map(e => e.message).join(', ') || undefined}
+                className="carousel-item-badge"
+              />
             </div>
           ))}
 
@@ -511,7 +524,7 @@ export function MultiMediaUpload({
           {pendingUploads.map(pending => (
             <div key={pending.id} className="carousel-item pending">
               <div className="carousel-thumbnail carousel-thumbnail--pending">
-                <span className="carousel-validating-badge">Validating…</span>
+                <MediaValidationBadge validating />
               </div>
               <div className="carousel-item-filename">{pending.fileName}</div>
             </div>

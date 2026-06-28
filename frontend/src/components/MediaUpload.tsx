@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from 'react'
 import { mediaApi, type MediaType, type ValidationStatus, type MediaValidationError, type MediaValidationWarning, type Platform, type Placement } from '../api/media'
 import { preValidateFile, preValidateImageDimensions, getImageDimensions, getClientValidationRule } from '../constants/mediaValidationRules'
 import type { PlatformId } from '../constants/validationLimits'
+import { MediaValidationBadge, MediaValidationPanel } from './MediaValidationStatus'
+import { createUploadClientId } from '../utils/uploadClientId'
 import './MediaUpload.css'
 
 interface MediaUploadProps {
@@ -48,12 +50,14 @@ export function MediaUpload({
   // Identifies the in-flight upload/validation owner. Each new file selection or
   // re-validation begins a fresh owner key; late progress/completion/error events
   // from an older owner are dropped instead of writing over the current media.
-  const sessionInstanceRef = useRef(Math.random().toString(36).slice(2))
+  // The per-component prefix is created once via the lazy useState initializer
+  // (React calls it a single time) so no impure call runs in the render path.
+  const [sessionInstance] = useState(createUploadClientId)
   const sessionCounterRef = useRef(0)
   const activeUploadOwnerKeyRef = useRef<string>('')
 
   const beginUploadSession = (): string => {
-    const uploadOwnerKey = `${sessionInstanceRef.current}:${++sessionCounterRef.current}`
+    const uploadOwnerKey = `${sessionInstance}:${++sessionCounterRef.current}`
     activeUploadOwnerKeyRef.current = uploadOwnerKey
     return uploadOwnerKey
   }
@@ -317,24 +321,6 @@ export function MediaUpload({
     }
   }
 
-  const getValidationBadge = () => {
-    if (validating) {
-      return <span className="validation-badge validating">Validating...</span>
-    }
-
-    switch (validationStatus) {
-      case 'Valid':
-        return <span className="validation-badge valid">Valid</span>
-      case 'Invalid':
-        return <span className="validation-badge invalid">Invalid</span>
-      case 'Warning':
-        return <span className="validation-badge warning">Warning</span>
-      case 'Pending':
-      default:
-        return selectedPlatform ? <span className="validation-badge pending">Pending</span> : null
-    }
-  }
-
   // Get dynamic hints based on selected platform
   const getUploadHints = () => {
     if (selectedPlatform) {
@@ -390,7 +376,11 @@ export function MediaUpload({
                 <span className={`media-type-badge ${mediaType}`}>
                   {mediaType === 'image' ? 'Photo' : 'Video'}
                 </span>
-                {getValidationBadge()}
+                <MediaValidationBadge
+                  validating={validating}
+                  status={validationStatus}
+                  showPending={!!selectedPlatform}
+                />
                 <span className="preview-filename">{fileName}</span>
               </div>
               <button
@@ -404,27 +394,9 @@ export function MediaUpload({
             </div>
           </div>
 
-          {/* Validation errors - outside preview for proper display */}
-          {validationErrors.length > 0 && (
-            <div className="validation-errors">
-              {validationErrors.map((err, i) => (
-                <div key={i} className="validation-error">
-                  {err.message}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Validation warnings - outside preview for proper display */}
-          {validationWarnings.length > 0 && validationErrors.length === 0 && (
-            <div className="validation-warnings">
-              {validationWarnings.map((warn, i) => (
-                <div key={i} className="validation-warning">
-                  {warn.message}
-                </div>
-              ))}
-            </div>
-          )}
+          {/* Validation errors/warnings - outside preview for proper display.
+              Errors take precedence over warnings (handled in the shared panel). */}
+          <MediaValidationPanel errors={validationErrors} warnings={validationWarnings} />
         </>
       ) : (
         <div
