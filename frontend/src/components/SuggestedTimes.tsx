@@ -133,7 +133,7 @@ export function SuggestedTimes({
     <div className={`suggested-times ${disabled ? 'disabled' : ''}`}>
       <div className="suggested-times-header" onClick={() => setExpanded(!expanded)}>
         <span className="suggested-times-icon">⏰</span>
-        <span className="suggested-times-title">Suggest Best Time</span>
+        <span className="suggested-times-title">AI Best Time</span>
         {loading && <span className="suggested-times-loading">...</span>}
         <span className={`suggested-times-chevron ${expanded ? 'expanded' : ''}`}>▼</span>
       </div>

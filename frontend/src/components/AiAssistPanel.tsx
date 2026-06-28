@@ -170,6 +170,7 @@ export function AiAssistPanel({
   onGoalChange,
   disabled = false,
 }: AiAssistPanelProps) {
+  const [expanded, setExpanded] = useState(false)
   const noPlatform = !platformProp
   const platform = platformProp
 
@@ -236,6 +237,11 @@ export function AiAssistPanel({
   const hasMedia = !!mediaUrl && mediaType && mediaType !== 'None'
   const isImage = mediaType === 'Image'
   const isVideo = mediaType === 'Video'
+
+  const generatedVariantCount =
+    textResult?.type === 'generated'
+      ? textResult.variants.length
+      : 0
 
   // Text tab handlers
   const handleTextAction = async (action: () => Promise<void>) => {
@@ -579,78 +585,97 @@ export function AiAssistPanel({
   }
 
   return (
-    <div className="ai-assist-panel">
-      <div className="ai-assist-header">
-        <h3>AI Assist</h3>
-        <div className="ai-tabs">
-          <button
-            type="button"
-            className={`ai-tab ${activeTab === 'text' ? 'active' : ''}`}
-            onClick={() => {
-              setActiveTab('text')
-              setError(null)
-            }}
-          >
-            Text
-          </button>
-          <button
-            type="button"
-            className={`ai-tab ${activeTab === 'translate' ? 'active' : ''}`}
-            onClick={() => {
-              setActiveTab('translate')
-              setError(null)
-            }}
-          >
-            Translate
-          </button>
-          <button
-            type="button"
-            className={`ai-tab ${activeTab === 'media' ? 'active' : ''}`}
-            onClick={() => {
-              setActiveTab('media')
-              setError(null)
-            }}
-          >
-            Media
-          </button>
-        </div>
-      </div>
+    <div className={`ai-assist-panel ${expanded ? 'expanded' : ''}`}>
+      <button
+        type="button"
+        className="ai-assist-accordion"
+        onClick={() => setExpanded((prev) => !prev)}
+        aria-expanded={expanded}
+      >
+        <span className="ai-assist-accordion-icon" aria-hidden="true">🤖</span>
+        <span className="ai-assist-accordion-copy">
+          <span className="ai-assist-accordion-title">AI Content Assist</span>
+          <span className="ai-assist-accordion-subtitle">Generate captions, translate, or improve your post text.</span>
+        </span>
+        {generatedVariantCount > 0 && (
+          <span className="ai-assist-accordion-badge">{generatedVariantCount} variants generated</span>
+        )}
+        {loading && <span className="ai-assist-accordion-loading">...</span>}
+        <span className={`ai-assist-accordion-chevron ${expanded ? 'expanded' : ''}`} aria-hidden="true">▼</span>
+      </button>
 
-      <div className="ai-controls">
-        <div className="ai-control-group ai-voice-profile-control">
-          <label htmlFor="ai-voice-profile">Voice Profile</label>
-          <div className="voice-profile-selector">
-            <select
-              id="ai-voice-profile"
-              value={selectedVoiceProfileId || 'none'}
-              onChange={(e) => handleVoiceProfileChange(e.target.value)}
-              disabled={isDisabled || loading}
-            >
-              <option value="none">None (Default)</option>
-              {voiceProfiles.map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profile.name}
-                </option>
-              ))}
-              <option value="create">+ Create new...</option>
-            </select>
-            {selectedVoiceProfileId && (
+      {expanded && (
+        <div className="ai-assist-content">
+          <div className="ai-assist-header">
+            <div className="ai-tabs">
               <button
                 type="button"
-                className="voice-profile-edit-btn"
-                onClick={handleEditProfile}
-                disabled={isDisabled || loading}
-                title="Edit voice profile"
+                className={`ai-tab ${activeTab === 'text' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('text')
+                  setError(null)
+                }}
               >
-                Edit
+                Text
               </button>
-            )}
+              <button
+                type="button"
+                className={`ai-tab ${activeTab === 'translate' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('translate')
+                  setError(null)
+                }}
+              >
+                Translate
+              </button>
+              <button
+                type="button"
+                className={`ai-tab ${activeTab === 'media' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('media')
+                  setError(null)
+                }}
+              >
+                Media
+              </button>
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* Text Tab Content */}
-      {activeTab === 'text' && (
+          <div className="ai-controls">
+            <div className="ai-control-group ai-voice-profile-control">
+              <label htmlFor="ai-voice-profile">Voice Profile</label>
+              <div className="voice-profile-selector">
+                <select
+                  id="ai-voice-profile"
+                  value={selectedVoiceProfileId || 'none'}
+                  onChange={(e) => handleVoiceProfileChange(e.target.value)}
+                  disabled={isDisabled || loading}
+                >
+                  <option value="none">None (Default)</option>
+                  {voiceProfiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.name}
+                    </option>
+                  ))}
+                  <option value="create">+ Create new...</option>
+                </select>
+                {selectedVoiceProfileId && (
+                  <button
+                    type="button"
+                    className="voice-profile-edit-btn"
+                    onClick={handleEditProfile}
+                    disabled={isDisabled || loading}
+                    title="Edit voice profile"
+                  >
+                    Edit
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Text Tab Content */}
+          {activeTab === 'text' && (
         <>
           {/* disabled state message handled by top-level banner */}
           {!disabled && noPlatform && <div className="ai-empty-state">Select a platform to enable AI features</div>}
@@ -779,10 +804,10 @@ export function AiAssistPanel({
             </button>
           </div>
         </>
-      )}
+          )}
 
-      {/* Translate Tab Content */}
-      {activeTab === 'translate' && (
+          {/* Translate Tab Content */}
+          {activeTab === 'translate' && (
         <>
           {/* disabled state message handled by top-level banner */}
           {!disabled && noPlatform && <div className="ai-empty-state">Select a platform to enable translation</div>}
@@ -880,10 +905,10 @@ export function AiAssistPanel({
             </>
           )}
         </>
-      )}
+          )}
 
-      {/* Media Tab Content */}
-      {activeTab === 'media' && (
+          {/* Media Tab Content */}
+          {activeTab === 'media' && (
         <>
           {/* disabled state message handled by top-level banner */}
           {!disabled && noPlatform && <div className="ai-empty-state">Select a platform to enable media AI features</div>}
@@ -958,26 +983,26 @@ export function AiAssistPanel({
             </>
           )}
         </>
-      )}
+          )}
 
-      {/* Loading State */}
-      {loading && (
-        <div className="ai-loading">
-          <div className="ai-spinner"></div>
-          <span>AI is analyzing...</span>
-        </div>
-      )}
+          {/* Loading State */}
+          {loading && (
+            <div className="ai-loading">
+              <div className="ai-spinner"></div>
+              <span>AI is analyzing...</span>
+            </div>
+          )}
 
-      {/* Error Display */}
-      {error && (
-        <div className="ai-error">
-          <span className="error-icon">!</span>
-          <span>{error}</span>
-        </div>
-      )}
+          {/* Error Display */}
+          {error && (
+            <div className="ai-error">
+              <span className="error-icon">!</span>
+              <span>{error}</span>
+            </div>
+          )}
 
-      {/* Text Results - Generated Variants (new workflow) */}
-      {activeTab === 'text' && textResult?.type === 'generated' && (
+          {/* Text Results - Generated Variants (new workflow) */}
+          {activeTab === 'text' && textResult?.type === 'generated' && (
         <div className="ai-results">
           <h4>Generated Variants</h4>
           <div className="ai-variants">
@@ -1027,10 +1052,10 @@ export function AiAssistPanel({
             ))}
           </div>
         </div>
-      )}
+          )}
 
-      {/* Text Results - Legacy variants (from old actions, kept for backward compat) */}
-      {activeTab === 'text' && textResult?.type === 'variants' && (
+          {/* Text Results - Legacy variants (from old actions, kept for backward compat) */}
+          {activeTab === 'text' && textResult?.type === 'variants' && (
         <div className="ai-results">
           <h4>Suggestions</h4>
           <div className="ai-variants">
@@ -1061,10 +1086,10 @@ export function AiAssistPanel({
             ))}
           </div>
         </div>
-      )}
+          )}
 
-      {/* Caption Results (Translate Tab) */}
-      {activeTab === 'translate' && textResult?.type === 'captions' && (
+          {/* Caption Results (Translate Tab) */}
+          {activeTab === 'translate' && textResult?.type === 'captions' && (
         <div className="ai-results">
           <h4>Generated Captions</h4>
           <div className="caption-meta">
@@ -1116,9 +1141,9 @@ export function AiAssistPanel({
             })}
           </div>
         </div>
-      )}
+          )}
 
-      {activeTab === 'text' && textResult?.type === 'hashtags' && (
+          {activeTab === 'text' && textResult?.type === 'hashtags' && (
         <div className="ai-results">
           <h4>Suggested Hashtags</h4>
           <p className="hashtags-hint">Click to select/deselect hashtags</p>
@@ -1161,9 +1186,9 @@ export function AiAssistPanel({
             </button>
           </div>
         </div>
-      )}
+          )}
 
-      {activeTab === 'text' && textResult?.type === 'preflight' && (
+          {activeTab === 'text' && textResult?.type === 'preflight' && (
         <div className="ai-results">
           <h4>Pre-flight Check</h4>
           <div className={`preflight-score ${getScoreColor(textResult.score)}`}>
@@ -1196,10 +1221,10 @@ export function AiAssistPanel({
             </button>
           )}
         </div>
-      )}
+          )}
 
-      {/* Media Results - Captions */}
-      {activeTab === 'media' && mediaResult?.type === 'captions' && (
+          {/* Media Results - Captions */}
+          {activeTab === 'media' && mediaResult?.type === 'captions' && (
         <div className="ai-results">
           <h4>Caption Ideas</h4>
           <div className="ai-variants">
@@ -1230,10 +1255,10 @@ export function AiAssistPanel({
             ))}
           </div>
         </div>
-      )}
+          )}
 
-      {/* Media Results - Quality Check */}
-      {activeTab === 'media' && mediaResult?.type === 'quality' && (
+          {/* Media Results - Quality Check */}
+          {activeTab === 'media' && mediaResult?.type === 'quality' && (
         <div className="ai-results">
           <h4>Image Quality Check</h4>
           <div className={`preflight-score ${getScoreColor(mediaResult.score)}`}>
@@ -1263,10 +1288,10 @@ export function AiAssistPanel({
             </div>
           )}
         </div>
-      )}
+          )}
 
-      {/* Media Results - Alt Text */}
-      {activeTab === 'media' && mediaResult?.type === 'alttext' && (
+          {/* Media Results - Alt Text */}
+          {activeTab === 'media' && mediaResult?.type === 'alttext' && (
         <div className="ai-results">
           <h4>Generated Alt Text</h4>
           <div className="alt-text-result">
@@ -1280,10 +1305,10 @@ export function AiAssistPanel({
             </button>
           </div>
         </div>
-      )}
+          )}
 
-      {/* Media Results - Thumbnails */}
-      {activeTab === 'media' && mediaResult?.type === 'thumbnails' && (
+          {/* Media Results - Thumbnails */}
+          {activeTab === 'media' && mediaResult?.type === 'thumbnails' && (
         <div className="ai-results">
           <h4>Select Thumbnail</h4>
           <div className="thumbnail-grid">
@@ -1306,6 +1331,8 @@ export function AiAssistPanel({
           >
             Set thumbnail
           </button>
+        </div>
+          )}
         </div>
       )}
     </div>

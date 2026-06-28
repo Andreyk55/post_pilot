@@ -6,6 +6,8 @@ import badgeSource from './WorkspaceContextBadge.tsx?raw'
 import connectedAccountsSource from '../pages/ConnectedAccountsPage.tsx?raw'
 import workspaceGuardSource from './WorkspaceGuard.tsx?raw'
 import workspaceSwitcherSource from './WorkspaceSwitcher.tsx?raw'
+import aiAssistPanelSource from './AiAssistPanel.tsx?raw'
+import suggestedTimesSource from './SuggestedTimes.tsx?raw'
 
 /**
  * Product rule: workspace switching/creation/management is centralized in the
@@ -93,5 +95,41 @@ describe('WorkspaceSwitcher — the only interactive workspace control', () => {
     // This is the single permitted switch/create surface; keep it intact.
     expect(workspaceSwitcherSource).toMatch(/switchTo\s*\(/)
     expect(workspaceSwitcherSource).toMatch(/\bcreate\s*\(/)
+  })
+})
+
+describe('SchedulePost AI sections', () => {
+  it('renders AI Content Assist as a collapsed accordion with generated-variant summary support', () => {
+    expect(aiAssistPanelSource).toMatch(/useState\(false\)/)
+    expect(aiAssistPanelSource).toMatch(/AI Content Assist/)
+    expect(aiAssistPanelSource).toMatch(/Generate captions, translate, or improve your post text\./)
+    expect(aiAssistPanelSource).toMatch(/aria-expanded=\{expanded\}/)
+    expect(aiAssistPanelSource).toMatch(/variants generated/)
+  })
+
+  it('keeps existing AI tabs and generated variants UI inside the accordion body', () => {
+    expect(aiAssistPanelSource).toMatch(/>\s*Text\s*</)
+    expect(aiAssistPanelSource).toMatch(/>\s*Translate\s*</)
+    expect(aiAssistPanelSource).toMatch(/>\s*Media\s*</)
+    expect(aiAssistPanelSource).toMatch(/Voice Profile/)
+    expect(aiAssistPanelSource).toMatch(/Generated Variants/)
+    expect(aiAssistPanelSource).toMatch(/>\s*Apply\s*</)
+    expect(aiAssistPanelSource).toMatch(/Copied!'\s*:\s*'Copy'/)
+    expect(aiAssistPanelSource).toMatch(/Regenerate/)
+  })
+
+  it('renames Suggest Best Time to AI Best Time', () => {
+    expect(suggestedTimesSource).toMatch(/AI Best Time/)
+    expect(suggestedTimesSource).not.toMatch(/Suggest Best Time/)
+  })
+
+  it('keeps media and publishing controls outside the AI panel in SchedulePost', () => {
+    const aiPanelIndex = schedulePostSource.indexOf('<AiAssistPanel')
+    const mediaLabelIndex = schedulePostSource.indexOf("'Media (required)'")
+    const formActionsIndex = schedulePostSource.indexOf('className="form-actions"')
+
+    expect(aiPanelIndex).toBeGreaterThan(-1)
+    expect(mediaLabelIndex).toBeGreaterThan(aiPanelIndex)
+    expect(formActionsIndex).toBeGreaterThan(aiPanelIndex)
   })
 })

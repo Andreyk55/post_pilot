@@ -2,15 +2,95 @@
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
-  padding: 1.25rem;
   margin-top: 1rem;
+  overflow: hidden;
+}
+
+.ai-assist-accordion {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem 1.1rem;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.15s ease;
+}
+
+.ai-assist-accordion:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ai-assist-accordion:focus-visible {
+  outline: none;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ai-assist-accordion-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.ai-assist-accordion-copy {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.ai-assist-accordion-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.ai-assist-accordion-subtitle {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.ai-assist-accordion-badge {
+  flex-shrink: 0;
+  padding: 0.22rem 0.55rem;
+  border: 1px solid rgba(102, 126, 234, 0.28);
+  border-radius: 999px;
+  background: rgba(102, 126, 234, 0.12);
+  color: #b9c4ff;
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.ai-assist-accordion-loading {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.5);
+  animation: suggested-times-pulse 1s infinite;
+}
+
+.ai-assist-accordion-chevron {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.5);
+  transition: transform 0.2s;
+}
+
+.ai-assist-accordion-chevron.expanded {
+  transform: rotate(180deg);
+}
+
+.ai-assist-content {
+  padding: 0 1.25rem 1.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .ai-assist-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   margin-bottom: 1rem;
+  padding-top: 1rem;
 }
 
 .ai-assist-header h3 {
@@ -504,6 +584,32 @@
   background: rgba(255, 255, 255, 0.04);
   padding: 0.25rem;
   border-radius: 6px;
+}
+
+@keyframes suggested-times-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@media (max-width: 720px) {
+  .ai-assist-accordion {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .ai-assist-accordion-copy {
+    min-width: min(100%, 220px);
+  }
+
+  .ai-assist-accordion-badge {
+    order: 3;
+    margin-left: 1.75rem;
+  }
+
+  .ai-assist-accordion-loading,
+  .ai-assist-accordion-chevron {
+    margin-left: auto;
+  }
 }
 
 .ai-tab {
