@@ -13,7 +13,7 @@ const navItems = [
   { id: 'assets', label: 'Assets', icon: '📦' },
   { id: 'schedule', label: 'Schedule Posts', icon: '📅' },
   { id: 'posts', label: 'My Posts', icon: '📝' },
-  { id: 'settings', label: 'Settings', icon: '⚙️' },
+  { id: 'settings', label: 'Account Settings', icon: '⚙️' },
   { id: 'contact', label: 'Contact Us', icon: '✉️' },
 ]
 

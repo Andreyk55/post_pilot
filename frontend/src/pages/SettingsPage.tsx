@@ -38,7 +38,7 @@ export function SettingsPage() {
 
   return (
     <div className="settings-page">
-      <h1>Settings</h1>
+      <h1>Account Settings</h1>
 
       <section className="settings-section">
         <h2>Account</h2>
