@@ -654,6 +654,17 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
     _warnings: MediaValidationWarning[],
     ownerKey: string,
   ) => {
+    // A `Pending` update marks the (re)start of a single-media upload session.
+    // Besides resetting the server-validation state (below), clear the transient
+    // upload-error banner too — it can hold a client-side pre-validation message
+    // (e.g. an invalid Story aspect ratio, which never reaches server validation
+    // and so has no owner key of its own). Clearing it here, synchronously as the
+    // new upload begins, stops the previous media's error from lingering under the
+    // new, still-pending upload. Especially visible for Stories, whose strict 9:16
+    // client check is the most likely to surface a pre-validation error.
+    if (status === 'Pending') {
+      setUploadError(null)
+    }
     setMediaValidation(prev => applySchedulePostMediaValidationUpdate(prev, status, errors, ownerKey))
   }
 
