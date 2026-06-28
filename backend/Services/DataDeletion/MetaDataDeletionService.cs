@@ -203,6 +203,7 @@ public sealed class MetaDataDeletionService : IMetaDataDeletionService
         {
             keys.Add(m.StorageKey);
             keys.Add(m.InstagramImageStorageKey);
+            keys.Add(m.ThumbnailStorageKey);
         }
         foreach (var p in posts)
         {

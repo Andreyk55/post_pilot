@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { getMediaUrl } from '../api/media'
 
 /**
@@ -14,7 +14,8 @@ import { getMediaUrl } from '../api/media'
  *
  * `thumbnailUrl` (e.g. a user-selected video thumbnail) is an already-resolved
  * absolute/relative URL and is rendered directly as an image when provided for a
- * video, falling back to the play-icon placeholder if it errors.
+ * video. `thumbnailStorageKey` is the backend-generated private thumbnail object
+ * and is resolved through the same media proxy as image previews.
  */
 interface MediaThumbnailProps {
   /** Raw storage key (or external URL) for the media; resolved via getMediaUrl. */
@@ -25,6 +26,8 @@ interface MediaThumbnailProps {
   alt?: string
   /** Pre-resolved thumbnail URL (e.g. selectedThumbnailUrl) for videos. */
   thumbnailUrl?: string | null
+  /** Backend-generated thumbnail storage key for videos. */
+  thumbnailStorageKey?: string | null
 }
 
 export function MediaThumbnail({
@@ -33,8 +36,14 @@ export function MediaThumbnail({
   className,
   alt = '',
   thumbnailUrl,
+  thumbnailStorageKey,
 }: MediaThumbnailProps) {
   const [imageBroken, setImageBroken] = useState(false)
+  const resolvedThumbnailUrl = thumbnailUrl || getMediaUrl(thumbnailStorageKey)
+
+  useEffect(() => {
+    setImageBroken(false)
+  }, [resolvedThumbnailUrl, storageKey, mediaType])
 
   if (mediaType === 'Image') {
     const src = getMediaUrl(storageKey)
@@ -50,19 +59,23 @@ export function MediaThumbnail({
   }
 
   if (mediaType === 'Video') {
-    // A user-picked thumbnail is a real image; try it, fall back to the icon.
-    if (thumbnailUrl && !imageBroken) {
+    if (resolvedThumbnailUrl && !imageBroken) {
       return (
-        <img
-          src={thumbnailUrl}
-          alt=""
-          className={className}
-          onError={() => setImageBroken(true)}
-        />
+        <div className={['media-thumbnail-video-frame', className].filter(Boolean).join(' ')}>
+          <img
+            src={resolvedThumbnailUrl}
+            alt=""
+            onError={() => setImageBroken(true)}
+          />
+          <div className="media-thumbnail-video-overlay" aria-hidden="true">
+            <svg className="video-play-icon" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </div>
+        </div>
       )
     }
-    // No usable thumbnail (or it errored): clean static placeholder. We do NOT
-    // fetch the video file just to draw a frame.
+
     return <VideoPlaceholder className={className} />
   }
 

@@ -24,11 +24,22 @@ export type PostStatusGroup = 'inProgress'
 
 export type PostType = 'Feed' | 'Story'
 
+export interface MediaThumbnailDto {
+  storageKey: string | null
+  url: string | null
+  mimeType: string | null
+  width: number | null
+  height: number | null
+  sizeBytes: number | null
+  createdAtUtc: string | null
+}
+
 export interface PostMediaItem {
   id: string
   order: number
   mediaUrl: string
   mediaType: MediaType
+  thumbnail?: MediaThumbnailDto | null
 }
 
 export interface CreatePostMediaItem {
@@ -62,6 +73,7 @@ export interface Post {
   nextRetryAt: string | null
   selectedThumbnailUrl: string | null
   instagramMediaType: string | null
+  thumbnail?: MediaThumbnailDto | null
   mediaItems: PostMediaItem[] | null
 }
 
@@ -129,6 +141,7 @@ export interface PostDetails {
   profileUrl: string | null
   pageUrl: string | null
   instagramMediaType: string | null
+  thumbnail?: MediaThumbnailDto | null
   mediaItems: PostMediaItem[] | null
 }
 

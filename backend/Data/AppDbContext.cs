@@ -249,6 +249,10 @@ public class AppDbContext : DbContext
             entity.Property(e => e.InstagramImageStorageKey).HasMaxLength(500);
             entity.Property(e => e.InstagramImageMimeType).HasMaxLength(100);
 
+            // Best-effort local video thumbnail metadata.
+            entity.Property(e => e.ThumbnailStorageKey).HasMaxLength(500);
+            entity.Property(e => e.ThumbnailMimeType).HasMaxLength(100);
+
             // Workspace FK — RESTRICT.
             entity.HasOne<Workspace>()
                 .WithMany()

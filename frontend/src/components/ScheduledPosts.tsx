@@ -324,7 +324,8 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
                     <MediaThumbnail
                       storageKey={post.mediaUrl}
                       mediaType="Video"
-                      thumbnailUrl={post.selectedThumbnailUrl}
+                      thumbnailUrl={post.selectedThumbnailUrl ?? post.thumbnail?.url}
+                      thumbnailStorageKey={post.thumbnail?.storageKey}
                       className="media-thumbnail"
                     />
                     <span className="media-indicator">

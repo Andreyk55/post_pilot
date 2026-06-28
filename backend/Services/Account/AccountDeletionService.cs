@@ -185,6 +185,7 @@ public sealed class AccountDeletionService : IAccountDeletionService
         {
             keys.Add(m.StorageKey);
             keys.Add(m.InstagramImageStorageKey);
+            keys.Add(m.ThumbnailStorageKey);
         }
         foreach (var p in posts)
         {

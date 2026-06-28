@@ -153,7 +153,7 @@ public class PostsController : ControllerBase
         var totalCount = await query.CountAsync();
         var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
 
-        var posts = await query
+        var postEntities = await query
             .Include(p => p.TargetPage)
             .Include(p => p.TargetInstagramAccount)
             .Include(p => p.MediaItems)
@@ -161,8 +161,12 @@ public class PostsController : ControllerBase
             .ThenByDescending(p => p.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(p => PostDto.FromEntity(p))
             .ToListAsync();
+
+        var thumbnailsByStorageKey = await LoadMediaThumbnailLookupAsync(workspaceId, postEntities);
+        var posts = postEntities
+            .Select(p => PostDto.FromEntity(p, thumbnailsByStorageKey))
+            .ToList();
 
         return new PaginatedResponse<PostDto>(
             posts,
@@ -188,7 +192,8 @@ public class PostsController : ControllerBase
             return NotFound();
         }
 
-        return PostDto.FromEntity(post);
+        var thumbnailsByStorageKey = await LoadMediaThumbnailLookupAsync(workspaceId, new[] { post });
+        return PostDto.FromEntity(post, thumbnailsByStorageKey);
     }
 
     [HttpGet("{id}/details")]
@@ -290,6 +295,8 @@ public class PostsController : ControllerBase
             }
         }
 
+        var thumbnailsByStorageKey = await LoadMediaThumbnailLookupAsync(workspaceId, new[] { post }, cancellationToken);
+
         return new PostDetailsDto(
             Id: post.Id,
             Content: post.Content,
@@ -318,9 +325,15 @@ public class PostsController : ControllerBase
             ProfileUrl: profileUrl,
             PageUrl: pageUrl,
             InstagramMediaType: post.InstagramMediaType?.ToString(),
+            Thumbnail: ResolveThumbnail(thumbnailsByStorageKey, post.MediaUrl),
             MediaItems: post.MediaItems?.Count > 0
                 ? post.MediaItems.OrderBy(m => m.Order)
-                    .Select(m => new PostDetailsMediaItemDto(m.Id, m.Order, m.MediaUrl, m.MediaType.ToString()))
+                    .Select(m => new PostDetailsMediaItemDto(
+                        m.Id,
+                        m.Order,
+                        m.MediaUrl,
+                        m.MediaType.ToString(),
+                        ResolveThumbnail(thumbnailsByStorageKey, m.MediaUrl)))
                     .ToList()
                 : null,
             TargetConnectionActive: post.Platform switch
@@ -330,6 +343,95 @@ public class PostsController : ControllerBase
                 _ => (bool?)null,
             }
         );
+    }
+
+    private async Task<Dictionary<string, MediaThumbnailDto>> LoadMediaThumbnailLookupAsync(
+        Guid workspaceId,
+        IEnumerable<Post> posts,
+        CancellationToken cancellationToken = default)
+    {
+        var storageKeys = posts
+            .SelectMany(CollectStorageKeys)
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        if (storageKeys.Length == 0)
+            return new Dictionary<string, MediaThumbnailDto>(StringComparer.Ordinal);
+
+        var mediaRows = await _context.Media
+            .AsNoTracking()
+            .Where(m => m.WorkspaceId == workspaceId
+                && m.ThumbnailStorageKey != null
+                && storageKeys.Contains(m.StorageKey))
+            .ToListAsync(cancellationToken);
+
+        return mediaRows.ToDictionary(
+            media => media.StorageKey,
+            BuildThumbnailDto,
+            StringComparer.Ordinal);
+    }
+
+    private IEnumerable<string?> CollectStorageKeys(Post post)
+    {
+        yield return post.MediaUrl;
+
+        if (post.MediaItems is null)
+            yield break;
+
+        foreach (var mediaItem in post.MediaItems)
+            yield return mediaItem.MediaUrl;
+    }
+
+    private MediaThumbnailDto BuildThumbnailDto(Entities.Media media)
+    {
+        var storageKey = media.ThumbnailStorageKey;
+        var url = string.IsNullOrWhiteSpace(storageKey) ? null : BuildAppMediaUrl(storageKey);
+
+        return new MediaThumbnailDto(
+            StorageKey: storageKey,
+            Url: url,
+            MimeType: media.ThumbnailMimeType,
+            Width: media.ThumbnailWidth,
+            Height: media.ThumbnailHeight,
+            SizeBytes: media.ThumbnailSizeBytes,
+            CreatedAtUtc: media.ThumbnailCreatedAtUtc);
+    }
+
+    private static MediaThumbnailDto? ResolveThumbnail(
+        IReadOnlyDictionary<string, MediaThumbnailDto> thumbnailsByStorageKey,
+        string? storageKey)
+    {
+        if (string.IsNullOrWhiteSpace(storageKey))
+            return null;
+
+        return thumbnailsByStorageKey.TryGetValue(storageKey, out var thumbnail)
+            ? thumbnail
+            : null;
+    }
+
+    private string BuildAppMediaUrl(string storageKey)
+    {
+        if (!LooksLikeStorageKey(storageKey))
+            return storageKey;
+
+        var encoded = string.Join('/', storageKey.Split('/').Select(Uri.EscapeDataString));
+        if (Request?.Host.HasValue == true && !string.IsNullOrWhiteSpace(Request.Scheme))
+            return $"{Request.Scheme}://{Request.Host}/api/media/files/{encoded}";
+
+        return $"/api/media/files/{encoded}";
+    }
+
+    private static bool LooksLikeStorageKey(string? mediaUrl)
+    {
+        if (string.IsNullOrWhiteSpace(mediaUrl))
+            return false;
+        if (mediaUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return mediaUrl.StartsWith("media/", StringComparison.OrdinalIgnoreCase)
+            || mediaUrl.StartsWith("workspaces/", StringComparison.OrdinalIgnoreCase)
+            || mediaUrl.StartsWith("users/", StringComparison.OrdinalIgnoreCase);
     }
 
     [HttpPost]
@@ -1303,7 +1405,8 @@ public record PostMediaItemDto(
     Guid Id,
     int Order,
     string MediaUrl,
-    MediaType MediaType
+    MediaType MediaType,
+    MediaThumbnailDto? Thumbnail = null
 );
 
 public record PostDto(
@@ -1330,6 +1433,7 @@ public record PostDto(
     DateTime? NextRetryAt,
     string? SelectedThumbnailUrl,
     string? InstagramMediaType,
+    MediaThumbnailDto? Thumbnail = null,
     List<PostMediaItemDto>? MediaItems = null,
     /// <summary>
     /// True if the post's target page/IG account is currently connected. False if it was
@@ -1338,7 +1442,9 @@ public record PostDto(
     bool? TargetConnectionActive = null
 )
 {
-    public static PostDto FromEntity(Post post)
+    public static PostDto FromEntity(
+        Post post,
+        IReadOnlyDictionary<string, MediaThumbnailDto>? thumbnailsByStorageKey = null)
     {
         bool? targetConnectionActive = post.Platform switch
         {
@@ -1373,10 +1479,30 @@ public record PostDto(
             post.NextRetryAt,
             post.SelectedThumbnailUrl,
             post.InstagramMediaType?.ToString(),
+            ResolveThumbnail(thumbnailsByStorageKey, post.MediaUrl),
             post.MediaItems?.Count > 0
-                ? post.MediaItems.OrderBy(m => m.Order).Select(m => new PostMediaItemDto(m.Id, m.Order, m.MediaUrl, m.MediaType)).ToList()
+                ? post.MediaItems.OrderBy(m => m.Order)
+                    .Select(m => new PostMediaItemDto(
+                        m.Id,
+                        m.Order,
+                        m.MediaUrl,
+                        m.MediaType,
+                        ResolveThumbnail(thumbnailsByStorageKey, m.MediaUrl)))
+                    .ToList()
                 : null,
             targetConnectionActive
         );
+    }
+
+    private static MediaThumbnailDto? ResolveThumbnail(
+        IReadOnlyDictionary<string, MediaThumbnailDto>? thumbnailsByStorageKey,
+        string? storageKey)
+    {
+        if (thumbnailsByStorageKey == null || string.IsNullOrWhiteSpace(storageKey))
+            return null;
+
+        return thumbnailsByStorageKey.TryGetValue(storageKey, out var thumbnail)
+            ? thumbnail
+            : null;
     }
 }

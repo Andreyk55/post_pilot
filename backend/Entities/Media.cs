@@ -72,4 +72,30 @@ public class Media
 
     /// <summary>UTC timestamp the derivative was generated.</summary>
     public DateTime? InstagramImageGeneratedAt { get; set; }
+
+    // ── Video thumbnail preview (local ffmpeg, best-effort) ─────────────────────
+    // When a video upload completes, the backend may extract a small JPEG preview
+    // frame locally with ffmpeg and store it alongside the original video. These
+    // columns remain null for image uploads, failed thumbnail generation, and
+    // legacy rows.
+
+    /// <summary>
+    /// Storage key of the generated thumbnail preview image.
+    /// </summary>
+    public string? ThumbnailStorageKey { get; set; }
+
+    /// <summary>MIME type of the generated thumbnail. Always <c>image/jpeg</c> when present.</summary>
+    public string? ThumbnailMimeType { get; set; }
+
+    /// <summary>Size in bytes of the generated thumbnail.</summary>
+    public long? ThumbnailSizeBytes { get; set; }
+
+    /// <summary>Pixel width of the generated thumbnail.</summary>
+    public int? ThumbnailWidth { get; set; }
+
+    /// <summary>Pixel height of the generated thumbnail.</summary>
+    public int? ThumbnailHeight { get; set; }
+
+    /// <summary>UTC timestamp the thumbnail was generated.</summary>
+    public DateTime? ThumbnailCreatedAtUtc { get; set; }
 }

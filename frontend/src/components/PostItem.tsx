@@ -231,7 +231,8 @@ export function PostItem({ post, cachedDetails, onDetailsFetched }: PostItemProp
               <MediaThumbnail
                 storageKey={post.mediaUrl}
                 mediaType="Video"
-                thumbnailUrl={post.selectedThumbnailUrl}
+                thumbnailUrl={post.selectedThumbnailUrl ?? post.thumbnail?.url}
+                thumbnailStorageKey={post.thumbnail?.storageKey}
               />
               <span className="video-badge">{getMediaLabel(post)}</span>
             </div>

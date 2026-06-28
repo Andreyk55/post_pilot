@@ -1,5 +1,15 @@
 namespace PostPilot.Api.DTOs;
 
+public record MediaThumbnailDto(
+    string? StorageKey,
+    string? Url,
+    string? MimeType,
+    int? Width,
+    int? Height,
+    long? SizeBytes,
+    DateTime? CreatedAtUtc
+);
+
 /// <summary>
 /// Engagement metrics for a social media post.
 /// </summary>
@@ -16,7 +26,8 @@ public record PostDetailsMediaItemDto(
     Guid Id,
     int Order,
     string MediaUrl,
-    string MediaType
+    string MediaType,
+    MediaThumbnailDto? Thumbnail = null
 );
 
 public record PostDetailsDto(
@@ -45,6 +56,7 @@ public record PostDetailsDto(
     string? ProfileUrl,
     string? PageUrl,
     string? InstagramMediaType,
+    MediaThumbnailDto? Thumbnail = null,
     List<PostDetailsMediaItemDto>? MediaItems = null,
     /// <summary>
     /// True if the post's target page/IG account is currently connected. False if it was

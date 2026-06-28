@@ -273,6 +273,30 @@
   height: 22px;
 }
 
+.media-thumbnail-video-frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.media-thumbnail-video-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.media-thumbnail-video-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.28);
+  color: rgba(255, 255, 255, 0.94);
+}
+
 /* Video Thumbnail in Post Media */
 .post-media .post-video-thumbnail {
   width: 100%;
@@ -290,7 +314,16 @@
   background: rgba(0, 0, 0, 0.35);
 }
 
+.post-media .media-thumbnail-video-overlay {
+  background: rgba(0, 0, 0, 0.35);
+}
+
 .post-media .video-thumbnail-overlay .video-play-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.post-media .media-thumbnail-video-overlay .video-play-icon {
   width: 20px;
   height: 20px;
 }

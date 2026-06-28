@@ -7,19 +7,23 @@ namespace PostPilot.Api.Services.Media;
 
 public class MediaUploadService : IMediaUploadService
 {
+    private const int VideoThumbnailMaxWidth = 480;
+
     private readonly AppDbContext _db;
     private readonly IMediaService _mediaService;
     private readonly MediaStorageOptions _storageOpts;
     private readonly TimeSpan _presignedUploadExpiration;
     private readonly ILogger<MediaUploadService> _logger;
     private readonly IInstagramDerivativeService? _derivativeService;
+    private readonly IVideoThumbnailGenerator? _videoThumbnailGenerator;
 
     public MediaUploadService(
         AppDbContext db,
         IMediaService mediaService,
         MediaStorageOptions storageOpts,
         ILogger<MediaUploadService> logger,
-        IInstagramDerivativeService? derivativeService = null)
+        IInstagramDerivativeService? derivativeService = null,
+        IVideoThumbnailGenerator? videoThumbnailGenerator = null)
     {
         _db = db;
         _mediaService = mediaService;
@@ -27,6 +31,7 @@ public class MediaUploadService : IMediaUploadService
         _presignedUploadExpiration = TimeSpan.FromMinutes(storageOpts.PresignedUploadExpirationMinutes);
         _logger = logger;
         _derivativeService = derivativeService;
+        _videoThumbnailGenerator = videoThumbnailGenerator;
     }
 
     public async Task<InitUploadResult> InitAsync(
@@ -121,6 +126,10 @@ public class MediaUploadService : IMediaUploadService
         // The original is never touched; Facebook uploads and legacy/unknown platform keys
         // do not get derivatives in this phase.
         await TryGenerateInstagramDerivativeAsync(media, cancellationToken);
+
+        // Best-effort local video thumbnail generation. Failure must never make the
+        // upload itself fail; we log and keep the media row usable without a thumbnail.
+        await TryGenerateVideoThumbnailAsync(media, cancellationToken);
 
         await _db.SaveChangesAsync(cancellationToken);
 
@@ -227,6 +236,86 @@ public class MediaUploadService : IMediaUploadService
         }
     }
 
+    /// <summary>
+    /// Generates a small JPEG preview for uploaded videos. This is strictly best-effort:
+    /// failures are logged and the upload still succeeds with thumbnail columns left null.
+    /// </summary>
+    private async Task TryGenerateVideoThumbnailAsync(Entities.Media media, CancellationToken cancellationToken)
+    {
+        if (_videoThumbnailGenerator == null)
+            return;
+        if (!_mediaService.IsValidVideoType(media.ContentType))
+            return;
+        if (!string.IsNullOrEmpty(media.ThumbnailStorageKey))
+            return;
+
+        var sourceLocalPath = (string?)null;
+        var outputLocalPath = (string?)null;
+
+        try
+        {
+            sourceLocalPath = await _mediaService.GetLocalFilePathAsync(media.StorageKey);
+            if (string.IsNullOrEmpty(sourceLocalPath) || !File.Exists(sourceLocalPath))
+            {
+                throw new InvalidOperationException(
+                    $"Uploaded video bytes are not retrievable for media {media.Id}.");
+            }
+
+            outputLocalPath = Path.Combine(Path.GetTempPath(), $"postpilot-media-thumb-{Guid.NewGuid():N}.jpg");
+            var result = await _videoThumbnailGenerator.GenerateAsync(
+                sourceLocalPath,
+                outputLocalPath,
+                VideoThumbnailMaxWidth,
+                cancellationToken);
+
+            await using var thumbnailStream = File.OpenRead(outputLocalPath);
+            var thumbnailKey = BuildVideoThumbnailKey(media.StorageKey);
+            await _mediaService.StorageProvider.UploadObjectAsync(
+                thumbnailKey,
+                thumbnailStream,
+                result.MimeType,
+                cancellationToken);
+
+            media.ThumbnailStorageKey = thumbnailKey;
+            media.ThumbnailMimeType = result.MimeType;
+            media.ThumbnailWidth = result.Width;
+            media.ThumbnailHeight = result.Height;
+            media.ThumbnailSizeBytes = result.SizeBytes;
+            media.ThumbnailCreatedAtUtc = DateTime.UtcNow;
+
+            _logger.LogInformation(
+                "Generated local video thumbnail for mediaId={MediaId} key={Key} {Width}x{Height} sizeBytes={Size}",
+                media.Id,
+                MediaValidationGateRedaction(thumbnailKey),
+                result.Width,
+                result.Height,
+                result.SizeBytes);
+        }
+        catch (Exception ex)
+        {
+            media.ThumbnailStorageKey = null;
+            media.ThumbnailMimeType = null;
+            media.ThumbnailWidth = null;
+            media.ThumbnailHeight = null;
+            media.ThumbnailSizeBytes = null;
+            media.ThumbnailCreatedAtUtc = null;
+
+            _logger.LogWarning(
+                ex,
+                "Video thumbnail generation failed for mediaId={MediaId} workspaceId={WorkspaceId} provider={Provider} category={Category} message={Message}",
+                media.Id,
+                media.WorkspaceId,
+                ExtractProviderSegment(media.StorageKey),
+                ex.GetType().Name,
+                ex.Message);
+        }
+        finally
+        {
+            _mediaService.TryCleanupTempLocalPath(sourceLocalPath);
+            _mediaService.TryCleanupTempLocalPath(outputLocalPath);
+        }
+    }
+
     // Local redaction so derivative keys never appear raw in logs (mirrors the gate's RedactKey).
     private static string MediaValidationGateRedaction(string? key) =>
         Validation.MediaValidationGate.RedactKey(key);
@@ -246,6 +335,28 @@ public class MediaUploadService : IMediaUploadService
         return false;
     }
 
+    private static string BuildVideoThumbnailKey(string originalStorageKey)
+    {
+        var lastSlash = originalStorageKey.LastIndexOf('/');
+        if (lastSlash < 0)
+            return "thumbnail.jpg";
+
+        var folder = originalStorageKey[..lastSlash];
+        return $"{folder}/thumbnail.jpg";
+    }
+
+    private static string ExtractProviderSegment(string storageKey)
+    {
+        var segments = storageKey.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        for (var i = 0; i < segments.Length - 1; i++)
+        {
+            if (string.Equals(segments[i], "providers", StringComparison.OrdinalIgnoreCase))
+                return segments[i + 1];
+        }
+
+        return "unknown";
+    }
+
     public async Task<bool> DeleteAsync(Guid workspaceId, Guid mediaId, CancellationToken cancellationToken = default)
     {
         var media = await _db.Media.FirstOrDefaultAsync(m => m.Id == mediaId && m.WorkspaceId == workspaceId, cancellationToken);
@@ -260,7 +371,20 @@ public class MediaUploadService : IMediaUploadService
 
         try
         {
-            await _mediaService.StorageProvider.DeleteAsync(media.StorageKey, cancellationToken);
+            var keysToDelete = new[]
+            {
+                media.ThumbnailStorageKey,
+                media.InstagramImageStorageKey,
+                media.StorageKey,
+            }
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+            foreach (var key in keysToDelete)
+            {
+                await _mediaService.StorageProvider.DeleteAsync(key!, cancellationToken);
+            }
         }
         catch (Exception ex)
         {
