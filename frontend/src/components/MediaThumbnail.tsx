@@ -22,6 +22,7 @@ interface MediaThumbnailProps {
   storageKey: string | null | undefined
   mediaType: 'None' | 'Image' | 'Video'
   className?: string
+  variant?: 'default' | 'scheduledCard'
   /** Alt text for genuine image previews. Never shown for videos or on error. */
   alt?: string
   /** Pre-resolved thumbnail URL (e.g. selectedThumbnailUrl) for videos. */
@@ -34,12 +35,17 @@ export function MediaThumbnail({
   storageKey,
   mediaType,
   className,
+  variant = 'default',
   alt = '',
   thumbnailUrl,
   thumbnailStorageKey,
 }: MediaThumbnailProps) {
   const [imageBroken, setImageBroken] = useState(false)
   const resolvedThumbnailUrl = thumbnailUrl || getMediaUrl(thumbnailStorageKey)
+  const classes = [
+    className,
+    variant === 'scheduledCard' ? 'media-thumbnail--scheduled-card' : null,
+  ].filter(Boolean).join(' ')
 
   useEffect(() => {
     setImageBroken(false)
@@ -52,7 +58,7 @@ export function MediaThumbnail({
       <img
         src={src}
         alt={alt}
-        className={className}
+        className={classes || undefined}
         onError={() => setImageBroken(true)}
       />
     )
@@ -61,7 +67,7 @@ export function MediaThumbnail({
   if (mediaType === 'Video') {
     if (resolvedThumbnailUrl && !imageBroken) {
       return (
-        <div className={['media-thumbnail-video-frame', className].filter(Boolean).join(' ')}>
+        <div className={['media-thumbnail-video-frame', classes].filter(Boolean).join(' ')}>
           <img
             src={resolvedThumbnailUrl}
             alt=""
@@ -76,7 +82,7 @@ export function MediaThumbnail({
       )
     }
 
-    return <VideoPlaceholder className={className} />
+    return <VideoPlaceholder className={classes || undefined} />
   }
 
   return null

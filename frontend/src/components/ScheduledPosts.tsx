@@ -295,6 +295,7 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
                       storageKey={post.mediaItems[0].mediaUrl}
                       mediaType="Image"
                       className="media-thumbnail"
+                      variant="scheduledCard"
                     />
                     <span className="media-indicator">
                       <ImageIcon />
@@ -310,6 +311,7 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
                       storageKey={post.mediaUrl}
                       mediaType="Image"
                       className="media-thumbnail"
+                      variant="scheduledCard"
                     />
                     <span className="media-indicator">
                       <ImageIcon />
@@ -327,6 +329,7 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
                       thumbnailUrl={post.selectedThumbnailUrl ?? post.thumbnail?.url}
                       thumbnailStorageKey={post.thumbnail?.storageKey}
                       className="media-thumbnail"
+                      variant="scheduledCard"
                     />
                     <span className="media-indicator">
                       <VideoIcon />
