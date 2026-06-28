@@ -53,7 +53,9 @@ export function MediaThumbnail({
 
   if (mediaType === 'Image') {
     const src = getMediaUrl(storageKey)
-    if (!src || imageBroken) return null
+    if (!src || imageBroken) {
+      return variant === 'scheduledCard' ? <ImagePlaceholder className={classes || undefined} /> : null
+    }
     return (
       <img
         src={src}
@@ -97,6 +99,21 @@ function VideoPlaceholder({ className }: { className?: string }) {
     >
       <svg className="video-play-icon" viewBox="0 0 24 24" fill="currentColor">
         <path d="M8 5v14l11-7z" />
+      </svg>
+    </div>
+  )
+}
+
+function ImagePlaceholder({ className }: { className?: string }) {
+  return (
+    <div
+      className={`media-thumbnail-image-placeholder ${className ?? ''}`.trim()}
+      aria-hidden="true"
+    >
+      <svg className="media-image-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="5" width="18" height="14" rx="2" />
+        <circle cx="8.5" cy="10" r="1.5" />
+        <path d="M21 15l-5-5L5 19" />
       </svg>
     </div>
   )

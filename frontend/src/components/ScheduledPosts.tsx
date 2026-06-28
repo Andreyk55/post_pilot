@@ -4,7 +4,7 @@ import { getMediaTypeFromFile } from '../api/media'
 import { MediaThumbnail } from './MediaThumbnail'
 import { ConfirmDialog } from './ConfirmDialog'
 import { Toast } from './Toast'
-import { getContentBadges, getMediaLabel } from '../utils/postBadges'
+import { getContentBadges } from '../utils/postBadges'
 import './ScheduledPosts.css'
 
 const statusDisplayLabel: Record<string, string> = {
@@ -74,20 +74,6 @@ const TrashIcon = () => (
     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
     <line x1="10" y1="11" x2="10" y2="17" />
     <line x1="14" y1="11" x2="14" y2="17" />
-  </svg>
-)
-
-const ImageIcon = () => (
-  <svg className="media-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3L14.5 4z" />
-    <circle cx="12" cy="13" r="3" />
-  </svg>
-)
-
-const VideoIcon = () => (
-  <svg className="media-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M15 10l4.553-2.069A1 1 0 0 1 21 8.87v6.26a1 1 0 0 1-1.447.914L15 14" />
-    <rect x="3" y="8" width="12" height="8" rx="2" />
   </svg>
 )
 
@@ -296,10 +282,6 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
                       className="media-thumbnail"
                       variant="scheduledCard"
                     />
-                    <span className="media-indicator">
-                      <ImageIcon />
-                      {getMediaLabel(post)}
-                    </span>
                   </div>
                 )}
 
@@ -312,10 +294,6 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
                       className="media-thumbnail"
                       variant="scheduledCard"
                     />
-                    <span className="media-indicator">
-                      <ImageIcon />
-                      {getMediaLabel(post)}
-                    </span>
                   </div>
                 )}
 
@@ -330,10 +308,6 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
                       className="media-thumbnail"
                       variant="scheduledCard"
                     />
-                    <span className="media-indicator">
-                      <VideoIcon />
-                      {getMediaLabel(post)}
-                    </span>
                   </div>
                 )}
 

@@ -1,7 +1,10 @@
+import { readFileSync } from 'node:fs'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import type { Post } from '../api/posts'
 import { ScheduledPosts } from './ScheduledPosts'
+
+const scheduledPostsCss = readFileSync(new URL('./ScheduledPosts.css', import.meta.url), 'utf-8')
 
 const basePost: Post = {
   id: 'post-1',
@@ -47,6 +50,17 @@ function renderScheduledPosts(post: Post) {
 }
 
 describe('ScheduledPosts media previews', () => {
+  it('styles scheduled media previews as compact square tiles', () => {
+    const previewRule = scheduledPostsCss.match(/\.post-media-preview\s*\{[\s\S]*?\}/)?.[0] ?? ''
+
+    expect(previewRule).toContain('width: 52px')
+    expect(previewRule).toContain('height: 52px')
+    expect(previewRule).toContain('padding: 0')
+    expect(previewRule).toContain('border: 0')
+    expect(previewRule).not.toContain('width: fit-content')
+    expect(previewRule).not.toContain('border: 1px solid')
+  })
+
   it('renders a scheduled video thumbnail with a centered play overlay', () => {
     const markup = renderScheduledPosts({
       ...basePost,
@@ -67,6 +81,7 @@ describe('ScheduledPosts media previews', () => {
     expect(markup).toContain('media-thumbnail--scheduled-card')
     expect(markup).toContain('media-thumbnail-video-overlay')
     expect(markup).toContain('video-play-icon')
+    expect(markup).not.toContain('media-indicator')
     expect(markup).toContain('/api/media/files/users/u/workspaces/w/providers/meta-facebook/media/m/thumbnail.jpg')
   })
 
@@ -80,6 +95,7 @@ describe('ScheduledPosts media previews', () => {
     expect(markup).toContain('media-thumbnail-video-placeholder')
     expect(markup).toContain('media-thumbnail--scheduled-card')
     expect(markup).toContain('video-play-icon')
+    expect(markup).not.toContain('media-indicator')
     expect(markup).not.toContain('media-thumbnail-video-overlay')
   })
 
@@ -93,7 +109,20 @@ describe('ScheduledPosts media previews', () => {
     expect(markup).toContain('<img')
     expect(markup).toContain('media-thumbnail media-thumbnail--scheduled-card')
     expect(markup).toContain('/api/media/files/users/u/workspaces/w/providers/meta-facebook/media/m/photo.jpg')
+    expect(markup).not.toContain('media-indicator')
     expect(markup).not.toContain('media-thumbnail-video-overlay')
     expect(markup).not.toContain('media-thumbnail-video-placeholder')
+  })
+
+  it('keeps the scheduled metadata media badges outside the preview tile', () => {
+    const markup = renderScheduledPosts({
+      ...basePost,
+      mediaUrl: 'users/u/workspaces/w/providers/meta-facebook/media/m/clip.mp4',
+      mediaType: 'Video',
+    })
+
+    expect(markup).toContain('class="media-type-badge" data-type="post">Post</span>')
+    expect(markup).toContain('class="media-type-badge" data-type="video">Video</span>')
+    expect(markup).not.toContain('media-indicator')
   })
 })

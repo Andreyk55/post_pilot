@@ -180,33 +180,36 @@
 .post-media-preview {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
   margin-bottom: 0.875rem;
-  padding: 0.5rem;
-  background: rgba(255, 255, 255, 0.03);
+  padding: 0;
+  background: rgba(255, 255, 255, 0.06);
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  width: fit-content;
+  border: 0;
+  overflow: hidden;
 }
 
-.media-thumbnail {
-  width: 36px;
-  height: 36px;
+.post-media-preview .media-thumbnail {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  border-radius: 6px;
+  border-radius: inherit;
   flex-shrink: 0;
 }
 
 .post-media-preview .media-thumbnail--scheduled-card {
-  width: 36px;
-  height: 36px;
-  max-height: 36px;
-  border-radius: 6px;
-  flex: 0 0 36px;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  border-radius: inherit;
+  flex: 1 1 auto;
   overflow: hidden;
 }
 
-.media-thumbnail-video-frame {
+.post-media-preview .media-thumbnail-video-frame {
   position: relative;
   width: 100%;
   height: 100%;
@@ -216,37 +219,39 @@
 }
 
 .post-media-preview .media-thumbnail-video-frame.media-thumbnail--scheduled-card,
-.post-media-preview .media-thumbnail-video-placeholder.media-thumbnail--scheduled-card {
+.post-media-preview .media-thumbnail-video-placeholder.media-thumbnail--scheduled-card,
+.post-media-preview .media-thumbnail-image-placeholder.media-thumbnail--scheduled-card {
   position: relative;
-  width: 36px;
-  height: 36px;
-  max-height: 36px;
-  border-radius: 6px;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  border-radius: inherit;
   overflow: hidden;
-  flex: 0 0 36px;
+  flex: 1 1 auto;
 }
 
-.media-thumbnail-video-placeholder {
+.post-media-preview .media-thumbnail-video-placeholder,
+.post-media-preview .media-thumbnail-image-placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(118, 75, 162, 0.2));
+  background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.9);
 }
 
-.media-thumbnail-video-frame img {
+.post-media-preview .media-thumbnail-video-frame img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
 
-.media-thumbnail-video-overlay {
+.post-media-preview .media-thumbnail-video-overlay {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
@@ -259,84 +264,16 @@
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.24);
 }
 
-.video-placeholder {
-  width: 36px;
-  height: 36px;
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(118, 75, 162, 0.2));
-  border-radius: 6px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.video-play-icon {
-  width: 12px;
-  height: 12px;
+.post-media-preview .video-play-icon {
+  width: 14px;
+  height: 14px;
   color: rgba(255, 255, 255, 0.8);
 }
 
-/* Video Thumbnail Component */
-.video-thumbnail {
-  position: relative;
-  width: 36px;
-  height: 36px;
-  border-radius: 6px;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-
-.video-thumbnail img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.video-thumbnail-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.3);
-  opacity: 0;
-  transition: opacity 0.15s ease;
-}
-
-.video-thumbnail:hover .video-thumbnail-overlay {
-  opacity: 1;
-}
-
-.video-thumbnail-loading,
-.video-thumbnail-fallback {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(118, 75, 162, 0.2));
-}
-
-.thumbnail-spinner {
-  width: 12px;
-  height: 12px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-top-color: rgba(255, 255, 255, 0.7);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-.media-indicator {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.media-icon {
-  flex-shrink: 0;
-  width: 14px;
-  height: 14px;
-  color: rgba(255, 255, 255, 0.4);
+.post-media-preview .media-image-icon {
+  width: 20px;
+  height: 20px;
+  color: rgba(255, 255, 255, 0.58);
 }
 
 /* ===== Post Meta ===== */

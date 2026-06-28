@@ -46,4 +46,30 @@ describe('MediaThumbnail', () => {
     expect(markup).not.toContain('media-thumbnail-video-overlay')
     expect(markup).not.toContain('media-thumbnail-video-placeholder')
   })
+
+  it('renders an icon-only image placeholder for scheduled cards when no preview exists', () => {
+    const markup = renderToStaticMarkup(
+      <MediaThumbnail
+        storageKey={null}
+        mediaType="Image"
+        className="media-thumbnail"
+        variant="scheduledCard"
+      />,
+    )
+
+    expect(markup).toContain('media-thumbnail-image-placeholder')
+    expect(markup).toContain('media-thumbnail--scheduled-card')
+    expect(markup).toContain('media-image-icon')
+  })
+
+  it('keeps missing default image previews hidden', () => {
+    const markup = renderToStaticMarkup(
+      <MediaThumbnail
+        storageKey={null}
+        mediaType="Image"
+      />,
+    )
+
+    expect(markup).toBe('')
+  })
 })
