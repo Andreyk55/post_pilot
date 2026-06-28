@@ -130,7 +130,7 @@ describe('SchedulePost AI sections', () => {
   it('keeps existing AI tabs and generated variants UI inside the accordion body', () => {
     expect(aiAssistPanelSource).toMatch(/>\s*Text\s*</)
     expect(aiAssistPanelSource).toMatch(/>\s*Translate\s*</)
-    expect(aiAssistPanelSource).toMatch(/>\s*Media\s*</)
+    expect(aiAssistPanelSource).toMatch(/showMediaTab && \(/)
     expect(aiAssistPanelSource).toMatch(/Voice Profile/)
     expect(aiAssistPanelSource).toMatch(/Generated Variants/)
     expect(aiAssistPanelSource).toMatch(/>\s*Apply\s*</)

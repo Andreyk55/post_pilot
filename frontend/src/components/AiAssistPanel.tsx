@@ -17,12 +17,16 @@ import {
   type AiGenerateVariantsRequest,
 } from '../api/ai'
 import { type VoiceProfileSummary } from '../api/voiceProfiles'
-import { getMediaUrl, type MediaType } from '../api/media'
-import { extractVideoFrames, extractSingleFrame } from '../utils/videoFrameExtractor'
+import { type MediaType } from '../api/media'
+import {
+  getAiAssistAvailability,
+  getSupportedAiAssistTab,
+  type AiAssistTab,
+} from './aiAssistPanelState'
 import { stripHashtags } from '../utils/textUtils'
 import './AiAssistPanel.css'
 
-type TabType = 'text' | 'media' | 'translate'
+type TabType = AiAssistTab
 
 // Sticky language state - persists across content edits until explicitly changed
 export interface StickyLanguageState {
@@ -235,13 +239,21 @@ export function AiAssistPanel({
 
   const isTextEmpty = !text.trim()
   const hasMedia = !!mediaUrl && mediaType && mediaType !== 'None'
-  const isImage = mediaType === 'Image'
-  const isVideo = mediaType === 'Video'
+  const { showMediaTab, showImageActions } = getAiAssistAvailability(mediaType)
 
   const generatedVariantCount =
     textResult?.type === 'generated'
       ? textResult.variants.length
       : 0
+
+  useEffect(() => {
+    const nextActiveTab = getSupportedAiAssistTab(activeTab, mediaType)
+    if (nextActiveTab !== activeTab) {
+      setActiveTab(nextActiveTab)
+      setMediaResult(null)
+      setError(null)
+    }
+  }, [activeTab, mediaType])
 
   // Text tab handlers
   const handleTextAction = async (action: () => Promise<void>) => {
@@ -264,7 +276,7 @@ export function AiAssistPanel({
   // Media tab handlers
   const handleMediaAction = async (action: () => Promise<void>) => {
     // Block all AI actions when disabled (no connected account/page)
-    if (isDisabled || !hasMedia) return
+    if (isDisabled || !hasMedia || !showImageActions) return
 
     setLoading(true)
     setError(null)
@@ -291,10 +303,7 @@ export function AiAssistPanel({
         setError(err.message)
       }
     } else if (err instanceof Error) {
-      // Show specific error message for video frame extraction failures
-      if (err.message.includes('cross-origin') || err.message.includes('CORS')) {
-        setError('Failed to process video due to cross-origin restrictions.')
-      } else if (err.message.includes('Failed to load video')) {
+      if (err.message.includes('Failed to load video')) {
         setError('Failed to load video. Please try again.')
       } else {
         setError(err.message || 'An unexpected error occurred. Please try again.')
@@ -465,50 +474,6 @@ export function AiAssistPanel({
       setMediaResult({ type: 'alttext', altText: response.altText })
     })
 
-  const handleVideoCaptionIdeas = () =>
-    handleMediaAction(async () => {
-      if (!platform) return // TypeScript guard - platform is required
-      // Convert storage key to full URL for browser video element
-      const videoUrl = getMediaUrl(mediaUrl)
-      console.log('Video caption ideas - mediaUrl:', mediaUrl, 'videoUrl:', videoUrl)
-      if (!videoUrl) throw new Error('Invalid media URL')
-
-      // Extract first frame client-side (works in Lambda - no FFmpeg needed)
-      const frame = await extractSingleFrame(videoUrl, 0.5)
-
-      // Send extracted frame to backend for AI analysis
-      const response = await aiMediaApi.videoCaptionIdeasWithFrame(
-        platform,
-        frame.dataUrl,
-        text || undefined
-      )
-      setMediaResult({ type: 'captions', variants: response.variants })
-    })
-
-  const handleThumbnailSuggest = () =>
-    handleMediaAction(async () => {
-      // Convert storage key to full URL for browser video element
-      const videoUrl = getMediaUrl(mediaUrl)
-      if (!videoUrl) throw new Error('Invalid media URL')
-
-      // Extract frames client-side (works in Lambda - no FFmpeg needed)
-      const extractedFrames = await extractVideoFrames(videoUrl, {
-        frameCount: 6,
-        width: 640,
-        quality: 0.85,
-      })
-
-      // Send extracted frames to backend for storage/URL generation
-      const response = await aiMediaApi.submitThumbnailFrames(
-        extractedFrames.map((f) => ({
-          timestampSeconds: f.timestampSeconds,
-          imageData: f.dataUrl,
-        }))
-      )
-
-      setMediaResult({ type: 'thumbnails', frames: response.frames, selectedIndex: null })
-    })
-
   // Result handlers
   const handleApply = (variantText: string, outputLang?: string) => {
     // When applying a translation (outputLang is provided), the variant text
@@ -628,16 +593,18 @@ export function AiAssistPanel({
               >
                 Translate
               </button>
-              <button
-                type="button"
-                className={`ai-tab ${activeTab === 'media' ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveTab('media')
-                  setError(null)
-                }}
-              >
-                Media
-              </button>
+              {showMediaTab && (
+                <button
+                  type="button"
+                  className={`ai-tab ${activeTab === 'media' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('media')
+                    setError(null)
+                  }}
+                >
+                  Media
+                </button>
+              )}
             </div>
           </div>
 
@@ -908,21 +875,21 @@ export function AiAssistPanel({
           )}
 
           {/* Media Tab Content */}
-          {activeTab === 'media' && (
+          {showMediaTab && activeTab === 'media' && (
         <>
           {/* disabled state message handled by top-level banner */}
           {!disabled && noPlatform && <div className="ai-empty-state">Select a platform to enable media AI features</div>}
           {!isDisabled && hasMedia && (
             <div className="ai-media-info">
-              <span className={`media-type-indicator ${isImage ? 'image' : 'video'}`}>
-                {isImage ? 'Photo' : 'Video'}
+              <span className={`media-type-indicator ${showImageActions ? 'image' : 'video'}`}>
+                {showImageActions ? 'Photo' : 'Video'}
               </span>
               <span className="media-filename">{getMediaFileName()}</span>
             </div>
           )}
 
           {/* Image Features */}
-          {!isDisabled && isImage && (
+          {!isDisabled && showImageActions && (
             <div className="ai-actions">
               <button
                 type="button"
@@ -954,33 +921,8 @@ export function AiAssistPanel({
             </div>
           )}
 
-          {/* Video Features - always show, disabled until video uploaded */}
-          {!isDisabled && (!hasMedia || isVideo) && (
-            <>
-              {!isVideo && (
-                <div className="ai-empty-state">Upload a video to enable video AI features</div>
-              )}
-              <div className="ai-actions">
-                <button
-                  type="button"
-                  className="ai-action-btn"
-                  onClick={handleVideoCaptionIdeas}
-                  disabled={isDisabled || !isVideo || loading}
-                  title="Generate caption ideas based on video"
-                >
-                  Caption ideas
-                </button>
-                <button
-                  type="button"
-                  className="ai-action-btn"
-                  onClick={handleThumbnailSuggest}
-                  disabled={isDisabled || !isVideo || loading}
-                  title="Pick a thumbnail from video frames"
-                >
-                  Pick thumbnail
-                </button>
-              </div>
-            </>
+          {!isDisabled && !hasMedia && (
+            <div className="ai-empty-state">Upload an image to enable media AI features</div>
           )}
         </>
           )}

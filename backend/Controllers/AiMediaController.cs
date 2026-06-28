@@ -52,6 +52,12 @@ public class AiMediaController : ControllerBase
             return ValidationProblem(new ValidationProblemDetails(validationErrors));
         }
 
+        if (IsVideoAiDisabled(request.AssetType, request.Action))
+        {
+            _logger.LogInformation("Video AI action {Action} is disabled for asset {AssetUrl}", request.Action, request.AssetUrl);
+            return Ok(CreateDisabledVideoResponse(request.Action));
+        }
+
         // Check rate limit (thumbnail suggest is free, doesn't use AI)
         if (request.Action != AiMediaAction.ThumbnailSuggest)
         {
@@ -175,67 +181,13 @@ public class AiMediaController : ControllerBase
     [HttpPost("media/thumbnails")]
     [ProducesResponseType(typeof(AiThumbnailSuggestResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> ProcessThumbnailFrames(
+    public Task<IActionResult> ProcessThumbnailFrames(
         [FromBody] AiThumbnailFramesRequest request,
         CancellationToken cancellationToken)
     {
-        // Validate request
-        if (request.Frames == null || request.Frames.Count == 0)
-        {
-            return ValidationProblem(new ValidationProblemDetails(
-                new Dictionary<string, string[]>
-                {
-                    ["frames"] = new[] { "At least one frame is required." }
-                }));
-        }
-
-        if (request.Frames.Count > 10)
-        {
-            return ValidationProblem(new ValidationProblemDetails(
-                new Dictionary<string, string[]>
-                {
-                    ["frames"] = new[] { "Maximum 10 frames allowed." }
-                }));
-        }
-
-        foreach (var (frame, index) in request.Frames.Select((f, i) => (f, i)))
-        {
-            if (string.IsNullOrWhiteSpace(frame.ImageData))
-            {
-                return ValidationProblem(new ValidationProblemDetails(
-                    new Dictionary<string, string[]>
-                    {
-                        [$"frames[{index}].imageData"] = new[] { "Image data is required." }
-                    }));
-            }
-
-            if (!frame.ImageData.StartsWith("data:image/"))
-            {
-                return ValidationProblem(new ValidationProblemDetails(
-                    new Dictionary<string, string[]>
-                    {
-                        [$"frames[{index}].imageData"] = new[] { "Image data must be a valid data URL." }
-                    }));
-            }
-        }
-
-        try
-        {
-            var response = await _mediaAiService.ProcessClientExtractedFramesAsync(
-                request.Frames,
-                cancellationToken);
-
-            return Ok(response);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error processing thumbnail frames");
-
-            return Problem(
-                title: "Processing error",
-                detail: "Failed to process thumbnail frames.",
-                statusCode: StatusCodes.Status500InternalServerError);
-        }
+        _logger.LogInformation("Video thumbnail AI is disabled; returning empty thumbnail response");
+        return Task.FromResult<IActionResult>(
+            Ok(new AiThumbnailSuggestResponse(AiMediaAction.ThumbnailSuggest, new List<AiVideoFrame>())));
     }
 
     /// <summary>
@@ -248,87 +200,13 @@ public class AiMediaController : ControllerBase
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable)]
-    public async Task<IActionResult> ProcessVideoCaptionIdeas(
+    public Task<IActionResult> ProcessVideoCaptionIdeas(
         [FromBody] AiVideoCaptionIdeasRequest request,
         CancellationToken cancellationToken)
     {
-        var userId = _currentUser.GetCurrentUserId();
-        // Validate request
-        if (string.IsNullOrWhiteSpace(request.FrameData))
-        {
-            return ValidationProblem(new ValidationProblemDetails(
-                new Dictionary<string, string[]>
-                {
-                    ["frameData"] = new[] { "Frame data is required." }
-                }));
-        }
-
-        if (!request.FrameData.StartsWith("data:image/"))
-        {
-            return ValidationProblem(new ValidationProblemDetails(
-                new Dictionary<string, string[]>
-                {
-                    ["frameData"] = new[] { "Frame data must be a valid data URL." }
-                }));
-        }
-
-        if (!Enum.IsDefined(request.Platform))
-        {
-            return ValidationProblem(new ValidationProblemDetails(
-                new Dictionary<string, string[]>
-                {
-                    ["platform"] = new[] { "Invalid platform value." }
-                }));
-        }
-
-        // Check rate limit
-        var canProceed = await _rateLimiter.TryAcquireAsync(userId, cancellationToken);
-        if (!canProceed)
-        {
-            _logger.LogWarning("Rate limit exceeded for user {UserId}", userId);
-
-            return Problem(
-                title: "Rate limit exceeded",
-                detail: "AI quota reached (free tier). Try again tomorrow or enable billing.",
-                statusCode: StatusCodes.Status429TooManyRequests);
-        }
-
-        try
-        {
-            var response = await _mediaAiService.GenerateVideoCaptionIdeasFromFrameAsync(
-                request.FrameData,
-                request.Platform,
-                request.Text,
-                request.Language,
-                cancellationToken);
-
-            return Ok(response);
-        }
-        catch (GeminiApiException ex) when (ex.StatusCode == 429)
-        {
-            return Problem(
-                title: "AI quota exceeded",
-                detail: "AI quota reached (free tier). Try again tomorrow or enable billing.",
-                statusCode: StatusCodes.Status429TooManyRequests);
-        }
-        catch (GeminiApiException ex)
-        {
-            _logger.LogError(ex, "Gemini API error: {Message}, Status: {StatusCode}", ex.Message, ex.StatusCode);
-
-            return Problem(
-                title: "AI service unavailable",
-                detail: "The AI service is temporarily unavailable. Please try again later.",
-                statusCode: StatusCodes.Status503ServiceUnavailable);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error processing video caption ideas");
-
-            return Problem(
-                title: "Processing error",
-                detail: "Failed to generate video caption ideas.",
-                statusCode: StatusCodes.Status500InternalServerError);
-        }
+        _logger.LogInformation("Video caption AI is disabled; returning empty caption response");
+        return Task.FromResult<IActionResult>(
+            Ok(new AiMediaCaptionIdeasResponse(AiMediaAction.VideoCaptionIdeas, new List<AiMediaCaptionVariant>())));
     }
 
     private static Dictionary<string, string[]> ValidateRequest(AiMediaRequest request)
@@ -386,5 +264,21 @@ public class AiMediaController : ControllerBase
         }
 
         return errors;
+    }
+
+    private static bool IsVideoAiDisabled(string assetType, AiMediaAction action)
+    {
+        return assetType.Equals("video", StringComparison.OrdinalIgnoreCase)
+            && (action == AiMediaAction.VideoCaptionIdeas || action == AiMediaAction.ThumbnailSuggest);
+    }
+
+    private static AiMediaResponseBase CreateDisabledVideoResponse(AiMediaAction action)
+    {
+        return action switch
+        {
+            AiMediaAction.VideoCaptionIdeas => new AiMediaCaptionIdeasResponse(action, new List<AiMediaCaptionVariant>()),
+            AiMediaAction.ThumbnailSuggest => new AiThumbnailSuggestResponse(action, new List<AiVideoFrame>()),
+            _ => throw new ArgumentOutOfRangeException(nameof(action), action, "Action is not a disabled video action.")
+        };
     }
 }
