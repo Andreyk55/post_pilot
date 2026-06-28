@@ -12,9 +12,9 @@ import schedulePostSource from './SchedulePost.tsx?raw'
  *  and "what it must NOT clear" are asserted against the reset itself, not the whole
  *  file (which legitimately sets connected pages/accounts elsewhere on load). */
 function resetComposerDraftBody(): string {
-  const start = schedulePostSource.indexOf('const resetComposerDraft = () => {')
+  const start = schedulePostSource.indexOf('const resetComposerDraft = ({')
   expect(start).toBeGreaterThan(-1)
-  const end = schedulePostSource.indexOf('\n  }', start)
+  const end = schedulePostSource.indexOf('const applyChannelSwitch = (platformId: string) => {', start)
   expect(end).toBeGreaterThan(start)
   return schedulePostSource.slice(start, end)
 }
@@ -55,10 +55,12 @@ describe('SchedulePost — Meta channel switch clears the draft', () => {
     expect(body).toMatch(/clearSingleMediaValidationState\(\)/)
     expect(body).toMatch(/setScheduledDate\(''\)/)
     expect(body).toMatch(/setScheduledTime\(''\)/)
-    expect(body).toMatch(/setPostType\('Feed'\)/)
+    expect(body).toMatch(/nextPostType = 'Feed'/)
+    expect(body).toMatch(/setPostType\(nextPostType\)/)
     expect(body).toMatch(/setSelectedPageId\(''\)/)
     expect(body).toMatch(/setSelectedInstagramAccountId\(''\)/)
     expect(body).toMatch(/setUploadError\(null\)/)
+    expect(body).toMatch(/setIsUploading\(false\)/)
     // AI Assist generated results + suggested times are remounted (fresh, empty).
     expect(body).toMatch(/setAiPanelKey\(k => k \+ 1\)/)
     expect(body).toMatch(/setSuggestedTimesKey\(k => k \+ 1\)/)
@@ -91,7 +93,7 @@ describe('SchedulePost — channel switch confirmation UX', () => {
   it('prompts before discarding a dirty draft and clears it only on confirm', () => {
     // A dirty draft defers the switch behind the confirm dialog instead of clearing.
     expect(schedulePostSource).toMatch(/if \(isDirty\) \{\s*setPendingChannelSwitch\(platformId\)/)
-    expect(schedulePostSource).toMatch(/isComposerDraftDirty\(\{[\s\S]*?content,[\s\S]*?\}\)/)
+    expect(schedulePostSource).toMatch(/isComposerDraftDirty\(getComposerDraftSnapshot\(\)\)/)
     // The dialog confirms into the switch, and cancel leaves channel + draft intact.
     expect(schedulePostSource).toMatch(/Switching channels will clear your current draft\. Continue\?/)
     expect(schedulePostSource).toMatch(/onConfirm=\{\(\) => \{[\s\S]*?applyChannelSwitch\(pendingChannelSwitch\)/)

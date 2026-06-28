@@ -41,6 +41,10 @@ export function isMetaChannelSwitch(currentPlatforms: string[], nextPlatformId: 
   return currentPlatforms.some(p => isMetaChannel(p) && p !== nextPlatformId)
 }
 
+export function isPostTypeSwitch(currentPostType: PostType, nextPostType: PostType): boolean {
+  return currentPostType !== nextPostType
+}
+
 /**
  * Snapshot of the draft fields that represent user-authored work. Channel-specific
  * selections (target Page/IG account) are intentionally excluded: they are trivial
@@ -56,13 +60,25 @@ export interface ComposerDraftSnapshot {
   scheduledTime: string
   postType: PostType
   selectedThumbnailUrl: string | null
+  hasUploadError: boolean
+  hasSingleMediaValidationState: boolean
+  carouselValidationIssueCount: number
+}
+
+interface ComposerDraftDirtyOptions {
+  includePostType?: boolean
 }
 
 /**
  * True when the composer holds work the user would lose on a channel switch. Used
  * to decide whether to prompt for confirmation before clearing the draft.
  */
-export function isComposerDraftDirty(draft: ComposerDraftSnapshot): boolean {
+export function isComposerDraftDirty(
+  draft: ComposerDraftSnapshot,
+  options: ComposerDraftDirtyOptions = {},
+): boolean {
+  const includePostType = options.includePostType ?? true
+
   return (
     draft.content.length > 0 ||
     draft.mediaUrl !== null ||
@@ -70,7 +86,10 @@ export function isComposerDraftDirty(draft: ComposerDraftSnapshot): boolean {
     draft.mediaTagCount > 0 ||
     draft.scheduledDate.length > 0 ||
     draft.scheduledTime.length > 0 ||
-    draft.postType !== 'Feed' ||
-    draft.selectedThumbnailUrl !== null
+    (includePostType && draft.postType !== 'Feed') ||
+    draft.selectedThumbnailUrl !== null ||
+    draft.hasUploadError ||
+    draft.hasSingleMediaValidationState ||
+    draft.carouselValidationIssueCount > 0
   )
 }

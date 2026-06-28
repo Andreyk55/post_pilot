@@ -21,7 +21,7 @@ import {
   hasBlockingSchedulePostMediaValidation,
   type SchedulePostMediaValidationState,
 } from '../utils/schedulePostMediaValidation'
-import { isMetaChannelSwitch, isComposerDraftDirty } from '../utils/schedulePostChannelSwitch'
+import { isMetaChannelSwitch, isPostTypeSwitch, isComposerDraftDirty } from '../utils/schedulePostChannelSwitch'
 import { ConfirmDialog } from './ConfirmDialog'
 import {
   getPostTextMaxChars,
@@ -69,6 +69,11 @@ interface SchedulePostProps {
   onNavigate?: (page: string) => void
 }
 
+interface ResetComposerDraftOptions {
+  nextPostType?: PostType
+  clearTargets?: boolean
+}
+
 const platforms = [
   { id: 'facebook', name: 'Facebook', icon: 'f' },
   { id: 'instagram', name: 'Instagram', icon: '📷' },
@@ -98,6 +103,9 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
   // while the "this will clear your draft" dialog is open; null when no switch is
   // pending. See handlePlatformClick / applyChannelSwitch.
   const [pendingChannelSwitch, setPendingChannelSwitch] = useState<string | null>(null)
+  // Pending in-platform post type switch awaiting confirmation. Holds the target
+  // post type while the dialog is open; null when no switch is pending.
+  const [pendingPostTypeSwitch, setPendingPostTypeSwitch] = useState<PostType | null>(null)
   const [connectedPages, setConnectedPages] = useState<ConnectedPage[]>([])
   const [connectedInstagramAccounts, setConnectedInstagramAccounts] = useState<ConnectedInstagramAccount[]>([])
   const [isAccountConnected, setIsAccountConnected] = useState(false)
@@ -360,23 +368,55 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
     setIsUploading(uploading)
   }
 
+  const getComposerDraftSnapshot = () => {
+    const carouselMediaTagCount = Array.from(carouselMediaTags.values())
+      .reduce((count, tags) => count + tags.length, 0)
+    const carouselValidationIssueCount = carouselItems.filter(item =>
+      item.validationStatus !== 'Valid' ||
+      item.validationErrors.length > 0 ||
+      item.validationWarnings.length > 0
+    ).length
+
+    return {
+      content,
+      mediaUrl,
+      carouselItemCount: carouselItems.length,
+      mediaTagCount: mediaTags.length + carouselMediaTagCount,
+      scheduledDate,
+      scheduledTime,
+      postType,
+      selectedThumbnailUrl,
+      hasUploadError: uploadError !== null,
+      hasSingleMediaValidationState: mediaValidation.status !== null || mediaValidation.errors.length > 0,
+      carouselValidationIssueCount,
+    }
+  }
+
   // Reset every field that belongs to the composer *draft* while leaving the
   // connected accounts/pages/IG assets, the workspace, and the published posts list
   // untouched. Bumping the child keys remounts MediaUpload / MultiMediaUpload /
   // AiAssistPanel / SuggestedTimes, which invalidates their in-flight
   // upload/validation ownership tokens — so a late response from the previous draft
   // can't re-populate the cleared state after the remount. Does NOT change
-  // selectedPlatforms; callers decide what the new selection should be.
-  const resetComposerDraft = () => {
+  // selectedPlatforms; callers decide what the new selection should be. Target
+  // selections are cleared for channel switches, but preserved for post-type
+  // switches inside the same platform.
+  const resetComposerDraft = ({
+    nextPostType = 'Feed',
+    clearTargets = true,
+  }: ResetComposerDraftOptions = {}) => {
     setContent('')
-    setPostType('Feed')
+    setPostType(nextPostType)
     setScheduledDate('')
     setScheduledTime('')
-    setSelectedPageId('')
-    setSelectedInstagramAccountId('')
+    if (clearTargets) {
+      setSelectedPageId('')
+      setSelectedInstagramAccountId('')
+    }
     setMediaUrl(null)
     setMediaType(null)
     setUploadError(null)
+    setIsUploading(false)
     setUploadKey(k => k + 1)
     setAiPanelKey(k => k + 1)
     setSuggestedTimesKey(k => k + 1)
@@ -396,22 +436,17 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
     setSelectedPlatforms([platformId])
   }
 
+  const applyPostTypeSwitch = (nextPostType: PostType) => {
+    resetComposerDraft({ nextPostType, clearTargets: false })
+  }
+
   // Platform button entrypoint. Switching the Meta channel (Facebook <-> Instagram)
   // clears the draft so media/text never carries over to the other channel; if the
   // draft has unsaved work we confirm first. First selection and deselect keep the
   // existing selectPlatform behavior (no draft reset).
   const handlePlatformClick = (platformId: string) => {
     if (isMetaChannelSwitch(selectedPlatforms, platformId)) {
-      const isDirty = isComposerDraftDirty({
-        content,
-        mediaUrl,
-        carouselItemCount: carouselItems.length,
-        mediaTagCount: mediaTags.length,
-        scheduledDate,
-        scheduledTime,
-        postType,
-        selectedThumbnailUrl,
-      })
+      const isDirty = isComposerDraftDirty(getComposerDraftSnapshot())
       if (isDirty) {
         setPendingChannelSwitch(platformId)
         return
@@ -420,6 +455,18 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
       return
     }
     selectPlatform(platformId)
+  }
+
+  const handlePostTypeChange = (nextPostType: PostType) => {
+    if (!isPostTypeSwitch(postType, nextPostType)) return
+
+    const isDirty = isComposerDraftDirty(getComposerDraftSnapshot(), { includePostType: false })
+    if (isDirty) {
+      setPendingPostTypeSwitch(nextPostType)
+      return
+    }
+
+    setPostType(nextPostType)
   }
 
   // Instagram media validation: single image/video OR carousel (2+ images)
@@ -791,30 +838,14 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
               <button
                 type="button"
                 className={`post-type-btn ${postType === 'Feed' ? 'selected' : ''}`}
-                onClick={() => {
-                  setPostType('Feed')
-                  // Clear single media when switching (carousel may need different setup)
-                  setMediaUrl(null)
-                  setMediaType(null)
-                  clearSingleMediaValidationState()
-                  setUploadKey(k => k + 1)
-                  setCarouselItems([])
-                }}
+                onClick={() => handlePostTypeChange('Feed')}
               >
                 Feed Post
               </button>
               <button
                 type="button"
                 className={`post-type-btn ${postType === 'Story' ? 'selected' : ''}`}
-                onClick={() => {
-                  setPostType('Story')
-                  // Clear carousel when switching to story (stories are single media)
-                  setMediaUrl(null)
-                  setMediaType(null)
-                  clearSingleMediaValidationState()
-                  setUploadKey(k => k + 1)
-                  setCarouselItems([])
-                }}
+                onClick={() => handlePostTypeChange('Story')}
               >
                 Story
               </button>
@@ -1141,6 +1172,22 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
           setPendingChannelSwitch(null)
         }}
         onCancel={() => setPendingChannelSwitch(null)}
+      />
+
+      <ConfirmDialog
+        isOpen={pendingPostTypeSwitch !== null}
+        title="Change post type?"
+        message="Changing the post type will clear your current draft details, uploaded media, and validation results. Continue?"
+        confirmText="Change & clear"
+        cancelText="Keep draft"
+        confirmVariant="danger"
+        onConfirm={() => {
+          if (pendingPostTypeSwitch) {
+            applyPostTypeSwitch(pendingPostTypeSwitch)
+          }
+          setPendingPostTypeSwitch(null)
+        }}
+        onCancel={() => setPendingPostTypeSwitch(null)}
       />
     </div>
   )
