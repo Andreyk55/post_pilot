@@ -17,6 +17,7 @@ public class AppDbContext : DbContext
     public DbSet<MetaOAuthState> MetaOAuthStates => Set<MetaOAuthState>();
     public DbSet<AiVoiceProfile> AiVoiceProfiles => Set<AiVoiceProfile>();
     public DbSet<Media> Media => Set<Media>();
+    public DbSet<UserMediaUploadUsage> UserMediaUploadUsages => Set<UserMediaUploadUsage>();
     public DbSet<AppUser> AppUsers => Set<AppUser>();
     public DbSet<Workspace> Workspaces => Set<Workspace>();
     public DbSet<WorkspaceMember> WorkspaceMembers => Set<WorkspaceMember>();
@@ -258,6 +259,14 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(e => e.WorkspaceId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<UserMediaUploadUsage>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => new { e.UserId, e.PeriodStartUtc }).IsUnique();
+            entity.Property(e => e.UploadCount).IsRequired();
         });
 
         modelBuilder.Entity<AppUser>(entity =>

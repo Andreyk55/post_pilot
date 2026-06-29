@@ -136,6 +136,25 @@ public class MediaController : ControllerBase
         {
             return StatusCode(501, new { error = ex.Message });
         }
+        catch (MediaUploadQuotaExceededException ex)
+        {
+            return StatusCode(
+                StatusCodes.Status429TooManyRequests,
+                new ProblemDetails
+                {
+                    Title = "Media upload quota exceeded",
+                    Detail = ex.Message,
+                    Status = StatusCodes.Status429TooManyRequests,
+                    Extensions =
+                    {
+                        ["code"] = ex.Result.ErrorCode ?? MediaUploadQuotaExceededException.DefaultErrorCode,
+                        ["limit"] = ex.Result.Limit,
+                        ["used"] = ex.Result.Used,
+                        ["remaining"] = ex.Result.Remaining,
+                        ["resetAtUtc"] = ex.Result.PeriodEndUtc,
+                    }
+                });
+        }
     }
 
     /// <summary>

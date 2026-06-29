@@ -131,6 +131,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IValidateOptions<MediaStorageOptions>, MediaStorageRunModeValidator>();
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<MediaStorageOptions>>().Value);
 
+        services.AddOptions<MediaUploadQuotaOptions>()
+            .Bind(configuration.GetSection(MediaUploadQuotaOptions.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<MediaUploadQuotaOptions>, MediaUploadQuotaOptionsValidator>();
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<MediaUploadQuotaOptions>>().Value);
+
         // ── Feature settings ─────────────────────────────────────────────────
         var featureSettings = configuration.GetSection("Features").Get<FeatureSettings>() ?? new FeatureSettings();
         services.AddSingleton(featureSettings);
@@ -221,6 +227,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IInstagramDerivativeService, InstagramDerivativeService>();
         services.AddSingleton<IVideoThumbnailGenerator, FfmpegVideoThumbnailGenerator>();
 
+        services.AddScoped<IMediaUploadQuotaService, MediaUploadQuotaService>();
         services.AddScoped<IMediaUploadService, MediaUploadService>();
     }
 

@@ -88,6 +88,13 @@ export interface InitUploadResponse {
   mediaType: MediaType
 }
 
+type MediaApiProblemDetails = {
+  error?: string
+  detail?: string
+  title?: string
+  code?: string
+}
+
 export interface CompleteUploadRequest {
   mediaId: string
 }
@@ -271,7 +278,7 @@ export const mediaApi = {
     })
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Failed to initiate upload' }))
-      throw new Error(error.error || 'Failed to initiate upload')
+      throw new Error(getMediaApiErrorMessage(error, 'Failed to initiate upload'))
     }
     return response.json()
   },
@@ -349,4 +356,15 @@ export const mediaApi = {
     }
     return response.json()
   },
+}
+
+export function getMediaApiErrorMessage(
+  error: MediaApiProblemDetails | null | undefined,
+  fallback: string,
+): string {
+  if (!error || typeof error !== 'object') return fallback
+  if (typeof error.error === 'string' && error.error.trim()) return error.error.trim()
+  if (typeof error.detail === 'string' && error.detail.trim()) return error.detail.trim()
+  if (typeof error.title === 'string' && error.title.trim()) return error.title.trim()
+  return fallback
 }

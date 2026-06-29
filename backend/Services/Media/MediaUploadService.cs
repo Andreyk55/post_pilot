@@ -14,6 +14,7 @@ public class MediaUploadService : IMediaUploadService
     private readonly MediaStorageOptions _storageOpts;
     private readonly TimeSpan _presignedUploadExpiration;
     private readonly ILogger<MediaUploadService> _logger;
+    private readonly IMediaUploadQuotaService _mediaUploadQuota;
     private readonly IInstagramDerivativeService? _derivativeService;
     private readonly IVideoThumbnailGenerator? _videoThumbnailGenerator;
 
@@ -23,13 +24,15 @@ public class MediaUploadService : IMediaUploadService
         MediaStorageOptions storageOpts,
         ILogger<MediaUploadService> logger,
         IInstagramDerivativeService? derivativeService = null,
-        IVideoThumbnailGenerator? videoThumbnailGenerator = null)
+        IVideoThumbnailGenerator? videoThumbnailGenerator = null,
+        IMediaUploadQuotaService? mediaUploadQuota = null)
     {
         _db = db;
         _mediaService = mediaService;
         _storageOpts = storageOpts;
         _presignedUploadExpiration = TimeSpan.FromMinutes(storageOpts.PresignedUploadExpirationMinutes);
         _logger = logger;
+        _mediaUploadQuota = mediaUploadQuota ?? DisabledMediaUploadQuotaService.Instance;
         _derivativeService = derivativeService;
         _videoThumbnailGenerator = videoThumbnailGenerator;
     }
@@ -55,6 +58,10 @@ public class MediaUploadService : IMediaUploadService
         // Provider-level absolute ceiling (Supabase). 0 means "no additional cap".
         if (_storageOpts.IsSupabase && _storageOpts.Supabase.MaxUploadBytes > 0 && sizeBytes > _storageOpts.Supabase.MaxUploadBytes)
             throw new ArgumentException($"File too large. Provider cap is {_storageOpts.Supabase.MaxUploadBytes} bytes (got {sizeBytes}).");
+
+        var quota = await _mediaUploadQuota.TryConsumeUploadAsync(userId, cancellationToken);
+        if (!quota.Allowed)
+            throw new MediaUploadQuotaExceededException(quota);
 
         // Pre-assign mediaId so we can embed it in the storage path. The backend chooses
         // the entire path; the frontend's fileName/contentType/platform are inputs, not paths.

@@ -71,3 +71,53 @@ describe('getMediaUrl', () => {
     expect(getMediaUrl('')).toBeNull()
   })
 })
+
+describe('mediaApi.initUpload', () => {
+  const fetchMock = vi.fn()
+
+  beforeEach(() => {
+    fetchMock.mockReset()
+    vi.stubGlobal('fetch', fetchMock)
+    vi.resetModules()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.doUnmock('../config/appConfig')
+  })
+
+  it('surfaces the backend quota detail message from a 429 problem-details response', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      json: async () => ({
+        title: 'Media upload quota exceeded',
+        detail: 'Daily media upload limit reached. You can upload more media when your quota resets.',
+        code: 'MEDIA_UPLOAD_QUOTA_EXCEEDED',
+        remaining: 0,
+      }),
+    })
+    const { mediaApi } = await importWithApiBaseUrl('')
+
+    await expect(mediaApi.initUpload({
+      fileName: 'photo.png',
+      contentType: 'image/png',
+      sizeBytes: 123,
+      platform: 'Facebook',
+    })).rejects.toThrow('Daily media upload limit reached. You can upload more media when your quota resets.')
+  })
+
+  it('falls back cleanly when the backend response has no usable detail', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      json: async () => ({}),
+    })
+    const { mediaApi } = await importWithApiBaseUrl('')
+
+    await expect(mediaApi.initUpload({
+      fileName: 'photo.png',
+      contentType: 'image/png',
+      sizeBytes: 123,
+      platform: 'Instagram',
+    })).rejects.toThrow('Failed to initiate upload')
+  })
+})
