@@ -31,7 +31,7 @@ function MainApp() {
       case 'posts':
         return <MyPostsPage />
       case 'accounts':
-        return <ConnectedAccountsPage />
+        return <ConnectedAccountsPage onNavigate={setCurrentPage} />
       case 'assets':
         return <AssetsPage onNavigate={setCurrentPage} />
       case 'settings':

@@ -172,7 +172,7 @@ export function AssetsPage({ onNavigate }: AssetsPageProps) {
   if (loading) {
     return (
       <div className="assets-page">
-        <h1>Assets</h1>
+        <h1>Publishing Assets</h1>
         <div className="loading-container">
           <span className="spinner"></span>
           <span>Loading assets...</span>
@@ -185,9 +185,9 @@ export function AssetsPage({ onNavigate }: AssetsPageProps) {
   if (!metaConnection) {
     return (
       <div className="assets-page">
-        <h1>Assets</h1>
+        <h1>Publishing Assets</h1>
         <p className="page-subtitle">
-          Manage your Facebook Pages and linked Instagram professional accounts
+          Manage the Facebook Pages and Instagram professional accounts available for publishing.
         </p>
 
         <div className="empty-state">
@@ -213,7 +213,7 @@ export function AssetsPage({ onNavigate }: AssetsPageProps) {
 
   return (
     <div className="assets-page">
-      <h1>Assets</h1>
+      <h1>Publishing Assets</h1>
       <p className="page-subtitle">
         Manage your Facebook Pages and linked Instagram professional accounts
       </p>

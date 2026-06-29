@@ -18,7 +18,12 @@ const metaPlatform = {
   color: '#0081FB',
 }
 
-export function ConnectedAccountsPage() {
+interface ConnectedAccountsPageProps {
+  /** Optional callback for navigating to other pages (e.g., Publishing Assets) */
+  onNavigate?: (page: string) => void
+}
+
+export function ConnectedAccountsPage({ onNavigate }: ConnectedAccountsPageProps = {}) {
   const { hasWorkspace } = useAuth()
   const [connecting, setConnecting] = useState<string | null>(null)
 
@@ -221,6 +226,21 @@ export function ConnectedAccountsPage() {
                 </span>
               )}
             </div>
+            {/* Clarify what publishing access this identity-level connection grants,
+                and point to the detailed asset list rather than duplicating it here. */}
+            <p className="connection-access-hint">
+              This connection gives Post Pilot access to the Facebook Pages you
+              allowed and any linked Instagram professional accounts.
+            </p>
+            {onNavigate && (
+              <button
+                type="button"
+                className="view-assets-link"
+                onClick={() => onNavigate('assets')}
+              >
+                View Publishing Assets →
+              </button>
+            )}
             {metaConnection?.status === 'ReauthRequired' && (
               // Token went invalid: the account is still owned/connected and posts
               // remain visible, but publishing will fail until the user reconnects

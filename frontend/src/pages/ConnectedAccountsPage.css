@@ -440,6 +440,30 @@
   margin-top: 0.4rem;
 }
 
+.connection-access-hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.view-assets-link {
+  align-self: flex-start;
+  padding: 0;
+  background: none;
+  border: none;
+  color: #4dabf7;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.view-assets-link:hover {
+  color: #74c0fc;
+  text-decoration: underline;
+}
+
 .provider-disconnect-message p {
   margin: 0 0 0.5rem 0;
 }

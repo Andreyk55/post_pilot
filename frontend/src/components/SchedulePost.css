@@ -332,6 +332,28 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   font-size: 0.875rem;
 }
 
+/* Compact confirmation of the selected publishing destination */
+.destination-confirmation {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-top: 0.6rem;
+  padding: 0.625rem 0.875rem;
+  background: rgba(102, 126, 234, 0.1);
+  border: 1px solid rgba(102, 126, 234, 0.3);
+  border-radius: 8px;
+}
+
+.destination-confirmation__primary {
+  font-size: 0.875rem;
+  color: #ffffff;
+}
+
+.destination-confirmation__meta {
+  font-size: 0.8125rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
 .no-pages-warning {
   padding: 1rem;
   background: rgba(255, 193, 7, 0.1);

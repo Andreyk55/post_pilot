@@ -108,6 +108,9 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
   const [pendingPostTypeSwitch, setPendingPostTypeSwitch] = useState<PostType | null>(null)
   const [connectedPages, setConnectedPages] = useState<ConnectedPage[]>([])
   const [connectedInstagramAccounts, setConnectedInstagramAccounts] = useState<ConnectedInstagramAccount[]>([])
+  // Identity-level Meta account display name, shown in the destination confirmation
+  // so the user can see which Meta connection a selected Page/IG publishes through.
+  const [connectedMetaAccountName, setConnectedMetaAccountName] = useState<string>('')
   const [isAccountConnected, setIsAccountConnected] = useState(false)
   const [selectedPageId, setSelectedPageId] = useState<string>('')
   const [selectedInstagramAccountId, setSelectedInstagramAccountId] = useState<string>('')
@@ -265,6 +268,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
 
         setConnectedPages(response.connection.pages)
         setConnectedInstagramAccounts(igAccounts)
+        setConnectedMetaAccountName(response.connection.providerAccountName ?? '')
       }
     } catch (err) {
       console.error('Failed to load connected accounts:', err)
@@ -278,6 +282,16 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
   const isStory = postType === 'Story'
   const showFacebookPageSelector = isFacebookSelected && connectedPages.length > 0
   const showInstagramAccountSelector = isInstagramSelected && connectedInstagramAccounts.length > 0
+
+  // Resolve the currently selected destination for the compact confirmation shown
+  // below each selector. Display-only: this does not affect validation, the submitted
+  // target ids, upload behavior, or AI gating.
+  const selectedPage = selectedPageId
+    ? connectedPages.find(page => page.id === selectedPageId)
+    : undefined
+  const selectedInstagramAccount = selectedInstagramAccountId
+    ? connectedInstagramAccounts.find(account => account.id === selectedInstagramAccountId)
+    : undefined
 
   // Stories are only supported on Facebook and Instagram
   const isStoryPlatformSelected = isFacebookSelected || isInstagramSelected
@@ -801,6 +815,20 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
                 ))}
               </select>
             )}
+            {/* Destination confirmation — only after a Page is selected. Works for
+                both Feed and Story; display-only (no effect on validation/publishing). */}
+            {selectedPage && (
+              <div className="destination-confirmation" role="status">
+                <span className="destination-confirmation__primary">
+                  Posting to Facebook Page: <strong>{selectedPage.name}</strong>
+                </span>
+                {connectedMetaAccountName && (
+                  <span className="destination-confirmation__meta">
+                    Connected via Meta account: <strong>{connectedMetaAccountName}</strong>
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -826,6 +854,25 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
                   </option>
                 ))}
               </select>
+            )}
+            {/* Destination confirmation — only after an account is selected. Works for
+                both Feed and Story; display-only (no effect on validation/publishing). */}
+            {selectedInstagramAccount && (
+              <div className="destination-confirmation" role="status">
+                <span className="destination-confirmation__primary">
+                  Posting to Instagram account: <strong>@{selectedInstagramAccount.username}</strong>
+                </span>
+                {selectedInstagramAccount.pageName && (
+                  <span className="destination-confirmation__meta">
+                    Linked Facebook Page: <strong>{selectedInstagramAccount.pageName}</strong>
+                  </span>
+                )}
+                {connectedMetaAccountName && (
+                  <span className="destination-confirmation__meta">
+                    Connected via Meta account: <strong>{connectedMetaAccountName}</strong>
+                  </span>
+                )}
+              </div>
             )}
           </div>
         )}

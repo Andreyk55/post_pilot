@@ -229,7 +229,7 @@ describe('Meta-focused page copy', () => {
   })
 
   it('describes assets as Facebook Pages plus linked Instagram professional accounts', () => {
-    expect(assetsPageSource).toMatch(/Manage your Facebook Pages and linked Instagram professional accounts/)
+    expect(assetsPageSource).toMatch(/Manage the Facebook Pages and Instagram professional accounts available for publishing\./)
     expect(assetsPageSource).toMatch(/Available through connected Facebook Pages/)
     expect(assetsPageSource).toMatch(/Facebook Pages and linked Instagram accounts/)
   })

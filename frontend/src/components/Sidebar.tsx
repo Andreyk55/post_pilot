@@ -10,7 +10,7 @@ interface SidebarProps {
 
 const navItems = [
   { id: 'accounts', label: 'Connected Accounts', icon: '🔗' },
-  { id: 'assets', label: 'Assets', icon: '📦' },
+  { id: 'assets', label: 'Publishing Assets', icon: '📦' },
   { id: 'schedule', label: 'Schedule Posts', icon: '📅' },
   { id: 'posts', label: 'My Posts', icon: '📝' },
   { id: 'settings', label: 'Account Settings', icon: '⚙️' },
