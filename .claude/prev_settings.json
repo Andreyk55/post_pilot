@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git diff:*)",
+      "Bash(git -C \"d:\\\\dev\\\\projects\\\\post_pilot\" status --short)",
+      "Bash(dotnet ef *)",
+      "Bash(dotnet tool *)",
+      "Bash(docker stop *)",
+      "PowerShell($env:ConnectionStrings__DefaultConnection = 'Host=localhost;Port=5432;Database=postpilot;Username=postgres;Password=postgres'; $env:ASPNETCORE_ENVIRONMENT = 'Development'; dotnet ef migrations add AddSoftDisconnect --project 'd:\\\\dev\\\\projects\\\\post_pilot\\\\backend\\\\PostPilot.Api.csproj' --no-build 2>&1 | Select-Object -Last 20)",
+      "Bash(Get-ChildItem -Path \"d:\\\\dev\\\\projects\\\\post_pilot\" -Directory -Force)",
+      "Bash(Select-Object Name)",
+      "Bash(npx eslint *)",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{const r=JSON.parse\\(d\\);r.filter\\(f=>f.errorCount>0\\).forEach\\(f=>console.log\\(f.errorCount+' errors: '+f.filePath.replace\\(/.*frontend./,''\\)\\)\\)}\\)\")",
+      "WebSearch",
+      "WebFetch(domain:www.ayrshare.com)",
+      "PowerShell(dotnet build backend/backend.csproj --nologo -clp:ErrorsOnly 2>&1)",
+      "PowerShell(dotnet build backend/PostPilot.Api.csproj --nologo -clp:ErrorsOnly 2>&1)",
+      "PowerShell(dotnet test backend/PostPilot.Api.Tests/PostPilot.Api.Tests.csproj --nologo --filter \"FullyQualifiedName~InstagramAutoPromotionTests\" 2>&1)",
+      "PowerShell(npx --prefix D:\\\\dev\\\\projects\\\\post_pilot\\\\frontend tsc --noEmit -p D:\\\\dev\\\\projects\\\\post_pilot\\\\frontend\\\\tsconfig.app.json 2>&1)",
+      "PowerShell(Set-Location D:\\\\dev\\\\projects\\\\post_pilot\\\\frontend; npx tsc --noEmit -p tsconfig.app.json 2>&1 | Select-Object -First 30; Write-Output \"EXIT: $LASTEXITCODE\")",
+      "PowerShell(npx vitest run 2>&1)",
+      "PowerShell(npx tsc -b 2>&1)",
+      "PowerShell(npx vitest run src/utils/schedulePostChannelSwitch.test.ts src/components/SchedulePost.channelSwitch.test.ts src/components/SchedulePost.workspace.test.ts 2>&1)"
+    ]
+  }
+}
