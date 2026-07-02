@@ -39,7 +39,7 @@ public sealed class SupportNotificationService : ISupportNotificationService
         CancellationToken ct)
     {
         var category = request.Category?.ToString() ?? "General";
-        var subject = $"[PostPilot Support] {category} - {request.Subject}";
+        var subject = $"[Publish Harbor Support] {category} - {request.Subject}";
 
         var body = BuildTextBody(request, user, category);
 
@@ -58,7 +58,7 @@ public sealed class SupportNotificationService : ISupportNotificationService
     private static string BuildTextBody(SupportContactRequest request, AppUser user, string category)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("New PostPilot support request");
+        sb.AppendLine("New Publish Harbor support request");
         sb.AppendLine();
         sb.AppendLine($"Request ID: {request.Id}");
         sb.AppendLine($"Category: {category}");

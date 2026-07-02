@@ -18,7 +18,7 @@ namespace PostPilot.Api.Controllers;
 public sealed class DataDeletionController : ControllerBase
 {
     // Fallback when Auth:FrontendUrl is not configured (matches the public deployment).
-    private const string DefaultFrontendBaseUrl = "https://post-auto-pilot.vercel.app";
+    private const string DefaultFrontendBaseUrl = "https://www.publishharbor.com";
 
     private readonly IMetaSignedRequestVerifier _verifier;
     private readonly IDataDeletionRequestService _requests;

@@ -80,7 +80,7 @@ public class SupportNotificationServiceTests
         await NewService().SendSupportRequestNotificationAsync(NewRequest(), NewUser(), CancellationToken.None);
 
         var subject = _sender.LastMessage!.Subject;
-        Assert.Contains("[PostPilot Support]", subject);
+        Assert.Contains("[Publish Harbor Support]", subject);
         Assert.Contains("DataDeletion", subject);
         Assert.Contains("Data deletion question", subject);
     }

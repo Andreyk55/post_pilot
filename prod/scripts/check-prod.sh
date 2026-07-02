@@ -28,7 +28,7 @@ fi
 echo
 
 cyan "Public API health (via host nginx + TLS)"
-if curl -fsS -o /dev/null -w "  HTTP %{http_code}\n" https://post-pilot.cloud-ip.cc/health; then
+if curl -fsS -o /dev/null -w "  HTTP %{http_code}\n" https://api.publishharbor.com/health; then
     green "  public /health OK"
 else
     red "  public /health FAILED"
