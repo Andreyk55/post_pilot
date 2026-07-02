@@ -17,26 +17,23 @@ namespace PostPilot.Api.Controllers;
 [AllowAnonymous]
 public sealed class DataDeletionController : ControllerBase
 {
-    // Fallback when Auth:FrontendUrl is not configured (matches the public deployment).
-    private const string DefaultFrontendBaseUrl = "https://www.publishharbor.com";
-
     private readonly IMetaSignedRequestVerifier _verifier;
     private readonly IDataDeletionRequestService _requests;
     private readonly IMetaDataDeletionService _metaDeletion;
-    private readonly AuthOptions _authOptions;
+    private readonly FrontendOptions _frontendOptions;
     private readonly ILogger<DataDeletionController> _logger;
 
     public DataDeletionController(
         IMetaSignedRequestVerifier verifier,
         IDataDeletionRequestService requests,
         IMetaDataDeletionService metaDeletion,
-        AuthOptions authOptions,
+        FrontendOptions frontendOptions,
         ILogger<DataDeletionController> logger)
     {
         _verifier = verifier;
         _requests = requests;
         _metaDeletion = metaDeletion;
-        _authOptions = authOptions;
+        _frontendOptions = frontendOptions;
         _logger = logger;
     }
 
@@ -50,6 +47,18 @@ public sealed class DataDeletionController : ControllerBase
         [FromForm(Name = "signed_request")] string? signedRequest,
         CancellationToken ct)
     {
+        // Meta requires a status URL in the response, which needs Frontend:BaseUrl.
+        // Bail out before touching any data — Meta retries the callback, so nothing
+        // is lost once the configuration is fixed.
+        var frontendBaseUrl = _frontendOptions.BaseUrl;
+        if (string.IsNullOrWhiteSpace(frontendBaseUrl))
+        {
+            _logger.LogError(
+                "Frontend:BaseUrl is not configured; rejecting Meta data-deletion callback. " +
+                "Set Frontend__BaseUrl to the public frontend origin.");
+            return StatusCode(StatusCodes.Status500InternalServerError, new { error = "server_misconfigured" });
+        }
+
         MetaSignedRequestPayload payload;
         try
         {
@@ -88,7 +97,7 @@ public sealed class DataDeletionController : ControllerBase
             await _requests.MarkFailedAsync(request.ConfirmationCode, "Deletion failed; please contact support.", ct);
         }
 
-        var url = $"{FrontendBaseUrl()}/data-deletion/status/{request.ConfirmationCode}";
+        var url = $"{frontendBaseUrl.TrimEnd('/')}/data-deletion/status/{request.ConfirmationCode}";
         return Ok(new MetaDataDeletionCallbackResponse(url, request.ConfirmationCode));
     }
 
@@ -108,12 +117,5 @@ public sealed class DataDeletionController : ControllerBase
             status.Status,
             status.RequestedAt,
             status.CompletedAt));
-    }
-
-    private string FrontendBaseUrl()
-    {
-        var configured = _authOptions.FrontendUrl;
-        var baseUrl = string.IsNullOrWhiteSpace(configured) ? DefaultFrontendBaseUrl : configured;
-        return baseUrl.TrimEnd('/');
     }
 }

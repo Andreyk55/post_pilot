@@ -67,6 +67,11 @@ public class Startup
             .Bind(Configuration.GetSection(GoogleAuthOptions.SectionName));
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<GoogleAuthOptions>>().Value);
 
+        // ── Public frontend origin (absolute URLs emitted by the backend) ────
+        services.AddOptions<FrontendOptions>()
+            .Bind(Configuration.GetSection(FrontendOptions.SectionName));
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<FrontendOptions>>().Value);
+
         services.AddHttpContextAccessor();
         services.AddScoped<IUserProvisioningService, UserProvisioningService>();
         services.AddScoped<ICurrentUserProvider, CurrentUserProvider>();

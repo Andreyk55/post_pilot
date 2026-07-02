@@ -74,6 +74,12 @@ key or path.
 | `Auth__RequireHttpsCookies` | recommended `true` in prod | When true the session cookie is `Secure` + `SameSite=None`. Set false only for local HTTP dev. |
 | `Auth__CookieName` | optional | Defaults to `postpilot_session`. |
 
+## Public URLs (Frontend section)
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `Frontend__BaseUrl` | yes (prod) | Public frontend origin, e.g. `https://www.publishharbor.com`. Used for absolute frontend URLs the backend emits (Meta data-deletion status page) and included in CORS allowed origins. No hardcoded fallback — the Meta data-deletion callback logs an error and returns 500 when unset. In dev defaults to `http://localhost:5173` via `appsettings.Development.json`. |
+
 ## Configuration (appsettings, not env vars)
 
 | Key | Default | Location |

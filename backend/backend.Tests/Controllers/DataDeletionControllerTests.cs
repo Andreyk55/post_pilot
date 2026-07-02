@@ -24,9 +24,9 @@ public class DataDeletionControllerTests
     private readonly Mock<IDataDeletionRequestService> _requests = new();
     private readonly Mock<IMetaDataDeletionService> _meta = new();
 
-    private DataDeletionController NewController() => new(
+    private DataDeletionController NewController(string frontendBaseUrl = FrontendUrl) => new(
         _verifier.Object, _requests.Object, _meta.Object,
-        new AuthOptions { FrontendUrl = FrontendUrl },
+        new FrontendOptions { BaseUrl = frontendBaseUrl },
         NullLogger<DataDeletionController>.Instance);
 
     private void SetupCreate(string code) =>
@@ -65,6 +65,20 @@ public class DataDeletionControllerTests
         Assert.IsType<OkObjectResult>(result);
         _requests.Verify(r => r.MarkAlreadyDeletedAsync("CODE999", It.IsAny<CancellationToken>()), Times.Once);
         _requests.Verify(r => r.MarkCompletedAsync(It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Missing_frontend_base_url_returns_500_and_deletes_nothing(string baseUrl)
+    {
+        var result = await NewController(baseUrl).MetaDataDeletion("signed", CancellationToken.None);
+
+        var error = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(500, error.StatusCode);
+        _verifier.Verify(v => v.Verify(It.IsAny<string>()), Times.Never);
+        _requests.Verify(r => r.CreateProcessingAsync(It.IsAny<ProviderType>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _meta.Verify(m => m.PurgeByProviderAccountIdAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
