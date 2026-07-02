@@ -70,6 +70,14 @@ public static class MediaValidationErrorCodes
     public const string NoRulesForCombination = "NO_RULES_FOR_COMBINATION";
 
     /// <summary>
+    /// A referenced media key is not a storage key owned by the current workspace: it is an
+    /// external URL, an unknown key, or a key belonging to another workspace. Emitted only on
+    /// the enforcement path (post create/update) when workspace ownership is required, so a
+    /// crafted request cannot attach foreign or arbitrary media.
+    /// </summary>
+    public const string MediaNotFound = "MEDIA_NOT_FOUND";
+
+    /// <summary>
     /// A PNG image was selected for Instagram but no Instagram-safe JPEG derivative
     /// exists for it (generation failed or never ran). Instagram needs JPEG, so the
     /// post is blocked until a JPEG-backed image is provided. (Phase 3)

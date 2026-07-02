@@ -30,11 +30,19 @@ public interface IMediaValidationGate
     /// <param name="workspaceId">Workspace that owns the media (storage-key ownership is enforced here).</param>
     /// <param name="items">Media items to validate (storage key + media type + 0-based order).</param>
     /// <param name="targets">Targets to validate against (platform + placement).</param>
+    /// <param name="requireOwnedStorageKey">
+    /// When true (post create/update enforcement), every item MUST be a storage key owned by
+    /// <paramref name="workspaceId"/>: external URLs, unknown keys, and foreign-workspace keys
+    /// produce a blocking <see cref="MediaValidationErrorCodes.MediaNotFound"/> error instead of
+    /// being skipped. When false (publisher defense-in-depth), non-owned/legacy keys are skipped
+    /// as before so already-scheduled legacy posts are not stranded.
+    /// </param>
     Task<MediaGateResult> ValidateAsync(
         Guid workspaceId,
         IReadOnlyList<MediaGateItem> items,
         IReadOnlyList<MediaGateTarget> targets,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        bool requireOwnedStorageKey = false);
 
     /// <summary>
     /// Single-item, single-target convenience guard for publishers. Returns the first

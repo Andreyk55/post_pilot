@@ -423,4 +423,68 @@ public class PostUpdateMediaGateTests : IDisposable
         Assert.Equal("Instagram", (string?)entry["platform"]);
         Assert.Equal("Feed", (string?)entry["placement"]);
     }
+
+    // ── M1: editing to external / unknown / foreign media is rejected ────────────
+
+    /// <summary>Inserts a Media row owned by a DIFFERENT workspace so the gate rejects it.</summary>
+    private void SeedForeignMedia(string storageKey)
+    {
+        _db.Media.Add(new Media
+        {
+            Id = Guid.NewGuid(),
+            WorkspaceId = Guid.Parse("00000000-0000-0000-0000-0000000000ff"),
+            StorageProvider = "local-disk", Bucket = "",
+            StorageKey = storageKey, OriginalFileName = "foreign.jpg", ContentType = "image/jpeg",
+            SizeBytes = 1024, Status = MediaUploadStatus.Uploaded,
+            CreatedAt = DateTime.UtcNow, UploadedAt = DateTime.UtcNow,
+        });
+        _db.SaveChanges();
+    }
+
+    [Theory]
+    [InlineData("https://example.com/x.jpg")]      // external URL
+    [InlineData("media/never-uploaded.jpg")]        // unknown key
+    public async Task UpdatePost_ToExternalOrUnknownMedia_IsRejected(string newMedia)
+    {
+        var igId = SeedInstagramAccount();
+        var startKey = SeedMedia("u-own-start", "image/jpeg", "jpeg", 1080, 1080);
+        var post = SeedScheduledPost(Platform.Instagram, startKey, targetPageId: null, targetIgId: igId);
+
+        var req = new UpdatePostRequest(
+            Content: "edited", MediaUrl: newMedia, MediaType: MediaType.Image, Platform: Platform.Instagram,
+            ScheduledAt: post.ScheduledAt, TargetInstagramAccountId: igId);
+
+        var result = await _controller.UpdatePost(post.Id, req);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        var pd = Assert.IsType<ProblemDetails>(bad.Value);
+        Assert.Contains(ExtractMediaErrors(pd)!, e => (string?)e["code"] == DTOs.MediaValidationErrorCodes.MediaNotFound);
+
+        // The edit must NOT persist: the post still points at its original media.
+        var fresh = await _db.Posts.FirstAsync(p => p.Id == post.Id);
+        Assert.Equal(startKey, fresh.MediaUrl);
+    }
+
+    [Fact]
+    public async Task UpdatePost_ToForeignWorkspaceMedia_IsRejected()
+    {
+        var igId = SeedInstagramAccount();
+        var startKey = SeedMedia("u-own-start2", "image/jpeg", "jpeg", 1080, 1080);
+        SeedForeignMedia("media/owned-elsewhere.jpg");
+        var post = SeedScheduledPost(Platform.Instagram, startKey, targetPageId: null, targetIgId: igId);
+
+        var req = new UpdatePostRequest(
+            Content: "edited", MediaUrl: "media/owned-elsewhere.jpg", MediaType: MediaType.Image,
+            Platform: Platform.Instagram,
+            ScheduledAt: post.ScheduledAt, TargetInstagramAccountId: igId);
+
+        var result = await _controller.UpdatePost(post.Id, req);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        var pd = Assert.IsType<ProblemDetails>(bad.Value);
+        Assert.Contains(ExtractMediaErrors(pd)!, e => (string?)e["code"] == DTOs.MediaValidationErrorCodes.MediaNotFound);
+
+        var fresh = await _db.Posts.FirstAsync(p => p.Id == post.Id);
+        Assert.Equal(startKey, fresh.MediaUrl);
+    }
 }

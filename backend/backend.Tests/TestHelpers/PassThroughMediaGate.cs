@@ -15,7 +15,8 @@ public sealed class PassThroughMediaGate : IMediaValidationGate
         Guid workspaceId,
         IReadOnlyList<MediaGateItem> items,
         IReadOnlyList<MediaGateTarget> targets,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool requireOwnedStorageKey = false)
         => Task.FromResult(MediaGateResult.Valid);
 
     public Task<string?> ValidateSingleAsync(

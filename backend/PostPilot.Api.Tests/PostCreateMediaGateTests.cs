@@ -379,4 +379,119 @@ public class PostCreateMediaGateTests : IDisposable
 
         Assert.IsType<CreatedAtActionResult>(result.Result);
     }
+
+    // ── M1: media ownership enforcement (reject external / unknown / foreign keys) ──
+
+    /// <summary>Inserts a Media row owned by a DIFFERENT workspace (no local bytes needed —
+    /// the gate rejects on the workspace-scoped lookup before ever resolving bytes).</summary>
+    private void SeedForeignMedia(string storageKey)
+    {
+        _db.Media.Add(new Media
+        {
+            Id = Guid.NewGuid(),
+            WorkspaceId = Guid.Parse("00000000-0000-0000-0000-0000000000ff"),
+            StorageProvider = "local-disk", Bucket = "",
+            StorageKey = storageKey, OriginalFileName = "foreign.jpg", ContentType = "image/jpeg",
+            SizeBytes = 1024, Status = MediaUploadStatus.Uploaded,
+            CreatedAt = DateTime.UtcNow, UploadedAt = DateTime.UtcNow,
+        });
+        _db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task CreatePost_ExternalMediaUrl_IsRejected()
+    {
+        var igId = SeedInstagramAccount();
+
+        var req = new CreatePostRequest(
+            Content: "hi", MediaUrl: "https://example.com/x.jpg", MediaType: MediaType.Image,
+            Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId);
+
+        var result = await _controller.CreatePost(req);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var pd = Assert.IsType<ProblemDetails>(bad.Value);
+        var errors = ExtractMediaErrors(pd);
+        Assert.Contains(errors!, e => (string?)e["code"] == DTOs.MediaValidationErrorCodes.MediaNotFound);
+        Assert.Empty(await _db.Posts.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CreatePost_UnknownStorageKey_IsRejected()
+    {
+        var igId = SeedInstagramAccount();
+
+        var req = new CreatePostRequest(
+            Content: "hi", MediaUrl: "media/never-uploaded.jpg", MediaType: MediaType.Image,
+            Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId);
+
+        var result = await _controller.CreatePost(req);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var pd = Assert.IsType<ProblemDetails>(bad.Value);
+        Assert.Contains(ExtractMediaErrors(pd)!, e => (string?)e["code"] == DTOs.MediaValidationErrorCodes.MediaNotFound);
+        Assert.Empty(await _db.Posts.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CreatePost_ForeignWorkspaceStorageKey_IsRejected()
+    {
+        var igId = SeedInstagramAccount();
+        SeedForeignMedia("media/owned-elsewhere.jpg");
+
+        var req = new CreatePostRequest(
+            Content: "hi", MediaUrl: "media/owned-elsewhere.jpg", MediaType: MediaType.Image,
+            Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId);
+
+        var result = await _controller.CreatePost(req);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var pd = Assert.IsType<ProblemDetails>(bad.Value);
+        Assert.Contains(ExtractMediaErrors(pd)!, e => (string?)e["code"] == DTOs.MediaValidationErrorCodes.MediaNotFound);
+        Assert.Empty(await _db.Posts.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CreatePost_Carousel_WithForeignItem_IsRejected()
+    {
+        var igId = SeedInstagramAccount();
+        var k0 = SeedMedia("c-own-0", "image/jpeg", "jpeg", 1080, 1080);
+        SeedForeignMedia("c-foreign-1");
+        var k2 = SeedMedia("c-own-2", "image/jpeg", "jpeg", 1080, 1080);
+
+        var req = new CreatePostRequest(
+            Content: "hi", MediaUrl: null, MediaType: null, Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId,
+            MediaItems: new List<CreatePostMediaItem>
+            {
+                new(k0, MediaType.Image, 0),
+                new("c-foreign-1", MediaType.Image, 1),
+                new(k2, MediaType.Image, 2),
+            });
+
+        var result = await _controller.CreatePost(req);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var pd = Assert.IsType<ProblemDetails>(bad.Value);
+        Assert.Contains(ExtractMediaErrors(pd)!, e => (string?)e["code"] == DTOs.MediaValidationErrorCodes.MediaNotFound);
+        Assert.Empty(await _db.Posts.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CreatePost_OwnedStorageKey_IsAccepted()
+    {
+        var igId = SeedInstagramAccount();
+        var key = SeedMedia("ig-owned", "image/jpeg", "jpeg", 1080, 1080);
+
+        var req = new CreatePostRequest(
+            Content: "hi", MediaUrl: key, MediaType: MediaType.Image, Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId);
+
+        var result = await _controller.CreatePost(req);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
 }

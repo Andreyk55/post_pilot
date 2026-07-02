@@ -229,6 +229,10 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<IMediaUploadQuotaService, MediaUploadQuotaService>();
         services.AddScoped<IMediaUploadService, MediaUploadService>();
+
+        // Central storage-key ownership check (workspace-scoped). Used by the AI media
+        // endpoint to reject external URLs and cross-workspace keys before any bytes are read.
+        services.AddScoped<IMediaOwnershipService, MediaOwnershipService>();
     }
 
     private static void ConfigureMediaValidationServices(IServiceCollection services)

@@ -34,17 +34,27 @@ public class MediaValidationGate : IMediaValidationGate
         Guid workspaceId,
         IReadOnlyList<MediaGateItem> items,
         IReadOnlyList<MediaGateTarget> targets,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool requireOwnedStorageKey = false)
     {
         var errors = new List<MediaGateError>();
 
         foreach (var item in items)
         {
             // We can only validate media we actually own as a storage key. Legacy external
-            // URLs (http...) and non-storage values are passed through; we have no bytes to
-            // decode and must not block historical content.
+            // URLs (http...) and non-storage values have no bytes to decode.
             if (!_mediaService.IsStorageKey(item.StorageKeyOrUrl))
             {
+                if (requireOwnedStorageKey)
+                {
+                    // Enforcement path (post create/update): an external URL or non-storage
+                    // value is never acceptable — a crafted request must not attach arbitrary
+                    // media. Block on every target so the caller sees a consistent error.
+                    AddNotOwnedErrors(errors, item, targets);
+                    continue;
+                }
+
+                // Defense-in-depth path (publisher): pass historical external content through.
                 _logger.LogInformation(
                     "Media gate: skipping non-storage-key media at order {Order} ({Key})",
                     item.Order, RedactKey(item.StorageKeyOrUrl));
@@ -54,9 +64,19 @@ public class MediaValidationGate : IMediaValidationGate
             var media = await LoadMediaAsync(workspaceId, item.StorageKeyOrUrl, cancellationToken);
             if (media == null)
             {
-                // Key not owned by this workspace (or never tracked). Don't block on it here;
-                // post creation already enforces workspace ownership of targets, and blocking
-                // untracked legacy keys would break old posts. Skip with a warning log.
+                if (requireOwnedStorageKey)
+                {
+                    // Enforcement path: the key is unknown or owned by another workspace.
+                    // Reject rather than skip so foreign/unknown keys cannot ride into a post.
+                    _logger.LogWarning(
+                        "Media gate: no Media row for key {Key} in workspace {WorkspaceId}; rejecting (ownership required)",
+                        RedactKey(item.StorageKeyOrUrl), workspaceId);
+                    AddNotOwnedErrors(errors, item, targets);
+                    continue;
+                }
+
+                // Defense-in-depth path: key not owned by this workspace (or never tracked).
+                // Don't block untracked legacy keys here — that would strand old posts.
                 _logger.LogWarning(
                     "Media gate: no Media row for key {Key} in workspace {WorkspaceId}; skipping validation",
                     RedactKey(item.StorageKeyOrUrl), workspaceId);
@@ -114,6 +134,28 @@ public class MediaValidationGate : IMediaValidationGate
             return Publishable();
 
         return await ValidateResolvedAsync(media, item.MediaType, target, cancellationToken);
+    }
+
+    /// <summary>
+    /// Emits a blocking "media not owned by this workspace" error for the given item against
+    /// every target (external URL, unknown key, or foreign-workspace key). Used only on the
+    /// enforcement path; the redacted key is safe to surface, the raw key is never logged/echoed.
+    /// </summary>
+    private static void AddNotOwnedErrors(
+        List<MediaGateError> errors, MediaGateItem item, IReadOnlyList<MediaGateTarget> targets)
+    {
+        var redacted = RedactKey(item.StorageKeyOrUrl);
+        foreach (var target in targets)
+        {
+            errors.Add(new MediaGateError(
+                Order: item.Order,
+                StorageKeyRedacted: redacted,
+                Platform: target.Platform,
+                Placement: target.Placement,
+                Code: MediaValidationErrorCodes.MediaNotFound,
+                Field: "media",
+                Message: "The selected media could not be found in this workspace. Re-upload the file and try again."));
+        }
     }
 
     private Task<Entities.Media?> LoadMediaAsync(Guid workspaceId, string storageKey, CancellationToken cancellationToken) =>

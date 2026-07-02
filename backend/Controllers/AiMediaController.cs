@@ -6,6 +6,7 @@ using PostPilot.Api.DTOs;
 using PostPilot.Api.Entities;
 using PostPilot.Api.Services.Ai;
 using PostPilot.Api.Services.Auth;
+using PostPilot.Api.Services.Media;
 
 namespace PostPilot.Api.Controllers;
 
@@ -17,6 +18,7 @@ public class AiMediaController : ControllerBase
     private readonly IMediaAiService _mediaAiService;
     private readonly IAiRateLimiter _rateLimiter;
     private readonly AppDbContext _db;
+    private readonly IMediaOwnershipService _mediaOwnership;
     private readonly ICurrentUserProvider _currentUser;
     private readonly ICurrentWorkspaceProvider _currentWorkspace;
     private readonly ILogger<AiMediaController> _logger;
@@ -25,6 +27,7 @@ public class AiMediaController : ControllerBase
         IMediaAiService mediaAiService,
         IAiRateLimiter rateLimiter,
         AppDbContext db,
+        IMediaOwnershipService mediaOwnership,
         ICurrentUserProvider currentUser,
         ICurrentWorkspaceProvider currentWorkspace,
         ILogger<AiMediaController> logger)
@@ -32,6 +35,7 @@ public class AiMediaController : ControllerBase
         _mediaAiService = mediaAiService;
         _rateLimiter = rateLimiter;
         _db = db;
+        _mediaOwnership = mediaOwnership;
         _currentUser = currentUser;
         _currentWorkspace = currentWorkspace;
         _logger = logger;
@@ -80,6 +84,21 @@ public class AiMediaController : ControllerBase
         }
 
         var mediaItem = mediaSupport.MediaItem!;
+
+        // OWNERSHIP + SSRF GATE. AssetUrl is client-supplied. It MUST be a server-issued
+        // storage key owned by the current workspace — never an external URL. This blocks
+        // (a) SSRF: fetching arbitrary http/https/file/ftp/localhost/private-network targets
+        // server-side, and (b) cross-workspace reads: resolving another workspace's storage
+        // key. Reject before rate-limiting or resolving any bytes. The raw AssetUrl is never
+        // echoed back so a caller can't probe which keys exist.
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(cancellationToken);
+        if (!await _mediaOwnership.IsOwnedStorageKeyAsync(mediaItem.AssetUrl, workspaceId, cancellationToken))
+        {
+            _logger.LogWarning(
+                "AI media request rejected: asset is not a storage key owned by workspace {WorkspaceId}.",
+                workspaceId);
+            return NotFound(new { error = "media_not_found" });
+        }
 
         // Check rate limit (thumbnail suggest is free, doesn't use AI)
         if (request.Action != AiMediaAction.ThumbnailSuggest)

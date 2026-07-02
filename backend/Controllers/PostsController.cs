@@ -1275,7 +1275,10 @@ public class PostsController : ControllerBase
 
         var targets = new List<MediaGateTarget> { target };
 
-        var result = await _mediaGate.ValidateAsync(workspaceId, items, targets);
+        // requireOwnedStorageKey: reject external URLs, unknown keys, and foreign-workspace
+        // keys server-side. Post creation/update is the authoritative enforcement point — the
+        // media a post references must be a storage key this workspace owns.
+        var result = await _mediaGate.ValidateAsync(workspaceId, items, targets, requireOwnedStorageKey: true);
         if (result.IsValid)
             return null;
 
