@@ -34,7 +34,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
               <path d="M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-          <span className="logo-text">Post Pilot</span>
+          <span className="logo-text">Publish Harbor</span>
         </button>
 
         {user && <WorkspaceSwitcher />}

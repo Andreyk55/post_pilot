@@ -23,7 +23,7 @@ export function describeDeletionStatus(status: string): DeletionStatusView {
     case 'Completed':
       return {
         title: 'Deletion completed',
-        message: 'Your Meta-related data has been deleted from PostPilot.',
+        message: 'Your Meta-related data has been deleted from Publish Harbor.',
         tone: 'success',
       }
     case 'AlreadyDeleted':

@@ -229,7 +229,7 @@ export function ConnectedAccountsPage({ onNavigate }: ConnectedAccountsPageProps
             {/* Clarify what publishing access this identity-level connection grants,
                 and point to the detailed asset list rather than duplicating it here. */}
             <p className="connection-access-hint">
-              This connection gives Post Pilot access to the Facebook Pages you
+              This connection gives Publish Harbor access to the Facebook Pages you
               allowed and any linked Instagram professional accounts.
             </p>
             {onNavigate && (

@@ -27,7 +27,7 @@ export function LoginScreen({ error }: LoginScreenProps) {
               <path d="M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
-          <h1 className="login-brand__name">Post Pilot</h1>
+          <h1 className="login-brand__name">Publish Harbor</h1>
         </div>
 
         <p className="login-tagline">Sign in to continue.</p>

@@ -59,9 +59,9 @@ export function SettingsPage() {
       <section className="settings-section settings-danger">
         <h2>Danger zone</h2>
         <div className="settings-danger-card">
-          <h3>Delete PostPilot account</h3>
+          <h3>Delete Publish Harbor account</h3>
           <p>
-            This permanently deletes your PostPilot account, your user/account records,
+            This permanently deletes your Publish Harbor account, your user/account records,
             owned workspaces, provider connections, scheduled posts, drafts, uploaded
             media, bucket files, and related app data.
           </p>

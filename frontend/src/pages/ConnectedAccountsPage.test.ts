@@ -12,13 +12,13 @@ const disconnectBtnIndex = connectedAccountsSource.indexOf('className="disconnec
 describe('ConnectedAccountsPage — Meta publishing access clarity', () => {
   it('shows the access helper copy when Meta is connected', () => {
     const hintIndex = connectedAccountsSource.indexOf(
-      'This connection gives Post Pilot access to the Facebook',
+      'This connection gives Publish Harbor access to the Facebook',
     )
     expect(hintIndex).toBeGreaterThan(connectedStateStart)
     expect(hintIndex).toBeLessThan(disconnectBtnIndex)
     // Full copy intact (whitespace-insensitive across JSX line wrapping).
     expect(connectedAccountsSource).toMatch(
-      /This connection gives Post Pilot access to the Facebook\s+Pages you\s+allowed and any linked Instagram professional accounts\./,
+      /This connection gives Publish Harbor access to the Facebook\s+Pages you\s+allowed and any linked Instagram professional accounts\./,
     )
   })
 

@@ -17,7 +17,7 @@ describe('Sidebar — Contact Us entry', () => {
 describe('ContactPage — form', () => {
   it('renders the Contact Us title and the help description', () => {
     expect(contactPageSource).toMatch(/<h1>Contact Us<\/h1>/)
-    expect(contactPageSource).toMatch(/Need help with PostPilot\? Send us a message/)
+    expect(contactPageSource).toMatch(/Need help with Publish Harbor\? Send us a message/)
   })
 
   it('renders subject, message, and optional category fields', () => {
@@ -80,7 +80,7 @@ describe('Public /data-deletion page — informational only', () => {
   })
 
   it('directs logged-in users to in-app Contact Us', () => {
-    expect(dataDeletionSource).toMatch(/sign in to PostPilot and use/)
+    expect(dataDeletionSource).toMatch(/sign in to Publish Harbor and use/)
     expect(dataDeletionSource).toMatch(/Contact Us/)
   })
 })

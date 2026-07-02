@@ -70,7 +70,7 @@ export function ContactPage() {
     <div className="contact-page">
       <h1>Contact Us</h1>
       <p className="contact-lead">
-        Need help with PostPilot? Send us a message and we’ll review it.
+        Need help with Publish Harbor? Send us a message and we’ll review it.
       </p>
 
       <form className="contact-form" onSubmit={handleSubmit}>
