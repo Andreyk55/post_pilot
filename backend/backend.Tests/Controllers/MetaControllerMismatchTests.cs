@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -38,7 +39,7 @@ public class MetaControllerMismatchTests
     public async Task CompleteOAuth_returns_409_on_account_mismatch()
     {
         var meta = new Mock<IMetaOAuthService>();
-        meta.Setup(m => m.CompleteOAuthAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>()))
+        meta.Setup(m => m.CompleteOAuthAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<Guid>()))
             .ThrowsAsync(new ProviderAccountMismatchException(ProviderType.Meta, "alpha", "beta"));
 
         var result = await NewController(meta)
@@ -53,7 +54,7 @@ public class MetaControllerMismatchTests
     {
         var meta = new Mock<IMetaOAuthService>();
         meta.Setup(m => m.SaveConnectionAsync(
-                It.IsAny<string>(), It.IsAny<List<string>>(), It.IsAny<List<string>>(), It.IsAny<Guid>()))
+                It.IsAny<string>(), It.IsAny<List<string>>(), It.IsAny<List<string>>(), It.IsAny<Guid>(), It.IsAny<Guid>()))
             .ThrowsAsync(new ProviderAccountMismatchException(ProviderType.Meta, "alpha", "beta"));
 
         var result = await NewController(meta)
@@ -69,7 +70,7 @@ public class MetaControllerMismatchTests
         // The callback path must reject permanent-binding violations as 409 (not 400/500)
         // so the wizard does not open page selection.
         var meta = new Mock<IMetaOAuthService>();
-        meta.Setup(m => m.HandleCallbackAsync(It.IsAny<string>(), It.IsAny<string>()))
+        meta.Setup(m => m.HandleCallbackAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>()))
             .ThrowsAsync(new ProviderAccountMismatchException(ProviderType.Meta, "alpha", "beta"));
 
         var result = await NewController(meta)
@@ -83,7 +84,7 @@ public class MetaControllerMismatchTests
     public async Task HandleCallback_returns_409_when_account_owned_by_another_workspace()
     {
         var meta = new Mock<IMetaOAuthService>();
-        meta.Setup(m => m.HandleCallbackAsync(It.IsAny<string>(), It.IsAny<string>()))
+        meta.Setup(m => m.HandleCallbackAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>()))
             .ThrowsAsync(new ProviderOwnedByAnotherWorkspaceException(ProviderType.Meta, "alpha"));
 
         var result = await NewController(meta)
@@ -95,5 +96,35 @@ public class MetaControllerMismatchTests
         var body = conflict.Value!;
         var errorProp = body.GetType().GetProperty("error")!.GetValue(body) as string;
         Assert.Equal(ProviderOwnedByAnotherWorkspaceException.UserMessage, errorProp);
+    }
+
+    [Fact]
+    public async Task HandleCallback_returns_403_on_state_workspace_mismatch()
+    {
+        // M3: a state minted for another workspace surfaces as 403 (not 400/409/500).
+        var meta = new Mock<IMetaOAuthService>();
+        meta.Setup(m => m.HandleCallbackAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>()))
+            .ThrowsAsync(new OAuthStateAccessDeniedException(Guid.NewGuid(), Guid.NewGuid()));
+
+        var result = await NewController(meta)
+            .HandleCallback(new MetaOAuthCallbackRequest("code", "state"));
+
+        var status = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status403Forbidden, status.StatusCode);
+    }
+
+    [Fact]
+    public async Task SaveConnection_returns_403_on_state_workspace_mismatch()
+    {
+        var meta = new Mock<IMetaOAuthService>();
+        meta.Setup(m => m.SaveConnectionAsync(
+                It.IsAny<string>(), It.IsAny<List<string>>(), It.IsAny<List<string>>(), It.IsAny<Guid>(), It.IsAny<Guid>()))
+            .ThrowsAsync(new OAuthStateAccessDeniedException(Guid.NewGuid(), Guid.NewGuid()));
+
+        var result = await NewController(meta)
+            .SaveConnection(new MetaSaveConnectionRequest("temp", new List<string> { "p" }, new List<string>()));
+
+        var status = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status403Forbidden, status.StatusCode);
     }
 }

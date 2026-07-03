@@ -157,9 +157,9 @@ public class MetaOAuthService : IMetaOAuthService
         return new MetaOAuthStartResponse(authUrl, state);
     }
 
-    public async Task<MetaOAuthCallbackResponse> HandleCallbackAsync(string code, string state)
+    public async Task<MetaOAuthCallbackResponse> HandleCallbackAsync(string code, string state, Guid currentWorkspaceId)
     {
-        // Validate state
+        // Validate state (fail closed on missing/expired).
         var oauthState = await _context.MetaOAuthStates
             .FirstOrDefaultAsync(s => s.State == state && s.ExpiresAt > DateTime.UtcNow);
 
@@ -167,6 +167,10 @@ public class MetaOAuthService : IMetaOAuthService
         {
             throw new InvalidOperationException("Invalid or expired OAuth state");
         }
+
+        // SESSION BINDING: the state must belong to the caller's current (membership-checked)
+        // workspace before we exchange the code or touch any provider data.
+        EnsureStateBelongsToWorkspace(oauthState, currentWorkspaceId);
 
         // Exchange code for access token
         var tokenUrl = $"{_graphApiBaseUrl}/oauth/access_token?" +
@@ -224,11 +228,11 @@ public class MetaOAuthService : IMetaOAuthService
         );
     }
 
-    public async Task<MetaOAuthCompleteResponse> CompleteOAuthAsync(string code, string state, Guid userId)
+    public async Task<MetaOAuthCompleteResponse> CompleteOAuthAsync(string code, string state, Guid userId, Guid currentWorkspaceId)
     {
         _logger.LogInformation("CompleteOAuth called with state: {State}", state);
 
-        // Validate state
+        // Validate state (fail closed on missing/expired).
         var oauthState = await _context.MetaOAuthStates
             .FirstOrDefaultAsync(s => s.State == state && s.ExpiresAt > DateTime.UtcNow);
 
@@ -237,6 +241,10 @@ public class MetaOAuthService : IMetaOAuthService
             _logger.LogWarning("State validation failed. State not found or expired: {State}", state);
             throw new InvalidOperationException("Invalid or expired OAuth state");
         }
+
+        // SESSION BINDING: reject a state minted for a different workspace than the caller's
+        // current (membership-checked) workspace before exchanging the code.
+        EnsureStateBelongsToWorkspace(oauthState, currentWorkspaceId);
 
         _logger.LogInformation("State validated successfully. Exchanging code for token...");
 
@@ -582,10 +590,14 @@ public class MetaOAuthService : IMetaOAuthService
         if (Guid.TryParse(tempToken, out var stateId))
         {
             var oauthState = await _context.MetaOAuthStates.FindAsync(stateId);
-            if (oauthState?.TempAccessToken == null)
+            // Fail closed on missing/consumed/expired temp token.
+            if (oauthState?.TempAccessToken == null || oauthState.ExpiresAt <= DateTime.UtcNow)
             {
                 throw new InvalidOperationException("Invalid or expired temp token");
             }
+            // SESSION BINDING: the state must belong to the caller's current (membership-checked)
+            // workspace — never trust the state's own WorkspaceId for a cross-workspace caller.
+            EnsureStateBelongsToWorkspace(oauthState, workspaceId);
             accessToken = oauthState.TempAccessToken;
         }
         else
@@ -667,7 +679,7 @@ public class MetaOAuthService : IMetaOAuthService
         return new MetaDiscoverInstagramResponse(instagramAccounts);
     }
 
-    public async Task<MetaSaveConnectionResponse> SaveConnectionAsync(string tempToken, List<string> selectedPageIds, List<string> selectedInstagramIds, Guid userId)
+    public async Task<MetaSaveConnectionResponse> SaveConnectionAsync(string tempToken, List<string> selectedPageIds, List<string> selectedInstagramIds, Guid userId, Guid currentWorkspaceId)
     {
         if (!Guid.TryParse(tempToken, out var stateId))
         {
@@ -675,10 +687,16 @@ public class MetaOAuthService : IMetaOAuthService
         }
 
         var oauthState = await _context.MetaOAuthStates.FindAsync(stateId);
-        if (oauthState?.TempAccessToken == null || oauthState.TokenExpiresAt == null)
+        // Fail closed on missing/consumed/expired temp token.
+        if (oauthState?.TempAccessToken == null || oauthState.TokenExpiresAt == null
+            || oauthState.ExpiresAt <= DateTime.UtcNow)
         {
             throw new InvalidOperationException("Invalid or expired temp token");
         }
+
+        // SESSION BINDING: the state must belong to the caller's current (membership-checked)
+        // workspace. This also guarantees the connection lands in that same workspace below.
+        EnsureStateBelongsToWorkspace(oauthState, currentWorkspaceId);
 
         var workspaceId = oauthState.WorkspaceId;
         var now = DateTime.UtcNow;
@@ -1490,6 +1508,27 @@ public class MetaOAuthService : IMetaOAuthService
         using var rng = RandomNumberGenerator.Create();
         rng.GetBytes(bytes);
         return Convert.ToBase64String(bytes).Replace("+", "-").Replace("/", "_").TrimEnd('=');
+    }
+
+    /// <summary>
+    /// Session-binding guard for every state/temp-token consumer. <paramref name="currentWorkspaceId"/>
+    /// is resolved by the controller via <see cref="Auth.ICurrentWorkspaceProvider"/>, which re-checks
+    /// the caller's membership of their currently-selected workspace. Requiring the state's workspace
+    /// to equal it therefore proves BOTH that the caller is a member of the state's workspace AND that
+    /// it is their current selection — so a state minted for workspace B can never be consumed from a
+    /// workspace-A context (even if B's high-entropy state value leaked). Throws
+    /// <see cref="OAuthStateAccessDeniedException"/> (→ 403) on mismatch. Does not weaken the separate
+    /// permanent provider-ownership guards, which still run afterwards.
+    /// </summary>
+    private void EnsureStateBelongsToWorkspace(MetaOAuthState oauthState, Guid currentWorkspaceId)
+    {
+        if (oauthState.WorkspaceId != currentWorkspaceId)
+        {
+            _logger.LogWarning(
+                "OAuth state workspace binding rejected: state belongs to {StateWorkspaceId} but caller's current workspace is {CurrentWorkspaceId}.",
+                oauthState.WorkspaceId, currentWorkspaceId);
+            throw new OAuthStateAccessDeniedException(oauthState.WorkspaceId, currentWorkspaceId);
+        }
     }
 
     private static MetaConnectionDto MapToDto(MetaConnection connection)

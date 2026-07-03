@@ -12,24 +12,31 @@ public interface IMetaOAuthService
     Task<MetaOAuthStartResponse> StartOAuthAsync(Guid workspaceId);
 
     /// <summary>
-    /// Exchange authorization code for access token and fetch available pages
+    /// Exchange authorization code for access token and fetch available pages.
+    /// <paramref name="currentWorkspaceId"/> is the caller's server-resolved (membership-checked)
+    /// current workspace; the state MUST have been minted for that same workspace or the flow is
+    /// rejected (see <see cref="OAuthStateAccessDeniedException"/>).
     /// </summary>
-    Task<MetaOAuthCallbackResponse> HandleCallbackAsync(string code, string state);
+    Task<MetaOAuthCallbackResponse> HandleCallbackAsync(string code, string state, Guid currentWorkspaceId);
 
     /// <summary>
-    /// Complete OAuth flow and save connection immediately (identity-level only, no page selection)
+    /// Complete OAuth flow and save connection immediately (identity-level only, no page selection).
+    /// <paramref name="currentWorkspaceId"/> must match the state's workspace (membership-checked).
     /// </summary>
-    Task<MetaOAuthCompleteResponse> CompleteOAuthAsync(string code, string state, Guid userId);
+    Task<MetaOAuthCompleteResponse> CompleteOAuthAsync(string code, string state, Guid userId, Guid currentWorkspaceId);
 
     /// <summary>
-    /// Discover Instagram Business accounts linked to selected pages
+    /// Discover Instagram Business accounts linked to selected pages. When <paramref name="tempToken"/>
+    /// is an OAuth state id, that state MUST belong to <paramref name="workspaceId"/> (the caller's
+    /// current workspace); otherwise the flow is rejected.
     /// </summary>
     Task<MetaDiscoverInstagramResponse> DiscoverInstagramAccountsAsync(string tempToken, List<string> pageIds, Guid workspaceId);
 
     /// <summary>
-    /// Save the final connection with selected pages and Instagram accounts
+    /// Save the final connection with selected pages and Instagram accounts.
+    /// <paramref name="currentWorkspaceId"/> must match the temp-token state's workspace (membership-checked).
     /// </summary>
-    Task<MetaSaveConnectionResponse> SaveConnectionAsync(string tempToken, List<string> selectedPageIds, List<string> selectedInstagramIds, Guid userId);
+    Task<MetaSaveConnectionResponse> SaveConnectionAsync(string tempToken, List<string> selectedPageIds, List<string> selectedInstagramIds, Guid userId, Guid currentWorkspaceId);
 
     /// <summary>
     /// Get current Meta connection for the workspace

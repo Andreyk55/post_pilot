@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using PostPilot.Api.Data;
+using PostPilot.Api.DTOs;
 using PostPilot.Api.Entities;
 using PostPilot.Api.Enums;
 using PostPilot.Api.Services;
@@ -112,6 +113,18 @@ public class CrossUserProviderOwnershipTests : IDisposable
         return state;
     }
 
+    /// <summary>
+    /// Runs the callback bound to the state's OWN workspace — i.e. the legitimate case where the
+    /// caller's current (membership-checked) workspace equals the state's workspace. These tests
+    /// exercise permanent provider-ownership rules, not the M3 workspace-mismatch guard (which is
+    /// covered by MetaOAuthStateBindingTests).
+    /// </summary>
+    private async Task<MetaOAuthCallbackResponse> Callback(MetaOAuthService service, string state)
+    {
+        var ws = (await _db.MetaOAuthStates.AsNoTracking().SingleAsync(s => s.State == state)).WorkspaceId;
+        return await service.HandleCallbackAsync("code", state, ws);
+    }
+
     // ── Scenario A: different users, same account, first ACTIVE → 409 ────────────
 
     [Fact]
@@ -125,7 +138,7 @@ public class CrossUserProviderOwnershipTests : IDisposable
         var state = SeedOAuthState(Workspace2Id);
 
         await Assert.ThrowsAsync<ProviderOwnedByAnotherWorkspaceException>(
-            () => service.HandleCallbackAsync("code", state));
+            () => Callback(service, state));
 
         // Fail-fast: never fetched pages, never persisted a connection for workspace 2.
         Assert.False(handler.PagesFetched);
@@ -147,7 +160,7 @@ public class CrossUserProviderOwnershipTests : IDisposable
         var state = SeedOAuthState(Workspace2Id);
 
         var ex = await Assert.ThrowsAsync<ProviderOwnedByAnotherWorkspaceException>(
-            () => service.HandleCallbackAsync("code", state));
+            () => Callback(service, state));
 
         // Must NOT suggest disconnecting elsewhere will free the account.
         Assert.DoesNotContain("Disconnect", ex.Message, StringComparison.OrdinalIgnoreCase);
@@ -168,7 +181,7 @@ public class CrossUserProviderOwnershipTests : IDisposable
         var (service, handler) = NewService(MetaAccountA);
         var state = SeedOAuthState(Workspace1Id);
 
-        var response = await service.HandleCallbackAsync("code", state);
+        var response = await Callback(service, state);
 
         Assert.NotNull(response);
         Assert.True(handler.PagesFetched);
@@ -185,7 +198,7 @@ public class CrossUserProviderOwnershipTests : IDisposable
         var (service, handler) = NewService(MetaAccountB);
         var state = SeedOAuthState(Workspace2Id);
 
-        var response = await service.HandleCallbackAsync("code", state);
+        var response = await Callback(service, state);
 
         Assert.NotNull(response);
         Assert.True(handler.PagesFetched);
@@ -206,7 +219,7 @@ public class CrossUserProviderOwnershipTests : IDisposable
         var state = SeedOAuthState(Workspace2Id);
 
         var ex = await Assert.ThrowsAsync<ProviderOwnedByAnotherWorkspaceException>(
-            () => service.HandleCallbackAsync("code", state));
+            () => Callback(service, state));
 
         // The message shown to user 2 is the generic, fixed UserMessage — it must not
         // expose the original owner's user id, workspace id/name, account id, or name.

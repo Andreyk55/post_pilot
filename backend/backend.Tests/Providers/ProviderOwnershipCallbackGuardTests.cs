@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using PostPilot.Api.Data;
+using PostPilot.Api.DTOs;
 using PostPilot.Api.Entities;
 using PostPilot.Api.Enums;
 using PostPilot.Api.Services;
@@ -106,6 +107,17 @@ public class ProviderOwnershipCallbackGuardTests : IDisposable
         return state;
     }
 
+    /// <summary>
+    /// Runs the callback bound to the state's OWN workspace (the legitimate case where the caller's
+    /// current membership-checked workspace equals the state's). These tests cover permanent
+    /// provider-ownership fail-fast, not the M3 workspace-mismatch guard (see MetaOAuthStateBindingTests).
+    /// </summary>
+    private async Task<MetaOAuthCallbackResponse> Callback(string state)
+    {
+        var ws = (await _db.MetaOAuthStates.AsNoTracking().SingleAsync(s => s.State == state)).WorkspaceId;
+        return await _service.HandleCallbackAsync("code", state, ws);
+    }
+
     // ── Tests ──────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -118,7 +130,7 @@ public class ProviderOwnershipCallbackGuardTests : IDisposable
         var state = SeedOAuthState(WorkspaceBId);
 
         var ex = await Assert.ThrowsAsync<ProviderOwnedByAnotherWorkspaceException>(
-            () => _service.HandleCallbackAsync("code", state));
+            () => Callback(state));
 
         // The 409 message is the cross-workspace-ownership message and never suggests
         // disconnecting from the other workspace.
@@ -152,7 +164,7 @@ public class ProviderOwnershipCallbackGuardTests : IDisposable
         var state = SeedOAuthState(WorkspaceBId);
 
         var ex = await Assert.ThrowsAsync<ProviderOwnedByAnotherWorkspaceException>(
-            () => _service.HandleCallbackAsync("code", state));
+            () => Callback(state));
         Assert.Contains("already linked to another workspace", ex.Message);
 
         Assert.False(_handler.PagesFetched, "Pages must not be fetched when ownership is rejected.");
@@ -172,7 +184,7 @@ public class ProviderOwnershipCallbackGuardTests : IDisposable
         var state = SeedOAuthState(WorkspaceBId);
 
         var ex = await Assert.ThrowsAsync<ProviderAccountMismatchException>(
-            () => _service.HandleCallbackAsync("code", state));
+            () => Callback(state));
         Assert.Equal(MetaAccountBeta, ex.BoundAccountId);
         Assert.Equal(MetaAccountAlpha, ex.AttemptedAccountId);
 
@@ -188,7 +200,7 @@ public class ProviderOwnershipCallbackGuardTests : IDisposable
         // No prior owner; workspace A connects Alpha for the first time → allowed.
         var state = SeedOAuthState(WorkspaceAId);
 
-        var response = await _service.HandleCallbackAsync("code", state);
+        var response = await Callback(state);
 
         // The page-selection list is returned only after ownership passes.
         Assert.True(_handler.PagesFetched, "Pages should be fetched once ownership passes.");
@@ -212,7 +224,7 @@ public class ProviderOwnershipCallbackGuardTests : IDisposable
 
         var state = SeedOAuthState(WorkspaceAId);
 
-        var response = await _service.HandleCallbackAsync("code", state);
+        var response = await Callback(state);
 
         Assert.NotNull(response);
         Assert.True(_handler.PagesFetched, "Pages should be fetched on a valid same-workspace reconnect.");

@@ -64,10 +64,21 @@ public class MetaController : ControllerBase
     [HttpPost("oauth/callback")]
     public async Task<ActionResult<MetaOAuthCallbackResponse>> HandleCallback([FromBody] MetaOAuthCallbackRequest request)
     {
+        // Resolve the caller's current workspace OUTSIDE the try so membership/selection
+        // failures (409/403) surface via the global middleware. This is the workspace the
+        // state MUST have been minted for; the service rejects any mismatch.
+        var currentWorkspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
         try
         {
-            var result = await _metaOAuthService.HandleCallbackAsync(request.Code, request.State);
+            var result = await _metaOAuthService.HandleCallbackAsync(request.Code, request.State, currentWorkspaceId);
             return Ok(result);
+        }
+        catch (OAuthStateAccessDeniedException ex)
+        {
+            // Session binding: the state belongs to a different workspace than the caller's
+            // current one. Return 403 with a fixed, non-revealing message.
+            _logger.LogWarning("OAuth callback rejected (state workspace mismatch).");
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = ex.Message });
         }
         catch (ProviderAccountMismatchException ex)
         {
@@ -98,11 +109,18 @@ public class MetaController : ControllerBase
     [HttpPost("oauth/complete")]
     public async Task<ActionResult<MetaOAuthCompleteResponse>> CompleteOAuth([FromBody] MetaOAuthCompleteRequest request)
     {
+        // Resolve caller identity + current workspace OUTSIDE the try (see HandleCallback).
+        var userId = _currentUser.GetCurrentUserId();
+        var currentWorkspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
         try
         {
-            var userId = _currentUser.GetCurrentUserId();
-            var result = await _metaOAuthService.CompleteOAuthAsync(request.Code, request.State, userId);
+            var result = await _metaOAuthService.CompleteOAuthAsync(request.Code, request.State, userId, currentWorkspaceId);
             return Ok(result);
+        }
+        catch (OAuthStateAccessDeniedException ex)
+        {
+            _logger.LogWarning("OAuth complete rejected (state workspace mismatch).");
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = ex.Message });
         }
         catch (ProviderAccountMismatchException ex)
         {
@@ -146,6 +164,11 @@ public class MetaController : ControllerBase
             var result = await _metaOAuthService.DiscoverInstagramAccountsAsync(request.TempToken, request.PageIds, workspaceId);
             return Ok(result);
         }
+        catch (OAuthStateAccessDeniedException ex)
+        {
+            _logger.LogWarning("Instagram discovery rejected (state workspace mismatch).");
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = ex.Message });
+        }
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "Instagram discovery failed: {Message}", ex.Message);
@@ -161,16 +184,24 @@ public class MetaController : ControllerBase
     [HttpPost("connection")]
     public async Task<ActionResult<MetaSaveConnectionResponse>> SaveConnection([FromBody] MetaSaveConnectionRequest request)
     {
+        // Resolve caller identity + current workspace OUTSIDE the try (see HandleCallback).
+        var userId = _currentUser.GetCurrentUserId();
+        var currentWorkspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
         try
         {
-            var userId = _currentUser.GetCurrentUserId();
             var result = await _metaOAuthService.SaveConnectionAsync(
                 request.TempToken,
                 request.SelectedPageIds,
                 request.SelectedInstagramIds,
-                userId
+                userId,
+                currentWorkspaceId
             );
             return Ok(result);
+        }
+        catch (OAuthStateAccessDeniedException ex)
+        {
+            _logger.LogWarning("Save connection rejected (state workspace mismatch).");
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = ex.Message });
         }
         catch (ProviderAccountMismatchException ex)
         {
