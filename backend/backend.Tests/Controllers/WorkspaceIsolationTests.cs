@@ -351,15 +351,17 @@ public class WorkspaceIsolationTests : IDisposable
     public async Task CreatePost_returns_409_when_targetInstagramAccount_belongs_to_other_workspace()
     {
         var (_, _, bIg) = SeedMetaForWorkspace(WorkspaceBId, UserBId);
+        var ownMedia = SeedMedia(WorkspaceAId, "media/a-key.jpg");
 
         ActAs(UserAId, WorkspaceAId);
         var request = new CreatePostRequest(
             Content: "x",
-            MediaUrl: "https://example.com/x.jpg",
+            MediaUrl: null,
             MediaType: MediaType.Image,
             Platform: Platform.Instagram,
             ScheduledAt: DateTime.UtcNow.AddHours(1),
-            TargetInstagramAccountId: bIg.Id);
+            TargetInstagramAccountId: bIg.Id,
+            MediaId: ownMedia.Id);
 
         var result = await NewPostsController().CreatePost(request);
 
@@ -675,12 +677,13 @@ public class WorkspaceIsolationTests : IDisposable
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var resp = Assert.IsType<InitUploadResponse>(ok.Value);
-        Assert.Contains($"/workspaces/{WorkspaceAId:D}/", resp.StorageKey);
-        Assert.DoesNotContain($"/workspaces/{WorkspaceBId:D}/", resp.StorageKey);
 
-        // The persisted Media row is in the selected workspace, not the other one.
+        // The persisted Media row is in the selected workspace, not the other one. StorageKey
+        // is internal-only (never returned to the frontend) so we assert on the DB row.
         var row = await _db.Media.SingleAsync(m => m.Id == resp.MediaId);
         Assert.Equal(WorkspaceAId, row.WorkspaceId);
+        Assert.Contains($"/workspaces/{WorkspaceAId:D}/", row.StorageKey);
+        Assert.DoesNotContain($"/workspaces/{WorkspaceBId:D}/", row.StorageKey);
     }
 
     [Fact]
@@ -696,11 +699,11 @@ public class WorkspaceIsolationTests : IDisposable
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var resp = Assert.IsType<InitUploadResponse>(ok.Value);
-        Assert.Contains($"/workspaces/{WorkspaceBId:D}/", resp.StorageKey);
-        Assert.DoesNotContain($"/workspaces/{WorkspaceAId:D}/", resp.StorageKey);
 
         var row = await _db.Media.SingleAsync(m => m.Id == resp.MediaId);
         Assert.Equal(WorkspaceBId, row.WorkspaceId);
+        Assert.Contains($"/workspaces/{WorkspaceBId:D}/", row.StorageKey);
+        Assert.DoesNotContain($"/workspaces/{WorkspaceAId:D}/", row.StorageKey);
     }
 
     [Fact]
@@ -952,7 +955,7 @@ public class WorkspaceIsolationTests : IDisposable
 
         ActAs(UserAId, WorkspaceAId);
         var result = await NewMediaController().ValidateMedia(
-            new ValidateMediaByKeyRequest(bMedia.StorageKey, "image/jpeg", Platform.Facebook, Placement.Feed),
+            new ValidateMediaByKeyRequest(bMedia.Id, "image/jpeg", Platform.Facebook, Placement.Feed),
             CancellationToken.None);
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
@@ -965,7 +968,7 @@ public class WorkspaceIsolationTests : IDisposable
 
         ActAs(UserAId, WorkspaceAId);
         var result = await NewMediaController().ExtractMetadata(
-            new ExtractMetadataRequest(bMedia.StorageKey, "image/jpeg"),
+            new ExtractMetadataRequest(bMedia.Id, "image/jpeg"),
             CancellationToken.None);
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
@@ -974,7 +977,7 @@ public class WorkspaceIsolationTests : IDisposable
     [Fact]
     public async Task ValidateMedia_succeeds_for_own_workspace_storage_key()
     {
-        // Negative-of-the-negative: when the key belongs to the caller's workspace
+        // Negative-of-the-negative: when the mediaId belongs to the caller's workspace
         // the controller must NOT 404 (it proceeds to validation, which then 404s
         // because the file doesn't exist on disk in the in-memory test — that's a
         // different code path from the workspace check we're pinning here).
@@ -982,7 +985,7 @@ public class WorkspaceIsolationTests : IDisposable
 
         ActAs(UserAId, WorkspaceAId);
         var result = await NewMediaController().ValidateMedia(
-            new ValidateMediaByKeyRequest(aMedia.StorageKey, "image/jpeg", Platform.Facebook, Placement.Feed),
+            new ValidateMediaByKeyRequest(aMedia.Id, "image/jpeg", Platform.Facebook, Placement.Feed),
             CancellationToken.None);
 
         // Past the workspace check, the missing physical file should produce a
@@ -991,7 +994,7 @@ public class WorkspaceIsolationTests : IDisposable
         // In practice both branches return NotFoundObjectResult, but the workspace
         // check would fire FIRST and short-circuit before any storage lookup. To
         // pin that ordering we use the helper directly.
-        var helper = await _db.Media.AnyAsync(m => m.StorageKey == aMedia.StorageKey && m.WorkspaceId == WorkspaceAId);
+        var helper = await _db.Media.AnyAsync(m => m.Id == aMedia.Id && m.WorkspaceId == WorkspaceAId);
         Assert.True(helper);
         Assert.NotNull(result);
     }

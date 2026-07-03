@@ -53,6 +53,7 @@ interface AiAssistPanelProps {
   platform: AiPlatform | null
   // Media props
   mediaUrl?: string | null
+  mediaId?: string | null
   mediaType?: MediaType | null
   mediaItems?: AiAssistMediaItem[]
   onSelectThumbnail?: (thumbnailUrl: string) => void
@@ -173,6 +174,7 @@ export function AiAssistPanel({
   resetLanguage,
   platform: platformProp,
   mediaUrl,
+  mediaId,
   mediaType,
   mediaItems,
   onSelectThumbnail,
@@ -247,11 +249,11 @@ export function AiAssistPanel({
   const isTextEmpty = !text.trim()
   const resolvedMediaItems: AiAssistMediaItem[] = mediaItems && mediaItems.length > 0
     ? mediaItems
-    : (mediaUrl && mediaType && mediaType !== 'None'
-        ? [{ assetUrl: mediaUrl, mediaType }]
+    : ((mediaId || mediaUrl) && mediaType && mediaType !== 'None'
+        ? [{ mediaId, previewUrl: mediaUrl, mediaType }]
         : [])
   const mediaSelectionKey = resolvedMediaItems
-    .map((item) => `${item.assetUrl ?? ''}:${item.mediaType ?? 'unknown'}`)
+    .map((item) => `${item.mediaId ?? ''}:${item.assetUrl ?? ''}:${item.mediaType ?? 'unknown'}`)
     .join('|')
   const mediaAiUnsupportedReason = getMediaAiUnsupportedReason(resolvedMediaItems)
   const supportedMediaItem = getSupportedSingleImageMediaItem(resolvedMediaItems)
@@ -482,11 +484,15 @@ export function AiAssistPanel({
   const handleImageCaptionIdeas = () =>
     handleMediaAction(async () => {
       if (!platform) return // TypeScript guard - platform is required
-      const mediaAssetUrl = supportedMediaItem?.assetUrl
-      if (!mediaAssetUrl) return
+      const mediaRef = supportedMediaItem?.mediaId
+        ? { mediaId: supportedMediaItem.mediaId, assetType: 'image' as const }
+        : (supportedMediaItem?.assetUrl
+            ? { assetUrl: supportedMediaItem.assetUrl, assetType: 'image' as const }
+            : null)
+      if (!mediaRef) return
       const response = await aiMediaApi.imageCaptionIdeas(
         platform,
-        [{ assetUrl: mediaAssetUrl, assetType: 'image' }],
+        [mediaRef],
         text || undefined,
         selectedVoiceProfileId
       )
@@ -495,21 +501,25 @@ export function AiAssistPanel({
 
   const handleImageQualityCheck = () =>
     handleMediaAction(async () => {
-      const mediaAssetUrl = supportedMediaItem?.assetUrl
-      if (!mediaAssetUrl) return
-      const response = await aiMediaApi.imageQualityCheck([
-        { assetUrl: mediaAssetUrl, assetType: 'image' },
-      ])
+      const mediaRef = supportedMediaItem?.mediaId
+        ? { mediaId: supportedMediaItem.mediaId, assetType: 'image' as const }
+        : (supportedMediaItem?.assetUrl
+            ? { assetUrl: supportedMediaItem.assetUrl, assetType: 'image' as const }
+            : null)
+      if (!mediaRef) return
+      const response = await aiMediaApi.imageQualityCheck([mediaRef])
       setMediaResult({ type: 'quality', score: response.score, issues: response.issues })
     })
 
   const handleAltText = () =>
     handleMediaAction(async () => {
-      const mediaAssetUrl = supportedMediaItem?.assetUrl
-      if (!mediaAssetUrl) return
-      const response = await aiMediaApi.altText([
-        { assetUrl: mediaAssetUrl, assetType: 'image' },
-      ])
+      const mediaRef = supportedMediaItem?.mediaId
+        ? { mediaId: supportedMediaItem.mediaId, assetType: 'image' as const }
+        : (supportedMediaItem?.assetUrl
+            ? { assetUrl: supportedMediaItem.assetUrl, assetType: 'image' as const }
+            : null)
+      if (!mediaRef) return
+      const response = await aiMediaApi.altText([mediaRef])
       setMediaResult({ type: 'alttext', altText: response.altText })
     })
 
@@ -583,8 +593,9 @@ export function AiAssistPanel({
 
   // Get media filename for display
   const getMediaFileName = (): string => {
-    if (!supportedMediaItem?.assetUrl) return ''
-    const parts = supportedMediaItem.assetUrl.split('/')
+    const displayValue = supportedMediaItem?.previewUrl ?? supportedMediaItem?.assetUrl
+    if (!displayValue) return supportedMediaItem?.mediaId ? 'uploaded-media' : ''
+    const parts = displayValue.split('/')
     return parts[parts.length - 1] || 'media'
   }
 

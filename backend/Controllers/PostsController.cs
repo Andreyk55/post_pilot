@@ -169,9 +169,9 @@ public class PostsController : ControllerBase
             .Take(pageSize)
             .ToListAsync();
 
-        var thumbnailsByStorageKey = await LoadMediaThumbnailLookupAsync(workspaceId, postEntities);
+        var mediaLookup = await LoadMediaLookupAsync(workspaceId, postEntities);
         var posts = postEntities
-            .Select(p => PostDto.FromEntity(p, thumbnailsByStorageKey))
+            .Select(p => PostDto.FromEntity(p, mediaLookup))
             .ToList();
 
         return new PaginatedResponse<PostDto>(
@@ -198,8 +198,8 @@ public class PostsController : ControllerBase
             return NotFound();
         }
 
-        var thumbnailsByStorageKey = await LoadMediaThumbnailLookupAsync(workspaceId, new[] { post });
-        return PostDto.FromEntity(post, thumbnailsByStorageKey);
+        var mediaLookup = await LoadMediaLookupAsync(workspaceId, new[] { post });
+        return PostDto.FromEntity(post, mediaLookup);
     }
 
     [HttpGet("{id}/details")]
@@ -301,12 +301,13 @@ public class PostsController : ControllerBase
             }
         }
 
-        var thumbnailsByStorageKey = await LoadMediaThumbnailLookupAsync(workspaceId, new[] { post }, cancellationToken);
+        var mediaLookup = await LoadMediaLookupAsync(workspaceId, new[] { post }, cancellationToken);
+        var mainMedia = ResolveMediaForDetails(mediaLookup, post.MediaUrl);
 
         return new PostDetailsDto(
             Id: post.Id,
             Content: post.Content,
-            MediaUrl: post.MediaUrl,
+            MediaUrl: ResolveMediaUrlForDetails(mainMedia, post.MediaUrl),
             MediaType: post.MediaType.ToString(),
             PostType: post.PostType.ToString(),
             Platform: post.Platform.ToString(),
@@ -331,15 +332,20 @@ public class PostsController : ControllerBase
             ProfileUrl: profileUrl,
             PageUrl: pageUrl,
             InstagramMediaType: post.InstagramMediaType?.ToString(),
-            Thumbnail: ResolveThumbnail(thumbnailsByStorageKey, post.MediaUrl),
+            Thumbnail: mainMedia?.Thumbnail,
             MediaItems: post.MediaItems?.Count > 0
                 ? post.MediaItems.OrderBy(m => m.Order)
-                    .Select(m => new PostDetailsMediaItemDto(
-                        m.Id,
-                        m.Order,
-                        m.MediaUrl,
-                        m.MediaType.ToString(),
-                        ResolveThumbnail(thumbnailsByStorageKey, m.MediaUrl)))
+                    .Select(m =>
+                    {
+                        var itemMedia = ResolveMediaForDetails(mediaLookup, m.MediaUrl);
+                        return new PostDetailsMediaItemDto(
+                            m.Id,
+                            m.Order,
+                            ResolveMediaUrlForDetails(itemMedia, m.MediaUrl),
+                            m.MediaType.ToString(),
+                            itemMedia?.Thumbnail,
+                            itemMedia?.MediaId);
+                    })
                     .ToList()
                 : null,
             TargetConnectionActive: post.Platform switch
@@ -347,11 +353,12 @@ public class PostsController : ControllerBase
                 Platform.Facebook  => post.TargetPage?.IsConnected,
                 Platform.Instagram => post.TargetInstagramAccount?.IsConnected,
                 _ => (bool?)null,
-            }
+            },
+            MediaId: mainMedia?.MediaId
         );
     }
 
-    private async Task<Dictionary<string, MediaThumbnailDto>> LoadMediaThumbnailLookupAsync(
+    private async Task<Dictionary<string, MediaLookupEntry>> LoadMediaLookupAsync(
         Guid workspaceId,
         IEnumerable<Post> posts,
         CancellationToken cancellationToken = default)
@@ -363,18 +370,16 @@ public class PostsController : ControllerBase
             .ToArray();
 
         if (storageKeys.Length == 0)
-            return new Dictionary<string, MediaThumbnailDto>(StringComparer.Ordinal);
+            return new Dictionary<string, MediaLookupEntry>(StringComparer.Ordinal);
 
         var mediaRows = await _context.Media
             .AsNoTracking()
-            .Where(m => m.WorkspaceId == workspaceId
-                && m.ThumbnailStorageKey != null
-                && storageKeys.Contains(m.StorageKey))
+            .Where(m => m.WorkspaceId == workspaceId && storageKeys.Contains(m.StorageKey))
             .ToListAsync(cancellationToken);
 
         return mediaRows.ToDictionary(
             media => media.StorageKey,
-            BuildThumbnailDto,
+            BuildMediaLookupEntry,
             StringComparer.Ordinal);
     }
 
@@ -389,46 +394,62 @@ public class PostsController : ControllerBase
             yield return mediaItem.MediaUrl;
     }
 
-    private MediaThumbnailDto BuildThumbnailDto(Entities.Media media)
+    private MediaLookupEntry BuildMediaLookupEntry(Entities.Media media)
     {
-        var storageKey = media.ThumbnailStorageKey;
-        var url = string.IsNullOrWhiteSpace(storageKey) ? null : BuildAppMediaUrl(storageKey);
+        MediaThumbnailDto? thumbnail = null;
+        if (!string.IsNullOrWhiteSpace(media.ThumbnailStorageKey))
+        {
+            thumbnail = new MediaThumbnailDto(
+                MediaId: media.Id,
+                Url: BuildMediaFileUrl(media.Id, variant: "thumbnail"),
+                MimeType: media.ThumbnailMimeType,
+                Width: media.ThumbnailWidth,
+                Height: media.ThumbnailHeight,
+                SizeBytes: media.ThumbnailSizeBytes,
+                CreatedAtUtc: media.ThumbnailCreatedAtUtc);
+        }
 
-        return new MediaThumbnailDto(
-            StorageKey: storageKey,
-            Url: url,
-            MimeType: media.ThumbnailMimeType,
-            Width: media.ThumbnailWidth,
-            Height: media.ThumbnailHeight,
-            SizeBytes: media.ThumbnailSizeBytes,
-            CreatedAtUtc: media.ThumbnailCreatedAtUtc);
+        return new MediaLookupEntry(media.Id, BuildMediaFileUrl(media.Id), thumbnail);
     }
 
-    private static MediaThumbnailDto? ResolveThumbnail(
-        IReadOnlyDictionary<string, MediaThumbnailDto> thumbnailsByStorageKey,
+    private static MediaLookupEntry? ResolveMediaForDetails(
+        IReadOnlyDictionary<string, MediaLookupEntry> mediaLookup,
         string? storageKey)
     {
         if (string.IsNullOrWhiteSpace(storageKey))
             return null;
 
-        return thumbnailsByStorageKey.TryGetValue(storageKey, out var thumbnail)
-            ? thumbnail
-            : null;
+        return mediaLookup.TryGetValue(storageKey, out var entry) ? entry : null;
     }
 
-    private string BuildAppMediaUrl(string storageKey)
+    /// <summary>See the identical rationale on <c>PostDto.ResolveMediaUrl</c> — never returns a raw StorageKey.</summary>
+    private static string? ResolveMediaUrlForDetails(MediaLookupEntry? resolved, string? rawMediaUrl)
     {
-        if (!LooksLikeStorageKey(storageKey))
-            return storageKey;
+        if (resolved != null)
+            return resolved.PreviewUrl;
 
-        var encoded = string.Join('/', storageKey.Split('/').Select(Uri.EscapeDataString));
-        if (Request?.Host.HasValue == true && !string.IsNullOrWhiteSpace(Request.Scheme))
-            return $"{Request.Scheme}://{Request.Host}/api/media/files/{encoded}";
-
-        return $"/api/media/files/{encoded}";
+        return LooksLikeStorageKey(rawMediaUrl) ? null : rawMediaUrl;
     }
 
-    private static bool LooksLikeStorageKey(string? mediaUrl)
+    /// <summary>
+    /// Builds the frontend-safe preview URL for a media item (<c>/api/media/{mediaId}/file</c>).
+    /// The frontend only ever learns this URL (or the bare mediaId) — never the StorageKey.
+    /// </summary>
+    private string BuildMediaFileUrl(Guid mediaId, string? variant = null)
+    {
+        var query = variant is null ? string.Empty : $"?variant={variant}";
+        if (Request?.Host.HasValue == true && !string.IsNullOrWhiteSpace(Request.Scheme))
+            return $"{Request.Scheme}://{Request.Host}/api/media/{mediaId}/file{query}";
+
+        return $"/api/media/{mediaId}/file{query}";
+    }
+
+    /// <summary>
+    /// True when the value has the shape of a server-issued storage key (as opposed to a plain
+    /// external URL). Internal so <see cref="PostDto"/>'s DTO-mapping code (same file) can reuse
+    /// it to decide whether an unresolvable media reference is safe to pass through verbatim.
+    /// </summary>
+    internal static bool LooksLikeStorageKey(string? mediaUrl)
     {
         if (string.IsNullOrWhiteSpace(mediaUrl))
             return false;
@@ -441,9 +462,20 @@ public class PostsController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<PostDto>> CreatePost(CreatePostRequest request)
+    public async Task<ActionResult<PostDto>> CreatePost(CreatePostRequest request, CancellationToken cancellationToken = default)
     {
-        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(cancellationToken);
+
+        // Resolve frontend-supplied MediaId(s) to the internal StorageKey(s) BEFORE any other
+        // validation runs. Media.Id is the only media reference the frontend should submit;
+        // the resolved request below has MediaUrl/MediaItems[].MediaUrl populated from the
+        // owning Media row (never trusted from the client), so the rest of this method is
+        // unchanged from the pre-MediaId design.
+        var (resolvedRequest, mediaResolutionError) = await ResolveCreatePostMediaAsync(workspaceId, request, cancellationToken);
+        if (mediaResolutionError != null)
+            return StatusCode(mediaResolutionError.Status ?? StatusCodes.Status404NotFound, mediaResolutionError);
+        request = resolvedRequest;
+
         var validationErrors = ValidateCreatePostRequest(request);
         if (validationErrors.Count > 0)
         {
@@ -877,14 +909,15 @@ public class PostsController : ControllerBase
         await _context.Entry(post).Reference(p => p.TargetInstagramAccount).LoadAsync();
         await _context.Entry(post).Collection(p => p.MediaItems).LoadAsync();
 
-        return CreatedAtAction(nameof(GetPost), new { id = post.Id }, PostDto.FromEntity(post));
+        var createdMediaLookup = await LoadMediaLookupAsync(workspaceId, new[] { post }, cancellationToken);
+        return CreatedAtAction(nameof(GetPost), new { id = post.Id }, PostDto.FromEntity(post, createdMediaLookup));
     }
 
     [HttpPut("{id}")]
-    public async Task<IActionResult> UpdatePost(Guid id, UpdatePostRequest request)
+    public async Task<IActionResult> UpdatePost(Guid id, UpdatePostRequest request, CancellationToken cancellationToken = default)
     {
-        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
-        var post = await _context.Posts.FirstOrDefaultAsync(p => p.Id == id && p.WorkspaceId == workspaceId);
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(cancellationToken);
+        var post = await _context.Posts.FirstOrDefaultAsync(p => p.Id == id && p.WorkspaceId == workspaceId, cancellationToken);
 
         if (post == null)
         {
@@ -896,6 +929,13 @@ public class PostsController : ControllerBase
         {
             return BadRequest(new { error = "Cannot update a post that is not scheduled" });
         }
+
+        // Resolve a frontend-supplied MediaId to its internal StorageKey before validation —
+        // see the identical rationale in CreatePost.
+        var (resolvedUpdateRequest, updateMediaError) = await ResolveUpdatePostMediaAsync(workspaceId, request, cancellationToken);
+        if (updateMediaError != null)
+            return StatusCode(updateMediaError.Status ?? StatusCodes.Status404NotFound, updateMediaError);
+        request = resolvedUpdateRequest;
 
         var validationErrors = ValidateUpdatePostRequest(request);
         if (validationErrors.Count > 0)
@@ -1093,9 +1133,11 @@ public class PostsController : ControllerBase
             await _context.Entry(post).Reference(p => p.TargetInstagramAccount).LoadAsync();
             await _context.Entry(post).Collection(p => p.MediaItems).LoadAsync();
 
+            var publishNowMediaLookup = await LoadMediaLookupAsync(workspaceId, new[] { post });
+
             if (result.Success)
             {
-                return Ok(PostDto.FromEntity(post));
+                return Ok(PostDto.FromEntity(post, publishNowMediaLookup));
             }
 
             // Transient publisher failures are handled inside the publisher by moving
@@ -1104,7 +1146,7 @@ public class PostsController : ControllerBase
             // the UI can show the in-progress/retry state instead of an error.
             if (post.Status == PostStatus.RetryPending || post.Status == PostStatus.Processing)
             {
-                return Accepted(PostDto.FromEntity(post));
+                return Accepted(PostDto.FromEntity(post, publishNowMediaLookup));
             }
             else
             {
@@ -1253,13 +1295,96 @@ public class PostsController : ControllerBase
     }
 
     /// <summary>
+    /// Resolves <see cref="CreatePostRequest.MediaId"/> / <see cref="CreatePostMediaItem.MediaId"/>
+    /// (the only media reference the frontend should submit) to the corresponding
+    /// <see cref="Entities.Media.StorageKey"/>, scoped to <paramref name="workspaceId"/>. Returns
+    /// a request with MediaUrl/MediaItems[].MediaUrl populated from the resolved StorageKey(s) so
+    /// the rest of post creation is unchanged. Unknown or foreign-workspace mediaIds produce a
+    /// 404 <c>MEDIA_NOT_FOUND</c> — the response never distinguishes "doesn't exist" from
+    /// "belongs to another workspace". When no MediaId is supplied for an item, that item's
+    /// MediaUrl passes through unchanged (back-compat path, still enforced by the ownership gate
+    /// in <see cref="RunMediaGateAsync"/> below).
+    /// </summary>
+    private async Task<(CreatePostRequest Request, ProblemDetails? Error)> ResolveCreatePostMediaAsync(
+        Guid workspaceId, CreatePostRequest request, CancellationToken cancellationToken)
+    {
+        if (request.MediaId is null && !string.IsNullOrWhiteSpace(request.MediaUrl))
+            return (request, UnsupportedMediaReferenceProblem());
+
+        if (request.MediaItems is { Count: > 0 } && request.MediaItems.Any(m => m.MediaId is null || !string.IsNullOrWhiteSpace(m.MediaUrl)))
+            return (request, UnsupportedMediaReferenceProblem());
+
+        var effectiveMediaUrl = request.MediaUrl;
+        if (request.MediaId.HasValue)
+        {
+            var media = await _context.Media.AsNoTracking()
+                .FirstOrDefaultAsync(m => m.Id == request.MediaId.Value && m.WorkspaceId == workspaceId, cancellationToken);
+            if (media == null)
+                return (request, MediaNotFoundProblem());
+            effectiveMediaUrl = media.StorageKey;
+        }
+
+        var effectiveMediaItems = request.MediaItems;
+        if (request.MediaItems is { Count: > 0 } && request.MediaItems.Any(m => m.MediaId.HasValue))
+        {
+            var resolved = new List<CreatePostMediaItem>(request.MediaItems.Count);
+            foreach (var item in request.MediaItems)
+            {
+                var media = await _context.Media.AsNoTracking()
+                    .FirstOrDefaultAsync(m => m.Id == item.MediaId.Value && m.WorkspaceId == workspaceId, cancellationToken);
+                if (media == null)
+                    return (request, MediaNotFoundProblem());
+
+                resolved.Add(item with { MediaUrl = media.StorageKey });
+            }
+            effectiveMediaItems = resolved;
+        }
+
+        return (request with { MediaUrl = effectiveMediaUrl, MediaItems = effectiveMediaItems }, null);
+    }
+
+    /// <summary>Update-path counterpart of <see cref="ResolveCreatePostMediaAsync"/> (single media only — updates have no carousel MediaItems input).</summary>
+    private async Task<(UpdatePostRequest Request, ProblemDetails? Error)> ResolveUpdatePostMediaAsync(
+        Guid workspaceId, UpdatePostRequest request, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(request.MediaUrl))
+            return (request, UnsupportedMediaReferenceProblem());
+
+        if (!request.MediaId.HasValue)
+            return (request, null);
+
+        var media = await _context.Media.AsNoTracking()
+            .FirstOrDefaultAsync(m => m.Id == request.MediaId.Value && m.WorkspaceId == workspaceId, cancellationToken);
+        if (media == null)
+            return (request, MediaNotFoundProblem());
+
+        return (request with { MediaUrl = media.StorageKey }, null);
+    }
+
+    private static ProblemDetails MediaNotFoundProblem() => new()
+    {
+        Title = "Media not found",
+        Detail = "The referenced media was not found in this workspace.",
+        Status = StatusCodes.Status404NotFound,
+        Extensions = { ["code"] = MediaValidationErrorCodes.MediaNotFound },
+    };
+
+    private static ProblemDetails UnsupportedMediaReferenceProblem() => new()
+    {
+        Title = "Unsupported media reference",
+        Detail = "Posts must reference uploaded media by mediaId.",
+        Status = StatusCodes.Status400BadRequest,
+        Extensions = { ["code"] = "UNSUPPORTED_MEDIA_REFERENCE" },
+    };
+
+    /// <summary>
     /// Builds the (item, target) matrix for a create request and runs the authoritative
     /// media gate. Returns a structured <see cref="ProblemDetails"/> when any selected
     /// target has invalid media, or null when everything passes (warnings are non-blocking).
     ///
     /// <para>Target model for this phase: a post has exactly one platform
     /// (<see cref="CreatePostRequest.Platform"/>) and one placement derived from
-    /// <see cref="CreatePostRequest.PostType"/> (Feed→Feed, Story→Story). The matrix is
+    /// (<see cref="CreatePostRequest.PostType"/> (Feed→Feed, Story→Story). The matrix is
     /// "every attached image × that single target". The per-target shape is intentionally
     /// general so multi-target cross-posting can populate more than one target later.</para>
     /// </summary>
@@ -1396,9 +1521,14 @@ public class PostsController : ControllerBase
 }
 
 public record CreatePostMediaItem(
-    string MediaUrl,
+    string? MediaUrl,
     MediaType MediaType,
-    int Order
+    int Order,
+    /// <summary>
+    /// Preferred media reference: the Media row id returned by the upload flow. When present,
+    /// the server resolves it to the internal StorageKey and ignores <see cref="MediaUrl"/>.
+    /// </summary>
+    Guid? MediaId = null
 );
 
 public record InstagramUserTagDto(
@@ -1424,7 +1554,15 @@ public record CreatePostRequest(
     /// Per-media-item Instagram user tags for carousel posts.
     /// Key = media item order (0-based), Value = list of tags for that item.
     /// </summary>
-    Dictionary<int, List<InstagramUserTagDto>>? InstagramMediaTags = null
+    Dictionary<int, List<InstagramUserTagDto>>? InstagramMediaTags = null,
+    /// <summary>
+    /// Preferred single-media reference: the Media row id returned by the upload flow. When
+    /// present, the server resolves it to the internal StorageKey server-side (scoped to the
+    /// current workspace) and ignores <see cref="MediaUrl"/>. This is the only media reference
+    /// new frontend code should submit — StorageKeys are never accepted directly from a trusted
+    /// client.
+    /// </summary>
+    Guid? MediaId = null
 );
 
 public record UpdatePostRequest(
@@ -1434,7 +1572,9 @@ public record UpdatePostRequest(
     Platform Platform,
     DateTime ScheduledAt,
     Guid? TargetPageId = null,
-    Guid? TargetInstagramAccountId = null
+    Guid? TargetInstagramAccountId = null,
+    /// <summary>See <see cref="CreatePostRequest.MediaId"/>.</summary>
+    Guid? MediaId = null
 );
 
 public record PaginatedResponse<T>(
@@ -1449,12 +1589,25 @@ public record PaginatedResponse<T>(
     public bool HasPreviousPage => Page > 1;
 }
 
+/// <summary>
+/// Internal (non-DTO) lookup value used to enrich Post/PostMediaItem responses with a
+/// frontend-safe media reference. Never serialized directly — <see cref="MediaId"/> and
+/// <see cref="PreviewUrl"/> are copied onto the public DTOs; the StorageKey itself never
+/// leaves the backend. Public only because it appears in <see cref="PostDto.FromEntity"/>'s
+/// public signature — it is not part of the wire contract (nothing maps it to JSON) and is
+/// never returned from an action directly.
+/// </summary>
+public sealed record MediaLookupEntry(Guid MediaId, string PreviewUrl, MediaThumbnailDto? Thumbnail);
+
+
 public record PostMediaItemDto(
     Guid Id,
     int Order,
-    string MediaUrl,
+    string? MediaUrl,
     MediaType MediaType,
-    MediaThumbnailDto? Thumbnail = null
+    MediaThumbnailDto? Thumbnail = null,
+    /// <summary>Media row id backing this item, when resolvable. Never a StorageKey.</summary>
+    Guid? MediaId = null
 );
 
 public record PostDto(
@@ -1487,12 +1640,14 @@ public record PostDto(
     /// True if the post's target page/IG account is currently connected. False if it was
     /// disconnected (frontend can render a "disconnected" badge). Null if the post has no target.
     /// </summary>
-    bool? TargetConnectionActive = null
+    bool? TargetConnectionActive = null,
+    /// <summary>Media row id backing the primary MediaUrl, when resolvable. Never a StorageKey.</summary>
+    Guid? MediaId = null
 )
 {
     public static PostDto FromEntity(
         Post post,
-        IReadOnlyDictionary<string, MediaThumbnailDto>? thumbnailsByStorageKey = null)
+        IReadOnlyDictionary<string, MediaLookupEntry>? mediaLookup = null)
     {
         bool? targetConnectionActive = post.Platform switch
         {
@@ -1501,10 +1656,12 @@ public record PostDto(
             _ => (bool?)null,
         };
 
+        var mainMedia = ResolveMedia(mediaLookup, post.MediaUrl);
+
         return new(
             post.Id,
             post.Content,
-            post.MediaUrl,
+            ResolveMediaUrl(mainMedia, post.MediaUrl),
             post.MediaType,
             post.PostType,
             post.Platform,
@@ -1527,30 +1684,49 @@ public record PostDto(
             post.NextRetryAt,
             post.SelectedThumbnailUrl,
             post.InstagramMediaType?.ToString(),
-            ResolveThumbnail(thumbnailsByStorageKey, post.MediaUrl),
+            mainMedia?.Thumbnail,
             post.MediaItems?.Count > 0
                 ? post.MediaItems.OrderBy(m => m.Order)
-                    .Select(m => new PostMediaItemDto(
-                        m.Id,
-                        m.Order,
-                        m.MediaUrl,
-                        m.MediaType,
-                        ResolveThumbnail(thumbnailsByStorageKey, m.MediaUrl)))
+                    .Select(m =>
+                    {
+                        var itemMedia = ResolveMedia(mediaLookup, m.MediaUrl);
+                        return new PostMediaItemDto(
+                            m.Id,
+                            m.Order,
+                            ResolveMediaUrl(itemMedia, m.MediaUrl),
+                            m.MediaType,
+                            itemMedia?.Thumbnail,
+                            itemMedia?.MediaId);
+                    })
                     .ToList()
                 : null,
-            targetConnectionActive
+            targetConnectionActive,
+            mainMedia?.MediaId
         );
     }
 
-    private static MediaThumbnailDto? ResolveThumbnail(
-        IReadOnlyDictionary<string, MediaThumbnailDto>? thumbnailsByStorageKey,
+    private static MediaLookupEntry? ResolveMedia(
+        IReadOnlyDictionary<string, MediaLookupEntry>? mediaLookup,
         string? storageKey)
     {
-        if (thumbnailsByStorageKey == null || string.IsNullOrWhiteSpace(storageKey))
+        if (mediaLookup == null || string.IsNullOrWhiteSpace(storageKey))
             return null;
 
-        return thumbnailsByStorageKey.TryGetValue(storageKey, out var thumbnail)
-            ? thumbnail
-            : null;
+        return mediaLookup.TryGetValue(storageKey, out var entry) ? entry : null;
+    }
+
+    /// <summary>
+    /// Never returns a raw StorageKey. When the media reference resolves to a known Media
+    /// row, returns its authenticated preview URL. Otherwise, only passes the raw value
+    /// through when it does NOT look like a storage key (i.e. it is a plain external URL —
+    /// nothing secret to protect); a bare, unresolvable storage key (legacy/edge case) is
+    /// suppressed to null rather than ever being exposed to the frontend.
+    /// </summary>
+    private static string? ResolveMediaUrl(MediaLookupEntry? resolved, string? rawMediaUrl)
+    {
+        if (resolved != null)
+            return resolved.PreviewUrl;
+
+        return PostsController.LooksLikeStorageKey(rawMediaUrl) ? null : rawMediaUrl;
     }
 }

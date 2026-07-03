@@ -86,8 +86,8 @@ public class PostThumbnailDtoTests
         var getPost = await controller.GetPost(postId);
         var postDto = Assert.IsType<PostDto>(getPost.Value);
         Assert.NotNull(postDto.Thumbnail);
-        Assert.Equal(thumbnailKey, postDto.Thumbnail!.StorageKey);
-        Assert.Equal("https://api.example.test/api/media/files/users/u/workspaces/w/providers/meta-facebook/media/m/thumbnail.jpg", postDto.Thumbnail.Url);
+        Assert.Equal(mediaId, postDto.Thumbnail!.MediaId);
+        Assert.Equal($"https://api.example.test/api/media/{mediaId}/file?variant=thumbnail", postDto.Thumbnail.Url);
         Assert.Equal("image/jpeg", postDto.Thumbnail.MimeType);
         Assert.Equal(480, postDto.Thumbnail.Width);
         Assert.Equal(270, postDto.Thumbnail.Height);
@@ -95,8 +95,8 @@ public class PostThumbnailDtoTests
         var details = await controller.GetPostDetails(postId, CancellationToken.None);
         var detailsDto = Assert.IsType<PostDetailsDto>(details.Value);
         Assert.NotNull(detailsDto.Thumbnail);
-        Assert.Equal(thumbnailKey, detailsDto.Thumbnail!.StorageKey);
-        Assert.Equal("https://api.example.test/api/media/files/users/u/workspaces/w/providers/meta-facebook/media/m/thumbnail.jpg", detailsDto.Thumbnail.Url);
+        Assert.Equal(mediaId, detailsDto.Thumbnail!.MediaId);
+        Assert.Equal($"https://api.example.test/api/media/{mediaId}/file?variant=thumbnail", detailsDto.Thumbnail.Url);
     }
 
     private static AppDbContext NewDb()

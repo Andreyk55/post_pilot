@@ -1,6 +1,5 @@
 import { useState, useMemo, useCallback } from 'react'
 import { parseInstagramUsername, extractMentionsFromCaption } from '../utils/instagramMention'
-import { getMediaUrl } from '../api/media'
 import './InstagramMediaTags.css'
 
 export interface MediaTag {
@@ -13,8 +12,8 @@ interface InstagramMediaTagsProps {
   caption: string
   mediaTags: MediaTag[]
   onMediaTagsChange: (tags: MediaTag[]) => void
-  /** Storage key of the selected media (image or video) */
-  mediaStorageKey: string | null
+  /** Resolved preview URL of the selected media (image or video) */
+  mediaUrl: string | null
   disabled?: boolean
   /** When true, hides the image placement editor (video tags auto-place at center) */
   isVideo?: boolean
@@ -24,7 +23,7 @@ export function InstagramMediaTags({
   caption,
   mediaTags,
   onMediaTagsChange,
-  mediaStorageKey,
+  mediaUrl,
   disabled,
   isVideo = false,
 }: InstagramMediaTagsProps) {
@@ -41,7 +40,7 @@ export function InstagramMediaTags({
     return captionMentions.filter(m => !taggedLower.has(m.toLowerCase()))
   }, [captionMentions, mediaTags])
 
-  const imageUrl = useMemo(() => getMediaUrl(mediaStorageKey), [mediaStorageKey])
+  const imageUrl = useMemo(() => mediaUrl, [mediaUrl])
 
   const addTag = useCallback((username: string) => {
     const lower = username.toLowerCase()

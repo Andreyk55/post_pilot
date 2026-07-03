@@ -1,9 +1,13 @@
+using System.Reflection;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using PostPilot.Api.Controllers;
 using PostPilot.Api.Data;
+using PostPilot.Api.Entities;
 using PostPilot.Api.Enums;
 using PostPilot.Api.Services.Auth;
 using PostPilot.Api.Services.Media;
@@ -13,32 +17,162 @@ using Xunit;
 namespace PostPilot.Api.Tests.Controllers;
 
 /// <summary>
-/// Pins the behaviour of the ONE [AllowAnonymous] data-serving route,
-/// <c>GET /api/media/files/{*storageKey}</c> (<see cref="MediaController.GetFile"/>).
-///
-/// <para>
-/// Security model (see docs/public-media-route.md): this route is a "capability URL".
-/// It is anonymous on purpose — Meta's Facebook/Instagram fetchers pull bytes from it
-/// during publishing and present no auth. The safety comes from the storage key being
-/// high-entropy (a server-generated GUID mediaId embedded in the path) and from there
-/// being NO enumeration endpoint. These tests lock in:
-/// </para>
-///
-/// <list type="bullet">
-///   <item>H4 — an anonymous caller holding the EXACT key gets the bytes (Meta needs this).</item>
-///   <item>H5 — an anonymous caller with a random/unknown key gets 404, not a hint.</item>
-///   <item>H6 — the controller exposes no "list keys" surface; GetFile takes one key and
-///         streams only that object, never a directory.</item>
-/// </list>
-///
-/// The route is workspace-blind by design, so these tests don't seed workspaces — they
-/// pin that knowledge-of-key is the only gate, which is exactly why the key must carry
-/// the entropy. Cross-workspace ownership of the AUTHENTICATED media endpoints is pinned
-/// in <see cref="WorkspaceIsolationTests"/>.
+/// Pins the media-privacy redesign: media file access is now ONLY through the authenticated,
+/// workspace-scoped <c>GET /api/media/{mediaId}/file</c> (<see cref="MediaController.GetMediaFile"/>).
+/// The former anonymous catch-all route <c>GET /api/media/files/{*storageKey}</c>
+/// (<c>MediaController.GetFile</c>) has been removed entirely — it is no longer reachable by
+/// any HTTP method, anonymous or authenticated. See docs/public-media-route.md for the
+/// (now-historical) rationale and the migration.
 /// </summary>
 public class MediaPublicFetchTests
 {
-    private static MediaController NewController(IMediaStorageProvider storage)
+    /// <summary>
+    /// The old anonymous action no longer exists on the controller at all — this is stronger
+    /// than "returns 404" (a 404 could also mean "route exists but not found"; here there is no
+    /// action, so ASP.NET routing itself can never match a request to it).
+    /// </summary>
+    [Fact]
+    public void GetFile_action_no_longer_exists_on_MediaController()
+    {
+        var method = typeof(MediaController).GetMethod("GetFile", BindingFlags.Public | BindingFlags.Instance);
+        Assert.Null(method);
+    }
+
+    /// <summary>
+    /// The two obsolete upload endpoints (POST /api/media/upload-url and
+    /// PUT /api/media/upload/{filename}) are removed entirely, not merely disabled.
+    /// </summary>
+    [Fact]
+    public void GenerateUploadUrl_action_no_longer_exists_on_MediaController()
+    {
+        var method = typeof(MediaController).GetMethod("GenerateUploadUrl", BindingFlags.Public | BindingFlags.Instance);
+        Assert.Null(method);
+    }
+
+    [Fact]
+    public void UploadFile_action_no_longer_exists_on_MediaController()
+    {
+        var method = typeof(MediaController).GetMethod("UploadFile", BindingFlags.Public | BindingFlags.Instance);
+        Assert.Null(method);
+    }
+
+    /// <summary>
+    /// The new mediaId-based file endpoint carries NO [AllowAnonymous] — it inherits the
+    /// controller-level [Authorize], so an unauthenticated caller is rejected by the auth
+    /// middleware before the action ever runs (pinned at the controller-plumbing layer since
+    /// this test project has no WebApplicationFactory to exercise the full HTTP pipeline).
+    /// </summary>
+    [Fact]
+    public void GetMediaFile_has_no_AllowAnonymous_attribute()
+    {
+        var method = typeof(MediaController).GetMethod(nameof(MediaController.GetMediaFile));
+        Assert.NotNull(method);
+        Assert.Null(method!.GetCustomAttribute<AllowAnonymousAttribute>());
+
+        var controllerAuthorize = typeof(MediaController).GetCustomAttribute<AuthorizeAttribute>();
+        Assert.NotNull(controllerAuthorize);
+    }
+
+    /// <summary>
+    /// GetFrame (local-dev-only extracted video frames) is intentionally out of scope for this
+    /// redesign and remains anonymous — pin that it still exists so a future refactor doesn't
+    /// accidentally remove/rename it without updating this expectation.
+    /// </summary>
+    [Fact]
+    public void GetFrame_is_still_anonymous_and_unaffected()
+    {
+        var method = typeof(MediaController).GetMethod(nameof(MediaController.GetFrame));
+        Assert.NotNull(method);
+        Assert.NotNull(method!.GetCustomAttribute<AllowAnonymousAttribute>());
+    }
+
+    [Fact]
+    public async Task GetMediaFile_with_own_workspace_mediaId_streams_bytes()
+    {
+        var workspaceId = Guid.NewGuid();
+        var key = $"users/{Guid.NewGuid():D}/workspaces/{workspaceId:D}/providers/meta-facebook/media/{Guid.NewGuid():D}/photo.jpg";
+        var (controller, db) = NewController(new KeyedStorage((key, new byte[] { 1, 2, 3, 4 })), workspaceId);
+        var media = SeedMedia(db, workspaceId, key, "image/jpeg");
+
+        var result = await controller.GetMediaFile(media.Id, null, CancellationToken.None);
+
+        var file = Assert.IsType<FileStreamResult>(result);
+        Assert.Equal("image/jpeg", file.ContentType);
+    }
+
+    /// <summary>
+    /// A random/unknown mediaId yields 404 — never a 403, a redirect, or any other response
+    /// that would confirm "this exists but you can't have it".
+    /// </summary>
+    [Fact]
+    public async Task GetMediaFile_with_unknown_mediaId_returns_404()
+    {
+        var (controller, _) = NewController(new KeyedStorage(), Guid.NewGuid());
+
+        var result = await controller.GetMediaFile(Guid.NewGuid(), null, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    /// <summary>
+    /// A mediaId that exists but belongs to a DIFFERENT workspace than the caller's current one
+    /// returns the exact same 404 as an unknown mediaId — the response never discloses that the
+    /// row exists in someone else's workspace.
+    /// </summary>
+    [Fact]
+    public async Task GetMediaFile_with_foreign_workspace_mediaId_returns_404_not_403()
+    {
+        var callerWorkspaceId = Guid.NewGuid();
+        var foreignWorkspaceId = Guid.NewGuid();
+        const string key = "media/foreign-owner.jpg";
+        var (controller, db) = NewController(new KeyedStorage((key, new byte[] { 9 })), callerWorkspaceId);
+        var media = SeedMedia(db, foreignWorkspaceId, key, "image/jpeg");
+
+        var result = await controller.GetMediaFile(media.Id, null, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    /// <summary>
+    /// <c>?variant=thumbnail</c> serves the derived thumbnail object, not the original asset.
+    /// </summary>
+    [Fact]
+    public async Task GetMediaFile_thumbnail_variant_serves_thumbnail_storage_key()
+    {
+        var workspaceId = Guid.NewGuid();
+        const string originalKey = "media/original.png";
+        const string thumbnailKey = "media/original-thumb.jpg";
+        var storage = new KeyedStorage((originalKey, new byte[] { 1 }), (thumbnailKey, new byte[] { 2 }));
+        var (controller, db) = NewController(storage, workspaceId);
+        var media = SeedMedia(db, workspaceId, originalKey, "image/png");
+        media.ThumbnailStorageKey = thumbnailKey;
+        media.ThumbnailMimeType = "image/jpeg";
+        db.SaveChanges();
+
+        var result = await controller.GetMediaFile(media.Id, "thumbnail", CancellationToken.None);
+
+        Assert.IsType<FileStreamResult>(result);
+        Assert.Equal(new[] { thumbnailKey }, storage.OpenedKeys);
+    }
+
+    /// <summary>
+    /// A mediaId with no thumbnail derivative returns 404 for the thumbnail variant even though
+    /// the original asset exists — it must not silently fall back to serving the original.
+    /// </summary>
+    [Fact]
+    public async Task GetMediaFile_thumbnail_variant_without_derivative_returns_404()
+    {
+        var workspaceId = Guid.NewGuid();
+        const string originalKey = "media/no-thumb.png";
+        var (controller, db) = NewController(new KeyedStorage((originalKey, new byte[] { 1 })), workspaceId);
+        var media = SeedMedia(db, workspaceId, originalKey, "image/png");
+
+        var result = await controller.GetMediaFile(media.Id, "thumbnail", CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    private static (MediaController Controller, AppDbContext Db) NewController(IMediaStorageProvider storage, Guid workspaceId)
     {
         var mediaService = new Mock<IMediaService>();
         mediaService.Setup(m => m.StorageProvider).Returns(storage);
@@ -48,95 +182,49 @@ public class MediaPublicFetchTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
 
-        return new MediaController(
+        var workspaceProvider = new Mock<ICurrentWorkspaceProvider>();
+        workspaceProvider.Setup(w => w.GetCurrentWorkspaceIdAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(workspaceId);
+
+        var controller = new MediaController(
             mediaService.Object,
             new Mock<IMediaUploadService>().Object,
             new Mock<IMediaValidationService>().Object,
             new Mock<IMediaValidationGate>().Object,
-            new Mock<ICurrentWorkspaceProvider>().Object,
+            workspaceProvider.Object,
             db,
             NullLogger<MediaController>.Instance)
         {
-            // GetFile writes response headers (nosniff / content-disposition); give it a context.
+            // GetMediaFile writes response headers (nosniff / content-disposition); give it a context.
             ControllerContext = new ControllerContext
             {
-                HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext(),
+                HttpContext = new DefaultHttpContext(),
             },
         };
+        return (controller, db);
     }
 
-    /// <summary>
-    /// H4: holding the exact key streams the bytes anonymously. This is the property
-    /// that makes Meta publishing work — and the one we accept as the residual risk.
-    /// </summary>
-    [Fact]
-    public async Task GetFile_with_exact_storage_key_streams_bytes()
+    private static Media SeedMedia(AppDbContext db, Guid workspaceId, string storageKey, string contentType)
     {
-        var key = $"users/{Guid.NewGuid():D}/workspaces/{Guid.NewGuid():D}/providers/meta-facebook/media/{Guid.NewGuid():D}/photo.jpg";
-        var bytes = new byte[] { 1, 2, 3, 4 };
-        var storage = new KeyedStorage((key, bytes));
-
-        var result = await NewController(storage).GetFile(key, CancellationToken.None);
-
-        var file = Assert.IsType<FileStreamResult>(result);
-        Assert.Equal("image/jpeg", file.ContentType);
+        var media = new Media
+        {
+            Id = Guid.NewGuid(),
+            WorkspaceId = workspaceId,
+            StorageProvider = "local-disk",
+            StorageKey = storageKey,
+            ContentType = contentType,
+            Status = MediaUploadStatus.Uploaded,
+            CreatedAt = DateTime.UtcNow,
+            UploadedAt = DateTime.UtcNow,
+        };
+        db.Media.Add(media);
+        db.SaveChanges();
+        return media;
     }
 
     /// <summary>
-    /// H5: a random/unknown key yields 404 — never a 403, a redirect, or any other
-    /// response that would confirm "this key exists but you can't have it" and turn
-    /// the route into an oracle.
-    /// </summary>
-    [Fact]
-    public async Task GetFile_with_unknown_key_returns_404()
-    {
-        // Storage knows about ONE real key; the caller guesses a different GUID.
-        var realKey = $"media/{Guid.NewGuid():N}.jpg";
-        var storage = new KeyedStorage((realKey, new byte[] { 9 }));
-
-        var guessedKey = $"media/{Guid.NewGuid():N}.jpg";
-        var result = await NewController(storage).GetFile(guessedKey, CancellationToken.None);
-
-        Assert.IsType<NotFoundObjectResult>(result);
-    }
-
-    /// <summary>
-    /// H5 (boundary): an empty/whitespace key is rejected outright — the catch-all
-    /// route must not be coaxed into serving a directory root.
-    /// </summary>
-    [Theory]
-    [InlineData("")]
-    [InlineData("   ")]
-    public async Task GetFile_with_blank_key_returns_404(string key)
-    {
-        var storage = new KeyedStorage();
-
-        var result = await NewController(storage).GetFile(key, CancellationToken.None);
-
-        Assert.IsType<NotFoundObjectResult>(result);
-    }
-
-    /// <summary>
-    /// H6: the public route serves exactly the one object named by the key and nothing
-    /// else. There is no list/enumerate path: GetFile asks the provider for a single
-    /// key via OpenReadAsync, so a caller can never coax a directory listing out of it.
-    /// </summary>
-    [Fact]
-    public async Task GetFile_requests_only_the_named_key_and_never_enumerates()
-    {
-        var key = $"media/{Guid.NewGuid():N}.png";
-        var storage = new KeyedStorage((key, new byte[] { 7, 7 }));
-
-        await NewController(storage).GetFile(key, CancellationToken.None);
-
-        // Exactly one read, for exactly the key the caller named.
-        Assert.Equal(new[] { key }, storage.OpenedKeys);
-    }
-
-    /// <summary>
-    /// Minimal storage double keyed by exact storage key. Unknown keys return null
-    /// (the contract <see cref="MediaController.GetFile"/> turns into a 404). Records
-    /// every key it was asked to open so a test can prove no extra/enumerating reads.
+    /// Minimal storage double keyed by exact storage key. Unknown keys return null.
+    /// Records every key it was asked to open so a test can prove no extra/enumerating reads.
     /// </summary>
     private sealed class KeyedStorage : IMediaStorageProvider
     {

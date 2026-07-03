@@ -10,7 +10,7 @@ import { createUploadClientId } from '../utils/uploadClientId'
 import './MediaUpload.css'
 
 interface MediaUploadProps {
-  onUploadComplete: (storageKey: string, mediaType: MediaType) => void
+  onUploadComplete: (mediaId: string, previewUrl: string, mediaType: MediaType) => void
   onUploadError: (error: string) => void
   onClear: () => void
   onUploadingChange?: (isUploading: boolean) => void
@@ -40,7 +40,7 @@ export function MediaUpload({
   const [progress, setProgress] = useState(0)
   const [fileName, setFileName] = useState<string | null>(null)
   const [mediaType, setMediaType] = useState<'image' | 'video' | null>(null)
-  const [uploadedStorageKey, setUploadedStorageKey] = useState<string | null>(null)
+  const [uploadedMediaId, setUploadedMediaId] = useState<string | null>(null)
   const [uploadedMimeType, setUploadedMimeType] = useState<string | null>(null)
   const [validationStatus, setValidationStatus] = useState<ValidationStatus>('Pending')
   const [validationErrors, setValidationErrors] = useState<MediaValidationError[]>([])
@@ -76,7 +76,7 @@ export function MediaUpload({
 
   // Validate/re-validate when platform changes (including first selection after upload)
   useEffect(() => {
-    if (uploadedStorageKey && uploadedMimeType && selectedPlatform) {
+    if (uploadedMediaId && uploadedMimeType && selectedPlatform) {
       revalidateMedia()
     }
   }, [selectedPlatform])
@@ -88,7 +88,7 @@ export function MediaUpload({
   }, [])
 
   const revalidateMedia = async () => {
-    if (!uploadedStorageKey || !uploadedMimeType || !selectedPlatform) return
+    if (!uploadedMediaId || !uploadedMimeType || !selectedPlatform) return
 
     const uploadOwnerKey = beginUploadSession()
     try {
@@ -103,7 +103,7 @@ export function MediaUpload({
       }
 
       const result = await mediaApi.validateMedia({
-        storageKey: uploadedStorageKey,
+        mediaId: uploadedMediaId,
         mimeType: uploadedMimeType,
         platform: platformMap[selectedPlatform] as Platform,
         placement: placement,
@@ -187,7 +187,7 @@ export function MediaUpload({
     const uploadOwnerKey = beginUploadSession()
     setProgress(0)
     setNeutralValidationState(uploadOwnerKey)
-    setUploadedStorageKey(null)
+    setUploadedMediaId(null)
     setUploadedMimeType(null)
 
     const error = await validateFile(file)
@@ -223,7 +223,7 @@ export function MediaUpload({
       setProgress(0)
 
       // Step 1: server issues a presigned PUT URL and creates a Media row (PendingUpload).
-      const { uploadUrl, storageKey, mediaId, mediaType: returnedMediaType } = await mediaApi.initUpload({
+      const { uploadUrl, mediaId, mediaType: returnedMediaType, previewUrl } = await mediaApi.initUpload({
         fileName: file.name,
         contentType: file.type,
         sizeBytes: file.size,
@@ -240,12 +240,12 @@ export function MediaUpload({
       if (isStaleUploadOwner(uploadOwnerKey)) return
 
       // Step 3: server verifies the object landed in storage and flips Media row to Uploaded.
-      await mediaApi.completeUpload({ mediaId })
+      const completeResult = await mediaApi.completeUpload({ mediaId })
       if (isStaleUploadOwner(uploadOwnerKey)) return
       setProgress(100)
 
       // Store upload info for validation
-      setUploadedStorageKey(storageKey)
+      setUploadedMediaId(mediaId)
       setUploadedMimeType(file.type)
 
       // If platform was selected, trigger validation
@@ -260,7 +260,7 @@ export function MediaUpload({
           }
 
           const validationResult = await mediaApi.validateMedia({
-            storageKey: storageKey,
+            mediaId,
             mimeType: file.type,
             platform: platformMap[selectedPlatform] as Platform,
             placement: placement,
@@ -283,7 +283,7 @@ export function MediaUpload({
       }
 
       if (isStaleUploadOwner(uploadOwnerKey)) return
-      onUploadComplete(storageKey, returnedMediaType as MediaType)
+      onUploadComplete(mediaId, completeResult.previewUrl || previewUrl, returnedMediaType as MediaType)
     } catch (err) {
       if (isStaleUploadOwner(uploadOwnerKey)) return
       console.error('Upload failed:', err)
@@ -309,7 +309,7 @@ export function MediaUpload({
     setFileName(null)
     setMediaType(null)
     setProgress(0)
-    setUploadedStorageKey(null)
+    setUploadedMediaId(null)
     setUploadedMimeType(null)
     setValidationStatus('Pending')
     setValidationErrors([])

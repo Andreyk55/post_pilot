@@ -97,6 +97,27 @@ public class InstagramAutoPromotionTests : IDisposable
             workspace.Object, new PassThroughMediaGate(), NullLogger<PostsController>.Instance);
     }
 
+    private Media SeedWorkspaceMedia(string storageKey)
+    {
+        var media = new Media
+        {
+            Id = Guid.NewGuid(),
+            WorkspaceId = WorkspaceId,
+            StorageProvider = "local-disk",
+            Bucket = "",
+            StorageKey = storageKey,
+            OriginalFileName = "promo.jpg",
+            ContentType = "image/jpeg",
+            SizeBytes = 1024,
+            Status = MediaUploadStatus.Uploaded,
+            CreatedAt = DateTime.UtcNow,
+            UploadedAt = DateTime.UtcNow,
+        };
+        _db.Media.Add(media);
+        _db.SaveChanges();
+        return media;
+    }
+
     // ─── seed helpers ───────────────────────────────────────────────────────────
 
     /// <summary>
@@ -215,15 +236,17 @@ public class InstagramAutoPromotionTests : IDisposable
 
         var igRow = await _db.ConnectedInstagramAccounts.SingleAsync(i => i.WorkspaceId == WorkspaceId);
 
+        var media = SeedWorkspaceMedia("media/promoted-ig.jpg");
         var controller = MakePostsController();
         var request = new CreatePostRequest(
             Content: "hello instagram",
-            MediaUrl: "https://example.com/pic.jpg",
+            MediaUrl: null,
             MediaType: MediaType.Image,
             Platform: Platform.Instagram,
             ScheduledAt: DateTime.UtcNow.AddHours(1),
             PostType: PostType.Feed,
-            TargetInstagramAccountId: igRow.Id);
+            TargetInstagramAccountId: igRow.Id,
+            MediaId: media.Id);
 
         var result = await controller.CreatePost(request);
 

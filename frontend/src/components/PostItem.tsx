@@ -208,7 +208,7 @@ export function PostItem({ post, cachedDetails, onDetailsFetched }: PostItemProp
           {post.mediaItems && post.mediaItems.length >= 2 && (
             <div className="post-carousel-thumbnail">
               <MediaThumbnail
-                storageKey={post.mediaItems[0].mediaUrl}
+                src={post.mediaItems[0].mediaUrl}
                 mediaType="Image"
                 alt=""
               />
@@ -220,7 +220,7 @@ export function PostItem({ post, cachedDetails, onDetailsFetched }: PostItemProp
           {/* Single image */}
           {!(post.mediaItems && post.mediaItems.length >= 2) && post.mediaUrl && getEffectiveMediaType(post) === 'Image' && (
             <MediaThumbnail
-              storageKey={post.mediaUrl}
+              src={post.mediaUrl}
               mediaType="Image"
               alt=""
             />
@@ -229,10 +229,9 @@ export function PostItem({ post, cachedDetails, onDetailsFetched }: PostItemProp
           {!(post.mediaItems && post.mediaItems.length >= 2) && post.mediaUrl && getEffectiveMediaType(post) === 'Video' && (
             <div className="post-video-thumbnail">
               <MediaThumbnail
-                storageKey={post.mediaUrl}
+                src={post.mediaUrl}
                 mediaType="Video"
                 thumbnailUrl={post.selectedThumbnailUrl ?? post.thumbnail?.url}
-                thumbnailStorageKey={post.thumbnail?.storageKey}
               />
               <span className="video-badge">{getMediaLabel(post)}</span>
             </div>

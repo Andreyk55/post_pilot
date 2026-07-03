@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { getMediaUrl } from '../api/media'
 
 /**
  * Fail-safe media preview thumbnail for post lists (My Posts / Scheduled).
@@ -12,14 +11,13 @@ import { getMediaUrl } from '../api/media'
  *    play-icon placeholder. (Real frame extraction is deliberately out of scope.)
  *  - Missing key / unknown type: render nothing.
  *
- * `thumbnailUrl` (e.g. a user-selected video thumbnail) is an already-resolved
- * absolute/relative URL and is rendered directly as an image when provided for a
- * video. `thumbnailStorageKey` is the backend-generated private thumbnail object
- * and is resolved through the same media proxy as image previews.
+ * `thumbnailUrl` (e.g. a user-selected or backend-generated video thumbnail) is an
+ * already-resolved absolute/relative URL and is rendered directly as an image when
+ * provided for a video.
  */
 interface MediaThumbnailProps {
-  /** Raw storage key (or external URL) for the media; resolved via getMediaUrl. */
-  storageKey: string | null | undefined
+  /** Already-resolved media preview URL. */
+  src: string | null | undefined
   mediaType: 'None' | 'Image' | 'Video'
   className?: string
   variant?: 'default' | 'scheduledCard'
@@ -27,21 +25,17 @@ interface MediaThumbnailProps {
   alt?: string
   /** Pre-resolved thumbnail URL (e.g. selectedThumbnailUrl) for videos. */
   thumbnailUrl?: string | null
-  /** Backend-generated thumbnail storage key for videos. */
-  thumbnailStorageKey?: string | null
 }
 
 export function MediaThumbnail({
-  storageKey,
+  src,
   mediaType,
   className,
   variant = 'default',
   alt = '',
   thumbnailUrl,
-  thumbnailStorageKey,
 }: MediaThumbnailProps) {
   const [imageBroken, setImageBroken] = useState(false)
-  const resolvedThumbnailUrl = thumbnailUrl || getMediaUrl(thumbnailStorageKey)
   const classes = [
     className,
     variant === 'scheduledCard' ? 'media-thumbnail--scheduled-card' : null,
@@ -49,10 +43,9 @@ export function MediaThumbnail({
 
   useEffect(() => {
     setImageBroken(false)
-  }, [resolvedThumbnailUrl, storageKey, mediaType])
+  }, [thumbnailUrl, src, mediaType])
 
   if (mediaType === 'Image') {
-    const src = getMediaUrl(storageKey)
     if (!src || imageBroken) {
       return variant === 'scheduledCard' ? <ImagePlaceholder className={classes || undefined} /> : null
     }
@@ -67,11 +60,11 @@ export function MediaThumbnail({
   }
 
   if (mediaType === 'Video') {
-    if (resolvedThumbnailUrl && !imageBroken) {
+    if (thumbnailUrl && !imageBroken) {
       return (
         <div className={['media-thumbnail-video-frame', classes].filter(Boolean).join(' ')}>
           <img
-            src={resolvedThumbnailUrl}
+            src={thumbnailUrl}
             alt=""
             onError={() => setImageBroken(true)}
           />

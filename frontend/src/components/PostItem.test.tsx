@@ -46,11 +46,12 @@ describe('PostItem media previews', () => {
   it('renders a video thumbnail image with a centered play overlay when thumbnail exists', () => {
     const markup = renderPostItem({
       ...basePost,
-      mediaUrl: 'users/u/workspaces/w/providers/meta-facebook/media/m/clip.mp4',
+      mediaUrl: '/api/media/11111111-1111-1111-1111-111111111111/file',
+      mediaId: '11111111-1111-1111-1111-111111111111',
       mediaType: 'Video',
       thumbnail: {
-        storageKey: 'users/u/workspaces/w/providers/meta-facebook/media/m/thumbnail.jpg',
-        url: null,
+        mediaId: '11111111-1111-1111-1111-111111111111',
+        url: '/api/media/11111111-1111-1111-1111-111111111111/file?variant=thumbnail',
         mimeType: 'image/jpeg',
         width: 320,
         height: 180,
@@ -62,13 +63,14 @@ describe('PostItem media previews', () => {
     expect(markup).toContain('media-thumbnail-video-frame')
     expect(markup).toContain('media-thumbnail-video-overlay')
     expect(markup).toContain('video-play-icon')
-    expect(markup).toContain('/api/media/files/users/u/workspaces/w/providers/meta-facebook/media/m/thumbnail.jpg')
+    expect(markup).toContain('/api/media/11111111-1111-1111-1111-111111111111/file?variant=thumbnail')
   })
 
   it('renders the generic video placeholder with play icon when no thumbnail exists', () => {
     const markup = renderPostItem({
       ...basePost,
-      mediaUrl: 'users/u/workspaces/w/providers/meta-facebook/media/m/clip.mp4',
+      mediaUrl: '/api/media/11111111-1111-1111-1111-111111111111/file',
+      mediaId: '11111111-1111-1111-1111-111111111111',
       mediaType: 'Video',
     })
 
@@ -80,12 +82,13 @@ describe('PostItem media previews', () => {
   it('renders image post without play overlay', () => {
     const markup = renderPostItem({
       ...basePost,
-      mediaUrl: 'users/u/workspaces/w/providers/meta-facebook/media/m/photo.jpg',
+      mediaUrl: '/api/media/11111111-1111-1111-1111-111111111111/file',
+      mediaId: '11111111-1111-1111-1111-111111111111',
       mediaType: 'Image',
     })
 
     expect(markup).toContain('<img')
-    expect(markup).toContain('/api/media/files/users/u/workspaces/w/providers/meta-facebook/media/m/photo.jpg')
+    expect(markup).toContain('/api/media/11111111-1111-1111-1111-111111111111/file')
     expect(markup).not.toContain('media-thumbnail-video-overlay')
     expect(markup).not.toContain('media-thumbnail-video-placeholder')
   })

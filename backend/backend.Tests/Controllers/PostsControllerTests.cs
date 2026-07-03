@@ -139,6 +139,31 @@ public class PostsControllerTests : IDisposable
         return page;
     }
 
+    private async Task<Media> CreateUploadedMedia(MediaType mediaType)
+    {
+        var (fileName, contentType) = mediaType switch
+        {
+            MediaType.Video => ("video.mp4", "video/mp4"),
+            _ => ("image.jpg", "image/jpeg"),
+        };
+
+        var media = new Media
+        {
+            Id = Guid.NewGuid(),
+            WorkspaceId = TestWorkspaceId,
+            StorageProvider = "local-disk",
+            StorageKey = $"users/test/workspaces/{TestWorkspaceId:D}/providers/meta-facebook/media/{Guid.NewGuid():D}/{fileName}",
+            ContentType = contentType,
+            Status = MediaUploadStatus.Uploaded,
+            CreatedAt = DateTime.UtcNow,
+            UploadedAt = DateTime.UtcNow,
+        };
+
+        _context.Media.Add(media);
+        await _context.SaveChangesAsync();
+        return media;
+    }
+
     #region CreatePost Platform-Specific Validation Tests
 
     [Theory]
@@ -173,14 +198,16 @@ public class PostsControllerTests : IDisposable
     public async Task CreatePost_Instagram_TextAtExactMaxLength_Succeeds()
     {
         var igAccount = await CreateTestInstagramAccount();
+        var media = await CreateUploadedMedia(MediaType.Image);
         var content = new string('x', 2200);
         var request = new CreatePostRequest(
             Content: content,
-            MediaUrl: "https://example.com/image.jpg",
+            MediaUrl: null,
             MediaType: MediaType.Image,
             Platform: Platform.Instagram,
             ScheduledAt: DateTime.UtcNow.AddHours(1),
-            TargetInstagramAccountId: igAccount.Id);
+            TargetInstagramAccountId: igAccount.Id,
+            MediaId: media.Id);
 
         var result = await _controller.CreatePost(request);
 
@@ -220,13 +247,15 @@ public class PostsControllerTests : IDisposable
     {
         var content = new string('x', 2201);
         var igAccount = await CreateTestInstagramAccount();
+        var media = await CreateUploadedMedia(MediaType.Image);
         var request = new CreatePostRequest(
             Content: content,
-            MediaUrl: "https://example.com/image.jpg",
+            MediaUrl: null,
             MediaType: MediaType.Image,
             Platform: Platform.Instagram,
             ScheduledAt: DateTime.UtcNow.AddHours(1),
-            TargetInstagramAccountId: igAccount.Id);
+            TargetInstagramAccountId: igAccount.Id,
+            MediaId: media.Id);
 
         var result = await _controller.CreatePost(request);
 
@@ -249,14 +278,16 @@ public class PostsControllerTests : IDisposable
         Guid? targetPageId = platform == Platform.Facebook
             ? (await CreateTestFacebookPage()).Id
             : null;
+        var media = await CreateUploadedMedia(MediaType.Image);
 
         var request = new CreatePostRequest(
             Content: null!,
-            MediaUrl: "https://example.com/image.jpg",
+            MediaUrl: null,
             MediaType: MediaType.Image,
             Platform: platform,
             ScheduledAt: DateTime.UtcNow.AddHours(1),
-            TargetPageId: targetPageId);
+            TargetPageId: targetPageId,
+            MediaId: media.Id);
 
         var result = await _controller.CreatePost(request);
 
@@ -271,12 +302,14 @@ public class PostsControllerTests : IDisposable
     [Fact]
     public async Task CreatePost_Instagram_RequiresTargetAccount()
     {
+        var media = await CreateUploadedMedia(MediaType.Image);
         var request = new CreatePostRequest(
             Content: "Test caption",
-            MediaUrl: "https://example.com/image.jpg",
+            MediaUrl: null,
             MediaType: MediaType.Image,
             Platform: Platform.Instagram,
-            ScheduledAt: DateTime.UtcNow.AddHours(1));
+            ScheduledAt: DateTime.UtcNow.AddHours(1),
+            MediaId: media.Id);
 
         var result = await _controller.CreatePost(request);
 
@@ -311,14 +344,16 @@ public class PostsControllerTests : IDisposable
         // added after this test originally asserted rejection). Test renamed + flipped
         // to match current behaviour.
         var igAccount = await CreateTestInstagramAccount();
+        var media = await CreateUploadedMedia(MediaType.Video);
 
         var request = new CreatePostRequest(
             Content: "Test caption",
-            MediaUrl: "https://example.com/video.mp4",
+            MediaUrl: null,
             MediaType: MediaType.Video,
             Platform: Platform.Instagram,
             ScheduledAt: DateTime.UtcNow.AddHours(1),
-            TargetInstagramAccountId: igAccount.Id);
+            TargetInstagramAccountId: igAccount.Id,
+            MediaId: media.Id);
 
         var result = await _controller.CreatePost(request);
 
@@ -351,14 +386,16 @@ public class PostsControllerTests : IDisposable
     public async Task CreatePost_Instagram_WithImage_Succeeds()
     {
         var igAccount = await CreateTestInstagramAccount();
+        var media = await CreateUploadedMedia(MediaType.Image);
 
         var request = new CreatePostRequest(
             Content: "Test caption #hashtag",
-            MediaUrl: "https://example.com/image.jpg",
+            MediaUrl: null,
             MediaType: MediaType.Image,
             Platform: Platform.Instagram,
             ScheduledAt: DateTime.UtcNow.AddHours(1),
-            TargetInstagramAccountId: igAccount.Id);
+            TargetInstagramAccountId: igAccount.Id,
+            MediaId: media.Id);
 
         var result = await _controller.CreatePost(request);
 
@@ -372,13 +409,15 @@ public class PostsControllerTests : IDisposable
     [Fact]
     public async Task CreatePost_Instagram_DisconnectedAccount_ReturnsConflict()
     {
+        var media = await CreateUploadedMedia(MediaType.Image);
         var request = new CreatePostRequest(
             Content: "Test caption",
-            MediaUrl: "https://example.com/image.jpg",
+            MediaUrl: null,
             MediaType: MediaType.Image,
             Platform: Platform.Instagram,
             ScheduledAt: DateTime.UtcNow.AddHours(1),
-            TargetInstagramAccountId: Guid.NewGuid()); // Non-existent account
+            TargetInstagramAccountId: Guid.NewGuid(), // Non-existent account
+            MediaId: media.Id);
 
         var result = await _controller.CreatePost(request);
 

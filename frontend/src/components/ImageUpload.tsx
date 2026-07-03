@@ -3,7 +3,7 @@ import { mediaApi } from '../api/media'
 import './ImageUpload.css'
 
 interface ImageUploadProps {
-  onUploadComplete: (storageKey: string) => void
+  onUploadComplete: (mediaId: string, previewUrl: string) => void
   onUploadError: (error: string) => void
   onClear: () => void
   onUploadingChange?: (isUploading: boolean) => void
@@ -53,7 +53,7 @@ export function ImageUpload({ onUploadComplete, onUploadError, onClear, onUpload
       setProgress(10)
 
       // Step 1: server issues a presigned PUT URL and creates a Media row (PendingUpload).
-      const { uploadUrl, storageKey, mediaId } = await mediaApi.initUpload({
+      const { uploadUrl, mediaId, previewUrl } = await mediaApi.initUpload({
         fileName: file.name,
         contentType: file.type,
         sizeBytes: file.size,
@@ -66,10 +66,10 @@ export function ImageUpload({ onUploadComplete, onUploadError, onClear, onUpload
       setProgress(80)
 
       // Step 3: server verifies the object landed in storage and flips Media row to Uploaded.
-      await mediaApi.completeUpload({ mediaId })
+      const completeResult = await mediaApi.completeUpload({ mediaId })
       setProgress(100)
 
-      onUploadComplete(storageKey)
+      onUploadComplete(mediaId, completeResult.previewUrl || previewUrl)
     } catch (err) {
       console.error('Upload failed:', err)
       onUploadError(err instanceof Error ? err.message : 'Failed to upload image. Please try again.')

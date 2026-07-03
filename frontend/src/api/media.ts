@@ -6,39 +6,19 @@ const API_URL = config.apiBaseUrl
 export type MediaType = 'None' | 'Image' | 'Video'
 
 /**
- * Generates a URL for viewing/downloading media from its storage key.
- *
- * The backend route is a catch-all that preserves the full key (including any
- * "media/" or "users/..." prefix), so we do NOT slice the prefix here — we only
- * encode each segment.
- *
- * URL base resolution:
- *  - When `apiBaseUrl` is an ABSOLUTE url (e.g. "https://post-pilot.cloud-ip.cc/api"
- *    in production, where the SPA and API live on different origins), we anchor the
- *    media URL to it → "https://post-pilot.cloud-ip.cc/api/media/files/{key}".
- *    Without this, a relative "/api/..." resolves against the Vercel frontend origin
- *    (which has no such route) and every thumbnail 404s.
- *  - When `apiBaseUrl` is empty or relative (local/dev, where Vite proxies "/api"),
- *    we keep the relative "/api/media/files/{key}" so same-origin/proxy still works.
- *
- * `apiBaseUrl` already ends in "/api" (e.g. ".../api"), so the media path is appended
- * as "/media/files/..." — we must NOT prepend another "/api".
+ * Generates the authenticated app media URL for a mediaId.
  */
-export function getMediaUrl(storageKey: string | null | undefined): string | null {
-  if (!storageKey) return null
-
-  // Preserve "/" between segments; encode each piece.
-  const encoded = storageKey.split('/').map(encodeURIComponent).join('/')
+export function getMediaUrl(mediaId: string | null | undefined, variant?: 'thumbnail'): string | null {
+  if (!mediaId) return null
+  const encodedMediaId = encodeURIComponent(mediaId)
+  const query = variant ? `?variant=${encodeURIComponent(variant)}` : ''
 
   const base = (API_URL ?? '').trim()
   if (isAbsoluteUrl(base)) {
-    // Append to the configured API base (already includes "/api"). Trim a trailing
-    // slash so we don't produce a "//media" path.
-    return `${base.replace(/\/+$/, '')}/media/files/${encoded}`
+    return `${base.replace(/\/+$/, '')}/media/${encodedMediaId}/file${query}`
   }
 
-  // Local/dev: relative path proxied to the API by Vite.
-  return `/api/media/files/${encoded}`
+  return `/api/media/${encodedMediaId}/file${query}`
 }
 
 /** True for an http(s) absolute URL — i.e. a cross-origin API base we must anchor to. */
@@ -56,21 +36,6 @@ export function getMediaTypeFromFile(filename: string): MediaType {
   return 'None'
 }
 
-export interface GenerateUploadUrlRequest {
-  fileName: string
-  contentType: string
-}
-
-export interface GenerateUploadUrlResponse {
-  uploadUrl: string
-  storageKey: string
-  mediaType: MediaType
-  allowedImageTypes: string[]
-  allowedVideoTypes: string[]
-  maxImageFileSizeBytes: number
-  maxVideoFileSizeBytes: number
-}
-
 export interface InitUploadRequest {
   fileName: string
   contentType: string
@@ -80,12 +45,12 @@ export interface InitUploadRequest {
 
 export interface InitUploadResponse {
   mediaId: string
-  storageKey: string
   uploadUrl: string
   method: 'PUT'
   contentType: string
   expiresAt: string
   mediaType: MediaType
+  previewUrl: string
 }
 
 type MediaApiProblemDetails = {
@@ -101,10 +66,10 @@ export interface CompleteUploadRequest {
 
 export interface CompleteUploadResponse {
   mediaId: string
-  storageKey: string
   sizeBytes: number
   contentType: string
   uploadedAt: string
+  previewUrl: string
 }
 
 export interface MediaConstraintsResponse {
@@ -157,14 +122,14 @@ export interface MediaValidationResult {
 }
 
 export interface ValidateMediaRequest {
-  storageKey: string
+  mediaId: string
   mimeType: string
   platform: Platform
   placement: Placement
 }
 
 export interface ExtractMetadataRequest {
-  storageKey: string
+  mediaId: string
   mimeType: string
 }
 
@@ -184,19 +149,6 @@ export interface MediaValidationRuleDto {
 }
 
 export const mediaApi = {
-  async generateUploadUrl(request: GenerateUploadUrlRequest): Promise<GenerateUploadUrlResponse> {
-    const response = await fetch(`${API_URL}/media/upload-url`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
-    })
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Failed to generate upload URL' }))
-      throw new Error(error.error || 'Failed to generate upload URL')
-    }
-    return response.json()
-  },
-
   async getConstraints(): Promise<MediaConstraintsResponse> {
     const response = await fetch(`${API_URL}/media/constraints`)
     if (!response.ok) {
@@ -305,7 +257,7 @@ export const mediaApi = {
   // ============================================
 
   /**
-   * Validates a media file by its storage key for a specific platform and placement.
+   * Validates a media file by its mediaId for a specific platform and placement.
    * This is a stateless operation - no database record is created.
    */
   async validateMedia(request: ValidateMediaRequest): Promise<MediaValidationResult> {
@@ -322,7 +274,7 @@ export const mediaApi = {
   },
 
   /**
-   * Extracts metadata from a media file by its storage key.
+   * Extracts metadata from a media file by its mediaId.
    * This is a stateless operation - no database record is created.
    */
   async extractMetadata(request: ExtractMetadataRequest): Promise<ExtractedMediaMetadata> {

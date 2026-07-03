@@ -23,7 +23,7 @@ import './MultiMediaUpload.css'
 
 export interface UploadedMediaItem {
   id: string
-  storageKey: string
+  mediaId: string
   mediaType: MediaType
   fileName: string
   previewUrl: string
@@ -269,7 +269,7 @@ export function MultiMediaUpload({
 
       try {
         // Step 1: server issues a presigned PUT URL and creates a Media row (PendingUpload).
-        const { uploadUrl, storageKey, mediaId, mediaType } = await mediaApi.initUpload({
+        const { uploadUrl, mediaId, mediaType, previewUrl } = await mediaApi.initUpload({
           fileName: file.name,
           contentType: file.type,
           sizeBytes: file.size,
@@ -287,11 +287,7 @@ export function MultiMediaUpload({
         if (isStaleUploadOwner(uploadOwnerKey)) return
 
         // Step 3: server verifies the object landed in storage and flips Media row to Uploaded.
-        await mediaApi.completeUpload({ mediaId })
-        if (isStaleUploadOwner(uploadOwnerKey)) return
-
-        // Create preview
-        const previewUrl = await createPreview(file)
+        const completeResult = await mediaApi.completeUpload({ mediaId })
         if (isStaleUploadOwner(uploadOwnerKey)) return
 
         // Validate on server
@@ -308,7 +304,7 @@ export function MultiMediaUpload({
           }
           try {
             const result = await mediaApi.validateMedia({
-              storageKey: storageKey,
+              mediaId,
               mimeType: file.type,
               platform: platformMap[selectedPlatform] as Platform,
               placement: 'Feed',
@@ -324,10 +320,10 @@ export function MultiMediaUpload({
 
         newItems.push({
           id: createUploadClientId(),
-          storageKey,
+          mediaId,
           mediaType: mediaType as MediaType,
           fileName: file.name,
-          previewUrl,
+          previewUrl: completeResult.previewUrl || previewUrl,
           validationStatus,
           validationErrors,
           validationWarnings,
@@ -356,14 +352,6 @@ export function MultiMediaUpload({
     replacePendingUploads([])
     setUploading(false)
     onUploadingChange?.(false)
-  }
-
-  const createPreview = (file: File): Promise<string> => {
-    return new Promise((resolve) => {
-      const reader = new FileReader()
-      reader.onload = (e) => resolve(e.target?.result as string)
-      reader.readAsDataURL(file)
-    })
   }
 
   const handleRemove = (id: string) => {

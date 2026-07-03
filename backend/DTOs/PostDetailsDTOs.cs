@@ -1,7 +1,13 @@
 namespace PostPilot.Api.DTOs;
 
+/// <summary>
+/// Frontend-safe thumbnail reference. Deliberately carries <see cref="MediaId"/> (the
+/// Media row's id) instead of a StorageKey — the frontend never learns the raw storage
+/// path; <see cref="Url"/> is an authenticated <c>/api/media/{mediaId}/file?variant=thumbnail</c>
+/// preview URL.
+/// </summary>
 public record MediaThumbnailDto(
-    string? StorageKey,
+    Guid? MediaId,
     string? Url,
     string? MimeType,
     int? Width,
@@ -25,9 +31,11 @@ public record PostEngagementDto(
 public record PostDetailsMediaItemDto(
     Guid Id,
     int Order,
-    string MediaUrl,
+    string? MediaUrl,
     string MediaType,
-    MediaThumbnailDto? Thumbnail = null
+    MediaThumbnailDto? Thumbnail = null,
+    /// <summary>Media row id backing this item, when resolvable. Never a StorageKey.</summary>
+    Guid? MediaId = null
 );
 
 public record PostDetailsDto(
@@ -62,5 +70,7 @@ public record PostDetailsDto(
     /// True if the post's target page/IG account is currently connected. False if it was
     /// disconnected (frontend can render a "disconnected" badge). Null if the post has no target.
     /// </summary>
-    bool? TargetConnectionActive = null
+    bool? TargetConnectionActive = null,
+    /// <summary>Media row id backing the primary MediaUrl, when resolvable. Never a StorageKey.</summary>
+    Guid? MediaId = null
 );

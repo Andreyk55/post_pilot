@@ -13,12 +13,18 @@ public enum AiMediaAction
 }
 
 /// <summary>
-/// A referenced media item for AI assistance.
+/// A referenced media item for AI assistance. The frontend should supply <see cref="MediaId"/>
+/// (the Media row id from the upload flow) rather than a raw storage key; when present, the
+/// server resolves it to the internal StorageKey scoped to the current workspace and ignores
+/// <see cref="AssetUrl"/>. <see cref="AssetUrl"/> remains for backward compatibility with
+/// existing callers that already pass an owned storage key directly (still enforced by the
+/// same workspace-ownership gate).
 /// </summary>
 public record AiMediaItemReference(
-    string AssetUrl,
+    string? AssetUrl,
     string AssetType,
-    int? Order = null
+    int? Order = null,
+    Guid? MediaId = null
 );
 
 /// <summary>

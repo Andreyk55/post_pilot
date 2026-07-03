@@ -89,7 +89,7 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
     postType: PostType
     targetPageId?: string
     targetInstagramAccountId?: string
-    mediaUrl?: string
+    mediaId?: string
     mediaType?: MediaType
     selectedThumbnailUrl?: string
     mediaItems?: CreatePostMediaItem[]
@@ -115,7 +115,7 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
           // Include targetInstagramAccountId for Instagram posts
           targetInstagramAccountId: platform === 'Instagram' ? formData.targetInstagramAccountId : undefined,
           // Include media URL and type if media was uploaded
-          mediaUrl: formData.mediaUrl,
+          mediaId: formData.mediaId,
           mediaType: formData.mediaType,
           // Include selected thumbnail URL for video posts
           selectedThumbnailUrl: formData.selectedThumbnailUrl,
@@ -160,7 +160,7 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
     postType: PostType
     targetPageId?: string
     targetInstagramAccountId?: string
-    mediaUrl?: string
+    mediaId?: string
     mediaType?: MediaType
     selectedThumbnailUrl?: string
     mediaItems?: CreatePostMediaItem[]
@@ -180,7 +180,7 @@ export function SchedulePostsPage({ onNavigate }: SchedulePostsPageProps) {
         scheduledAt,
         targetPageId: platform === 'Facebook' ? formData.targetPageId : undefined,
         targetInstagramAccountId: platform === 'Instagram' ? formData.targetInstagramAccountId : undefined,
-        mediaUrl: formData.mediaUrl,
+        mediaId: formData.mediaId,
         mediaType: formData.mediaType,
         selectedThumbnailUrl: formData.selectedThumbnailUrl,
         mediaItems: formData.postType !== 'Story' && (platform === 'Instagram' || platform === 'Facebook') ? formData.mediaItems : undefined,

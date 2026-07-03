@@ -430,7 +430,11 @@ public class FacebookMultiPhotoPostDtoTests
         Assert.Equal(0, dto.MediaItems![0].Order);
         Assert.Equal(1, dto.MediaItems![1].Order);
         Assert.Equal(2, dto.MediaItems![2].Order);
-        Assert.Equal("media/image1.jpg", dto.MediaItems![0].MediaUrl);
+        // No media lookup dictionary was supplied (test builds the Post directly, bypassing the
+        // DB-backed enrichment PostsController performs). MediaUrl values that look like storage
+        // keys are never leaked raw to the frontend — they are suppressed to null rather than
+        // passed through, so this pins the safe default rather than a real preview URL.
+        Assert.Null(dto.MediaItems![0].MediaUrl);
     }
 
     [Fact]

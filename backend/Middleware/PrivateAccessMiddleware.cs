@@ -13,7 +13,6 @@ namespace PostPilot.Api.Middleware;
 ///   /api/auth/google/callback
 ///   /api/auth/me
 ///   /api/auth/logout
-///   /api/media/files/{*storageKey}  — Meta fetches images here; no cookie
 ///   /health
 /// CORS preflight (OPTIONS) is always allowed through so the browser can
 /// negotiate cross-origin requests before sending the cookie.
@@ -22,6 +21,10 @@ namespace PostPilot.Api.Middleware;
 /// the SPA can call /api/auth/me to discover login state. The gate is still
 /// in front of the rest of the app — users must first pass the password gate
 /// before any of the Google login flow becomes reachable in the UI.
+///
+/// Media file access (GET /api/media/{mediaId}/file) is intentionally NOT on this
+/// allow-list — it requires the normal authenticated app session (see
+/// MediaController.GetMediaFile), so a caller must pass both this gate and app auth.
 /// </summary>
 public class PrivateAccessMiddleware
 {
@@ -107,8 +110,6 @@ public class PrivateAccessMiddleware
             if (string.Equals(path, allowed, StringComparison.OrdinalIgnoreCase))
                 return true;
         }
-        if (path.StartsWith("/api/media/files/", StringComparison.OrdinalIgnoreCase))
-            return true;
         // Public deletion status page polls this; no cookie required.
         if (path.StartsWith("/api/data-deletion/status/", StringComparison.OrdinalIgnoreCase))
             return true;

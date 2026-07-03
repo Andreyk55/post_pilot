@@ -349,8 +349,9 @@ export type AiMediaAction =
 export type AiAssetType = 'image' | 'video' | 'unknown'
 
 export interface AiMediaItemReference {
-  assetUrl: string
+  assetUrl?: string
   assetType: AiAssetType
+  mediaId?: string
 }
 
 export interface AiMediaRequest {

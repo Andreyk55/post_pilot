@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -85,21 +86,22 @@ public class PostCreateMediaGateTests : IDisposable
     }
 
     /// <summary>Seeds a video Media row (placeholder bytes; metadata comes from the fake extractor).</summary>
-    private string SeedVideoMedia(string storageKey, string contentType, long sizeBytes)
+    private Media SeedVideoMedia(string storageKey, string contentType, long sizeBytes)
     {
         var path = Path.Combine(Path.GetTempPath(), $"createtest_{Guid.NewGuid():N}.bin");
         File.WriteAllBytes(path, new byte[] { 0x00 });
         _tempFiles.Add(path);
         _keyToPath[storageKey] = path;
-        _db.Media.Add(new Media
+        var media = new Media
         {
             Id = Guid.NewGuid(), WorkspaceId = Ws, StorageProvider = "local-disk", Bucket = "",
             StorageKey = storageKey, OriginalFileName = Path.GetFileName(path), ContentType = contentType,
             SizeBytes = sizeBytes, Status = MediaUploadStatus.Uploaded,
             CreatedAt = DateTime.UtcNow, UploadedAt = DateTime.UtcNow,
-        });
+        };
+        _db.Media.Add(media);
         _db.SaveChanges();
-        return storageKey;
+        return media;
     }
 
     public void Dispose()
@@ -109,7 +111,7 @@ public class PostCreateMediaGateTests : IDisposable
         _db.Dispose();
     }
 
-    private string SeedMedia(string storageKey, string contentType, string format, int width, int height)
+    private Media SeedMedia(string storageKey, string contentType, string format, int width, int height)
     {
         using var image = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(width, height);
         var ext = format == "png" ? ".png" : ".jpg";
@@ -122,24 +124,25 @@ public class PostCreateMediaGateTests : IDisposable
         _tempFiles.Add(path);
         _keyToPath[storageKey] = path;
 
-        _db.Media.Add(new Media
+        var media = new Media
         {
             Id = Guid.NewGuid(), WorkspaceId = Ws, StorageProvider = "local-disk", Bucket = "",
             StorageKey = storageKey, OriginalFileName = Path.GetFileName(path), ContentType = contentType,
             SizeBytes = new FileInfo(path).Length, Status = MediaUploadStatus.Uploaded,
             CreatedAt = DateTime.UtcNow, UploadedAt = DateTime.UtcNow,
-        });
+        };
+        _db.Media.Add(media);
         _db.SaveChanges();
-        return storageKey;
+        return media;
     }
 
     /// <summary>
     /// Seeds a PNG original WITH a stored Instagram JPEG derivative, mirroring what the
     /// upload-complete flow produces. Both keys resolve to real image files.
     /// </summary>
-    private string SeedPngMediaWithDerivative(string originalKey, int width, int height, int derivW = 1080, int derivH = 1080)
+    private Media SeedPngMediaWithDerivative(string originalKey, int width, int height, int derivW = 1080, int derivH = 1080)
     {
-        SeedMedia(originalKey, "image/png", "png", width, height);
+        var originalMedia = SeedMedia(originalKey, "image/png", "png", width, height);
         var derivKey = originalKey + ".ig.jpg";
         var derivPath = Path.Combine(Path.GetTempPath(), $"createderiv_{Guid.NewGuid():N}.jpg");
         using (var img = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(derivW, derivH))
@@ -156,7 +159,7 @@ public class PostCreateMediaGateTests : IDisposable
         media.InstagramImageHeight = derivH;
         media.InstagramImageGeneratedAt = DateTime.UtcNow;
         _db.SaveChanges();
-        return originalKey;
+        return originalMedia;
     }
 
     private Guid SeedFacebookPage()
@@ -192,11 +195,11 @@ public class PostCreateMediaGateTests : IDisposable
     public async Task CreatePost_FacebookPng_IsAccepted()
     {
         var pageId = SeedFacebookPage();
-        var key = SeedMedia("fb-png", "image/png", "png", 1200, 630);
+        var media = SeedMedia("fb-png", "image/png", "png", 1200, 630);
 
         var req = new CreatePostRequest(
-            Content: "hi", MediaUrl: key, MediaType: MediaType.Image, Platform: Platform.Facebook,
-            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetPageId: pageId);
+            Content: "hi", MediaUrl: null, MediaType: MediaType.Image, Platform: Platform.Facebook,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetPageId: pageId, MediaId: media.Id);
 
         var result = await _controller.CreatePost(req);
 
@@ -209,11 +212,11 @@ public class PostCreateMediaGateTests : IDisposable
     public async Task CreatePost_InstagramPng_IsRejected()
     {
         var igId = SeedInstagramAccount();
-        var key = SeedMedia("ig-png", "image/png", "png", 1080, 1080);
+        var media = SeedMedia("ig-png", "image/png", "png", 1080, 1080);
 
         var req = new CreatePostRequest(
-            Content: "hi", MediaUrl: key, MediaType: MediaType.Image, Platform: Platform.Instagram,
-            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId);
+            Content: "hi", MediaUrl: null, MediaType: MediaType.Image, Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId, MediaId: media.Id);
 
         var result = await _controller.CreatePost(req);
 
@@ -235,11 +238,11 @@ public class PostCreateMediaGateTests : IDisposable
     public async Task CreatePost_InstagramPngWithValidDerivative_IsAccepted()
     {
         var igId = SeedInstagramAccount();
-        var key = SeedPngMediaWithDerivative("ig-png-ok", 2000, 2000);
+        var media = SeedPngMediaWithDerivative("ig-png-ok", 2000, 2000);
 
         var req = new CreatePostRequest(
-            Content: "hi", MediaUrl: key, MediaType: MediaType.Image, Platform: Platform.Instagram,
-            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId);
+            Content: "hi", MediaUrl: null, MediaType: MediaType.Image, Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId, MediaId: media.Id);
 
         var result = await _controller.CreatePost(req);
 
@@ -250,11 +253,11 @@ public class PostCreateMediaGateTests : IDisposable
     public async Task CreatePost_InstagramValidJpeg_IsAccepted()
     {
         var igId = SeedInstagramAccount();
-        var key = SeedMedia("ig-jpg", "image/jpeg", "jpeg", 1080, 1080);
+        var media = SeedMedia("ig-jpg", "image/jpeg", "jpeg", 1080, 1080);
 
         var req = new CreatePostRequest(
-            Content: "hi", MediaUrl: key, MediaType: MediaType.Image, Platform: Platform.Instagram,
-            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId);
+            Content: "hi", MediaUrl: null, MediaType: MediaType.Image, Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId, MediaId: media.Id);
 
         var result = await _controller.CreatePost(req);
 
@@ -265,11 +268,11 @@ public class PostCreateMediaGateTests : IDisposable
     public async Task CreatePost_InstagramOverMaxWidthValidAspect_IsAccepted_WarningIgnored()
     {
         var igId = SeedInstagramAccount();
-        var key = SeedMedia("ig-wide", "image/jpeg", "jpeg", 1500, 1500); // > 1440 → warning only
+        var media = SeedMedia("ig-wide", "image/jpeg", "jpeg", 1500, 1500); // > 1440 → warning only
 
         var req = new CreatePostRequest(
-            Content: "hi", MediaUrl: key, MediaType: MediaType.Image, Platform: Platform.Instagram,
-            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId);
+            Content: "hi", MediaUrl: null, MediaType: MediaType.Image, Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId, MediaId: media.Id);
 
         var result = await _controller.CreatePost(req);
 
@@ -280,11 +283,11 @@ public class PostCreateMediaGateTests : IDisposable
     public async Task CreatePost_InstagramBadAspect_IsRejected()
     {
         var igId = SeedInstagramAccount();
-        var key = SeedMedia("ig-aspect", "image/jpeg", "jpeg", 1600, 400); // aspect 4.0 → invalid
+        var media = SeedMedia("ig-aspect", "image/jpeg", "jpeg", 1600, 400); // aspect 4.0 → invalid
 
         var req = new CreatePostRequest(
-            Content: "hi", MediaUrl: key, MediaType: MediaType.Image, Platform: Platform.Instagram,
-            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId);
+            Content: "hi", MediaUrl: null, MediaType: MediaType.Image, Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId, MediaId: media.Id);
 
         var result = await _controller.CreatePost(req);
 
@@ -300,18 +303,18 @@ public class PostCreateMediaGateTests : IDisposable
     public async Task CreatePost_InstagramCarousel_OneInvalidItem_IsRejected_AndIdentifiesItem()
     {
         var igId = SeedInstagramAccount();
-        var k0 = SeedMedia("c0", "image/jpeg", "jpeg", 1080, 1080);
-        var k1 = SeedMedia("c1", "image/png", "png", 1080, 1080); // PNG → invalid for IG
-        var k2 = SeedMedia("c2", "image/jpeg", "jpeg", 1080, 1080);
+        var m0 = SeedMedia("c0", "image/jpeg", "jpeg", 1080, 1080);
+        var m1 = SeedMedia("c1", "image/png", "png", 1080, 1080); // PNG → invalid for IG
+        var m2 = SeedMedia("c2", "image/jpeg", "jpeg", 1080, 1080);
 
         var req = new CreatePostRequest(
             Content: "hi", MediaUrl: null, MediaType: null, Platform: Platform.Instagram,
             ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId,
             MediaItems: new List<CreatePostMediaItem>
             {
-                new(k0, MediaType.Image, 0),
-                new(k1, MediaType.Image, 1),
-                new(k2, MediaType.Image, 2),
+                new(null, MediaType.Image, 0, m0.Id),
+                new(null, MediaType.Image, 1, m1.Id),
+                new(null, MediaType.Image, 2, m2.Id),
             });
 
         var result = await _controller.CreatePost(req);
@@ -330,11 +333,11 @@ public class PostCreateMediaGateTests : IDisposable
     public async Task CreatePost_FacebookValidJpeg_NoMediaErrors()
     {
         var pageId = SeedFacebookPage();
-        var key = SeedMedia("fb-jpg", "image/jpeg", "jpeg", 1200, 630);
+        var media = SeedMedia("fb-jpg", "image/jpeg", "jpeg", 1200, 630);
 
         var req = new CreatePostRequest(
-            Content: "hi", MediaUrl: key, MediaType: MediaType.Image, Platform: Platform.Facebook,
-            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetPageId: pageId);
+            Content: "hi", MediaUrl: null, MediaType: MediaType.Image, Platform: Platform.Facebook,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetPageId: pageId, MediaId: media.Id);
 
         var result = await _controller.CreatePost(req);
 
@@ -347,12 +350,12 @@ public class PostCreateMediaGateTests : IDisposable
     public async Task CreatePost_InstagramVideoTooLong_IsRejected()
     {
         var igId = SeedInstagramAccount();
-        var key = SeedVideoMedia("ig-vid-long", "video/mp4", 10L * 1024 * 1024);
+        var media = SeedVideoMedia("ig-vid-long", "video/mp4", 10L * 1024 * 1024);
         UseVideoMetadata(1080, 1080, durationSeconds: 75); // > 60s for IG feed
 
         var req = new CreatePostRequest(
-            Content: "hi", MediaUrl: key, MediaType: MediaType.Video, Platform: Platform.Instagram,
-            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId);
+            Content: "hi", MediaUrl: null, MediaType: MediaType.Video, Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId, MediaId: media.Id);
 
         var result = await _controller.CreatePost(req);
 
@@ -368,12 +371,12 @@ public class PostCreateMediaGateTests : IDisposable
     public async Task CreatePost_InstagramValidMovVideo_IsAccepted()
     {
         var igId = SeedInstagramAccount();
-        var key = SeedVideoMedia("ig-vid-mov", "video/quicktime", 20L * 1024 * 1024);
+        var media = SeedVideoMedia("ig-vid-mov", "video/quicktime", 20L * 1024 * 1024);
         UseVideoMetadata(1080, 1080, durationSeconds: 10, container: "mov", videoCodec: "h264", audioCodec: "aac");
 
         var req = new CreatePostRequest(
-            Content: "hi", MediaUrl: key, MediaType: MediaType.Video, Platform: Platform.Instagram,
-            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId);
+            Content: "hi", MediaUrl: null, MediaType: MediaType.Video, Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId, MediaId: media.Id);
 
         var result = await _controller.CreatePost(req);
 
@@ -384,9 +387,9 @@ public class PostCreateMediaGateTests : IDisposable
 
     /// <summary>Inserts a Media row owned by a DIFFERENT workspace (no local bytes needed —
     /// the gate rejects on the workspace-scoped lookup before ever resolving bytes).</summary>
-    private void SeedForeignMedia(string storageKey)
+    private Media SeedForeignMedia(string storageKey)
     {
-        _db.Media.Add(new Media
+        var media = new Media
         {
             Id = Guid.NewGuid(),
             WorkspaceId = Guid.Parse("00000000-0000-0000-0000-0000000000ff"),
@@ -394,8 +397,10 @@ public class PostCreateMediaGateTests : IDisposable
             StorageKey = storageKey, OriginalFileName = "foreign.jpg", ContentType = "image/jpeg",
             SizeBytes = 1024, Status = MediaUploadStatus.Uploaded,
             CreatedAt = DateTime.UtcNow, UploadedAt = DateTime.UtcNow,
-        });
+        };
+        _db.Media.Add(media);
         _db.SaveChanges();
+        return media;
     }
 
     [Fact]
@@ -410,47 +415,51 @@ public class PostCreateMediaGateTests : IDisposable
 
         var result = await _controller.CreatePost(req);
 
-        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
-        var pd = Assert.IsType<ProblemDetails>(bad.Value);
-        var errors = ExtractMediaErrors(pd);
-        Assert.Contains(errors!, e => (string?)e["code"] == DTOs.MediaValidationErrorCodes.MediaNotFound);
+        var obj = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, obj.StatusCode);
+        var pd = Assert.IsType<ProblemDetails>(obj.Value);
+        Assert.Equal("UNSUPPORTED_MEDIA_REFERENCE", pd.Extensions["code"]);
         Assert.Empty(await _db.Posts.ToListAsync());
     }
 
     [Fact]
-    public async Task CreatePost_UnknownStorageKey_IsRejected()
+    public async Task CreatePost_UnknownMediaId_IsRejected()
     {
         var igId = SeedInstagramAccount();
 
         var req = new CreatePostRequest(
-            Content: "hi", MediaUrl: "media/never-uploaded.jpg", MediaType: MediaType.Image,
+            Content: "hi", MediaUrl: null, MediaType: MediaType.Image,
             Platform: Platform.Instagram,
-            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId);
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId,
+            MediaId: Guid.NewGuid());
 
         var result = await _controller.CreatePost(req);
 
-        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
-        var pd = Assert.IsType<ProblemDetails>(bad.Value);
-        Assert.Contains(ExtractMediaErrors(pd)!, e => (string?)e["code"] == DTOs.MediaValidationErrorCodes.MediaNotFound);
+        var obj = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status404NotFound, obj.StatusCode);
+        var pd = Assert.IsType<ProblemDetails>(obj.Value);
+        Assert.Equal(DTOs.MediaValidationErrorCodes.MediaNotFound, pd.Extensions["code"]);
         Assert.Empty(await _db.Posts.ToListAsync());
     }
 
     [Fact]
-    public async Task CreatePost_ForeignWorkspaceStorageKey_IsRejected()
+    public async Task CreatePost_ForeignWorkspaceMediaId_IsRejected()
     {
         var igId = SeedInstagramAccount();
-        SeedForeignMedia("media/owned-elsewhere.jpg");
+        var foreignMedia = SeedForeignMedia("media/owned-elsewhere.jpg");
 
         var req = new CreatePostRequest(
-            Content: "hi", MediaUrl: "media/owned-elsewhere.jpg", MediaType: MediaType.Image,
+            Content: "hi", MediaUrl: null, MediaType: MediaType.Image,
             Platform: Platform.Instagram,
-            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId);
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId,
+            MediaId: foreignMedia.Id);
 
         var result = await _controller.CreatePost(req);
 
-        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
-        var pd = Assert.IsType<ProblemDetails>(bad.Value);
-        Assert.Contains(ExtractMediaErrors(pd)!, e => (string?)e["code"] == DTOs.MediaValidationErrorCodes.MediaNotFound);
+        var obj = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status404NotFound, obj.StatusCode);
+        var pd = Assert.IsType<ProblemDetails>(obj.Value);
+        Assert.Equal(DTOs.MediaValidationErrorCodes.MediaNotFound, pd.Extensions["code"]);
         Assert.Empty(await _db.Posts.ToListAsync());
     }
 
@@ -458,37 +467,38 @@ public class PostCreateMediaGateTests : IDisposable
     public async Task CreatePost_Carousel_WithForeignItem_IsRejected()
     {
         var igId = SeedInstagramAccount();
-        var k0 = SeedMedia("c-own-0", "image/jpeg", "jpeg", 1080, 1080);
-        SeedForeignMedia("c-foreign-1");
-        var k2 = SeedMedia("c-own-2", "image/jpeg", "jpeg", 1080, 1080);
+        var m0 = SeedMedia("c-own-0", "image/jpeg", "jpeg", 1080, 1080);
+        var foreignMedia = SeedForeignMedia("c-foreign-1");
+        var m2 = SeedMedia("c-own-2", "image/jpeg", "jpeg", 1080, 1080);
 
         var req = new CreatePostRequest(
             Content: "hi", MediaUrl: null, MediaType: null, Platform: Platform.Instagram,
             ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId,
             MediaItems: new List<CreatePostMediaItem>
             {
-                new(k0, MediaType.Image, 0),
-                new("c-foreign-1", MediaType.Image, 1),
-                new(k2, MediaType.Image, 2),
+                new(null, MediaType.Image, 0, m0.Id),
+                new(null, MediaType.Image, 1, foreignMedia.Id),
+                new(null, MediaType.Image, 2, m2.Id),
             });
 
         var result = await _controller.CreatePost(req);
 
-        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
-        var pd = Assert.IsType<ProblemDetails>(bad.Value);
-        Assert.Contains(ExtractMediaErrors(pd)!, e => (string?)e["code"] == DTOs.MediaValidationErrorCodes.MediaNotFound);
+        var obj = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status404NotFound, obj.StatusCode);
+        var pd = Assert.IsType<ProblemDetails>(obj.Value);
+        Assert.Equal(DTOs.MediaValidationErrorCodes.MediaNotFound, pd.Extensions["code"]);
         Assert.Empty(await _db.Posts.ToListAsync());
     }
 
     [Fact]
-    public async Task CreatePost_OwnedStorageKey_IsAccepted()
+    public async Task CreatePost_OwnedMediaId_IsAccepted()
     {
         var igId = SeedInstagramAccount();
-        var key = SeedMedia("ig-owned", "image/jpeg", "jpeg", 1080, 1080);
+        var media = SeedMedia("ig-owned", "image/jpeg", "jpeg", 1080, 1080);
 
         var req = new CreatePostRequest(
-            Content: "hi", MediaUrl: key, MediaType: MediaType.Image, Platform: Platform.Instagram,
-            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId);
+            Content: "hi", MediaUrl: null, MediaType: MediaType.Image, Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId, MediaId: media.Id);
 
         var result = await _controller.CreatePost(req);
 

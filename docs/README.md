@@ -67,13 +67,13 @@ The frontend talks to the API at `http://localhost:5122` and uploads media direc
 Media uploads go directly from the browser to MinIO via S3-compatible presigned PUT URLs:
 
 1. Browser calls `POST /api/media/uploads/init` with `{ fileName, contentType, sizeBytes }`.
-2. API creates a `Media` row (status `PendingUpload`), returns a presigned `uploadUrl` (host `localhost:9000`), a `storageKey`, and a `mediaId`.
+2. API creates a `Media` row (status `PendingUpload`), returns a presigned `uploadUrl` (host `localhost:9000`), a `mediaId`, and a `previewUrl` built from the `mediaId`. The internal `storageKey` is never returned to the frontend.
 3. Browser `PUT`s the bytes directly to the `uploadUrl`.
 4. Browser calls `POST /api/media/uploads/complete` with `{ mediaId }`; the API verifies the object via a HEAD request and flips the row to `Uploaded`.
 
 Why the URL uses `localhost:9000` (public) while the API talks to `minio:9000` (internal): the browser cannot resolve Docker DNS, but the S3 signature is bound to the endpoint it was signed against — so the provider keeps two `AmazonS3Client` instances and uses the public one only for presigning.
 
-For real Meta publishing from a local dev environment, set `App__PublicUrl` to a public tunnel URL (ngrok/cloudflared) pointing at the API on `5122`. Meta will fetch media via `{App.PublicUrl}/api/media/files/{storageKey}`, which the API streams from MinIO.
+For real Meta publishing from a local dev environment, set `App__PublicUrl` to a public tunnel URL (ngrok/cloudflared) pointing at the API on `5122`. In server-storage modes (Supabase/S3-compatible) Meta fetches media via a short-lived signed URL minted directly from the object store (`IMediaService.GetPublishingUrlAsync`); local-disk mode falls back to an API-proxied URL that is no longer publicly servable now that the anonymous `/api/media/files/{storageKey}` route has been removed (media privacy redesign) — see [docs/public-media-route.md](public-media-route.md). Authenticated previews in the SPA use `GET /api/media/{mediaId}/file` instead.
 
 Production storage provider is intentionally not implemented yet — the `IMediaStorageProvider` abstraction is in place for any S3-compatible backend (S3, R2, Spaces, B2, Wasabi, Hetzner) once a production provider is chosen.
 

@@ -6,8 +6,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      // Proxy media files to backend to avoid CORS issues with video canvas extraction
-      '/api/media/files': {
+      // Proxy authenticated media routes to the backend in local development.
+      '/api/media': {
         target: 'http://localhost:5122',
         changeOrigin: true,
       },

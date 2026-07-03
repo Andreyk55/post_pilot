@@ -277,7 +277,7 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
                 {post.mediaItems && post.mediaItems.length >= 2 && (
                   <div className="post-media-preview carousel-preview">
                     <MediaThumbnail
-                      storageKey={post.mediaItems[0].mediaUrl}
+                      src={post.mediaItems[0].mediaUrl}
                       mediaType="Image"
                       className="media-thumbnail"
                       variant="scheduledCard"
@@ -289,7 +289,7 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
                 {!(post.mediaItems && post.mediaItems.length >= 2) && post.mediaUrl && mediaType === 'Image' && (
                   <div className="post-media-preview">
                     <MediaThumbnail
-                      storageKey={post.mediaUrl}
+                      src={post.mediaUrl}
                       mediaType="Image"
                       className="media-thumbnail"
                       variant="scheduledCard"
@@ -301,10 +301,9 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
                 {!(post.mediaItems && post.mediaItems.length >= 2) && post.mediaUrl && mediaType === 'Video' && (
                   <div className="post-media-preview">
                     <MediaThumbnail
-                      storageKey={post.mediaUrl}
+                      src={post.mediaUrl}
                       mediaType="Video"
                       thumbnailUrl={post.selectedThumbnailUrl ?? post.thumbnail?.url}
-                      thumbnailStorageKey={post.thumbnail?.storageKey}
                       className="media-thumbnail"
                       variant="scheduledCard"
                     />

@@ -1,99 +1,65 @@
-# Public media route — `GET /api/media/files/{*storageKey}`
+# Media file access — `GET /api/media/{mediaId}/file`
 
-This is the only `[AllowAnonymous]` data-serving endpoint in the API. It must
-stay anonymous for current publishing flows to work. This doc explains why,
-what the risk surface is, and the path to a hardened replacement.
+> **Update (media privacy redesign):** the anonymous catch-all route this document
+> originally covered — `GET /api/media/files/{*storageKey}` (`MediaController.GetFile`) —
+> has been **removed**. Media file access is now exclusively through the authenticated,
+> workspace-scoped route described below. This document keeps the historical rationale at
+> the bottom for context on why the old route existed and what changed.
 
-## What it does
+## Current design
 
-Streams a stored media file by its raw storage key. The route is a catch-all
-(`{*storageKey}`) so multi-segment keys like
-`users/{guid}/workspaces/{guid}/providers/meta-facebook/media/{guid}/photo.jpg`
-survive intact end-to-end (the legacy `media/{guid}.jpg` shape is still served for
-older objects). The handler lives in
-[backend/Controllers/MediaController.cs](../backend/Controllers/MediaController.cs)
-under `GetFile`.
+`GET /api/media/{mediaId}/file` (`MediaController.GetMediaFile`):
 
-## Why it must stay public
+- Requires the normal authenticated app session (`[Authorize]` on the controller — no
+  `[AllowAnonymous]` on this action).
+- Resolves the caller's current workspace server-side via `ICurrentWorkspaceProvider`
+  (never trusts a workspace id from the client).
+- Looks up the `Media` row by `mediaId` **and** `WorkspaceId`; a missing row and a
+  foreign-workspace row both return the same 404 (`{"error":"Media not found"}`) so the
+  response never discloses which case it was.
+- Streams bytes via the storage provider using `Media.StorageKey` internally — the
+  frontend never learns the StorageKey, only the `mediaId` (and this URL).
+- `?variant=thumbnail` serves the derived thumbnail (`Media.ThumbnailStorageKey`) instead
+  of the original asset.
+- Applies the same safe response headers as before: `X-Content-Type-Options: nosniff`,
+  the real image/video content type for known-renderable types, and
+  `application/octet-stream` + `Content-Disposition: attachment` for anything else.
 
-At publish time the API hands the URL of a media file to Meta. In **server
-(Supabase/S3) mode** that is a short-lived *signed* bucket URL and this proxy
-route is not involved. In **local-disk mode** (and as a signing fallback) the
-worker hands Meta this anonymous proxy route instead:
+The frontend only ever holds `mediaId` (returned by `/uploads/init`, `/uploads/complete`,
+and every post/media response) and builds this URL from it — it never sees a raw
+StorageKey or a `/api/media/files/...` path.
 
-```
-{App.PublicUrl}/api/media/files/users/{guid}/workspaces/{guid}/providers/meta-facebook/media/{guid}/photo.jpg
-```
+## Why removing the anonymous route did not break publishing
 
-Meta's Graph API fetchers (Facebook, Instagram) then `GET` that URL from
-their own infrastructure to ingest the image or video. Those fetchers do
-**not** present any auth — no cookie, no token, no header. If we add
-`[Authorize]` to this route, Facebook/Instagram publishing via the proxy breaks.
+At publish time the worker/publishers ask `IMediaService.GetPublishingUrlAsync` for the
+URL to hand Meta. For the production storage backends (Supabase, S3-compatible) this
+already mints a **short-lived signed URL directly from the object store** — the old
+anonymous proxy route was never in that path. It was only used:
 
-The same key is also embedded in image/video previews in the SPA. The SPA
-**is** authenticated, but it requests the file via the same anonymous route
-because that's where Meta will pull it from.
+1. In local-disk dev mode (no object store to sign against), and
+2. As a rare fallback if signing an object-store URL throws.
 
-## Risk surface
-
-What an attacker would need to access an arbitrary file:
-
-1. **Knowledge of the storage key.** Keys are produced server-side as
-   `users/{userId}/workspaces/{ws}/providers/{provider}/media/{mediaId}/{name}.{ext}`,
-   where `mediaId` is a `Guid.NewGuid()` (122 bits of entropy) — enough on its
-   own to make the key unguessable. (Older objects use the legacy
-   `media/{Guid.NewGuid():N}.{ext}` shape, also a 122-bit GUID.)
-2. **No enumeration endpoint exists.** The API never returns a list of keys.
-3. **Keys/URLs are not logged in full.** The publishers redact storage keys and
-   signed URLs before logging (`FacebookPagePublisher.RedactKey` /
-   `RedactUrl`, `InstagramPublisher.RedactUrl`) — only scheme+host and a short
-   tail survive, never the query string or signed token. The full key still
-   appears inside the publish payload sent to Meta.
-
-So in practice this is a "capability URL" — anyone holding the URL can fetch
-the bytes. The bytes are always media the user intended to publish to public
-social networks; once published, the same media is also reachable through
-Meta's CDN with no auth. The marginal exposure of the public route is small.
-
-## What is not OK
-
-- **Treating storage keys as secret data**: they aren't. Don't log them in
-  client-visible places. Don't put them in error messages. Don't put them in
-  URLs that get cached in browser histories outside the SPA itself.
-- **Adding paths that return all keys**: even a paginated listing endpoint
-  would weaken this from "capability URL" to "enumerable".
-- **Reusing the same key across workspaces**: the per-workspace `Media` row is
-  what enforces ownership for the *authenticated* media endpoints
-  (`/uploads/init`, `/uploads/complete`, `DELETE /media/{id}`, `validate`,
-  `extract-metadata`). The unauth `GetFile` is intentionally workspace-blind.
-
-## Future hardening
-
-Two non-breaking paths exist if we want to drop the anonymous surface:
-
-1. **Short-lived presigned URLs per publish**. At publish time, generate a
-   presigned `GET` URL (signed by the object store) with a short expiry,
-   hand *that* URL to Meta, and let the publish complete before it expires.
-   Drop `[AllowAnonymous]` on `/api/media/files/{key}`. Cost: media URLs in
-   posts become un-cacheable after expiry; we need to refresh them in the
-   SPA's image components.
-2. **Split routes**. Keep an anonymous `/api/media/public/{key}` for Meta
-   (same behaviour as today), and add an authenticated `/api/media/files/{key}`
-   for SPA use. The SPA stops sharing URLs with Meta, which means publishing
-   uses the public route and previewing uses the auth'd one. Cost: the
-   anonymous route remains, but with a smaller blast radius (only files
-   actively being published).
-
-Both options need work in `MediaService` / the storage providers
-(`S3CompatibleMediaStorageProvider`, `LocalDiskMediaStorageProvider`) to mint
-the presigned URLs, and in the publishers
-(`FacebookPagePublisher`, `InstagramPublisher`, story publishers) to use them.
-That is a deliberate follow-up, not a hot-fix.
+Both of those fallback paths now produce a URL that 404s (the route is gone). This is an
+accepted, deliberate trade-off of the redesign — the production critical path (Supabase
+signed URLs) is unaffected — but local-disk-mode Meta publishing and the signing-failure
+fallback are known follow-up items if they need to keep working; see the doc comments on
+`MediaService.GetPublishingUrlAsync`.
 
 ## Related code
 
-- [`backend/Controllers/MediaController.cs:GetFile`](../backend/Controllers/MediaController.cs) — the route itself, with an
-  inline doc-comment that mirrors this note.
-- [`backend/Services/Media/IMediaStorageProvider.cs`](../backend/Services/Media/IMediaStorageProvider.cs) — where presigned-URL
-  generation would land.
-- [`backend/Services/Publishing/`](../backend/Services/Publishing/) — every publisher that currently embeds the public URL.
+- [`backend/Controllers/MediaController.cs`](../backend/Controllers/MediaController.cs) — `GetMediaFile` (current route) and `GetOwnedMediaAsync`/`BuildMediaFileUrl` helpers.
+- [`backend/Services/Media/IMediaService.cs`](../backend/Services/Media/IMediaService.cs) — `GetPublishingUrlAsync`, which mints the signed URL handed to Meta at publish time.
+- [`backend/Services/Publishing/`](../backend/Services/Publishing/) — the publishers that call `GetPublishingUrlAsync`.
+- [`backend/backend.Tests/Controllers/MediaPublicFetchTests.cs`](../backend/backend.Tests/Controllers/MediaPublicFetchTests.cs) — pins that the old route no longer exists and that the new one is workspace-scoped.
+
+## Historical context (why the old route was anonymous)
+
+The removed route was a "capability URL": streamed a stored file by its raw storage key,
+with a catch-all path so multi-segment keys survived intact. It stayed anonymous because
+Meta's Facebook/Instagram fetchers pulled bytes from it directly during publishing and
+presented no auth. Storage keys carried a high-entropy `Guid` mediaId, there was no
+enumeration endpoint, and publishers redacted keys/URLs from logs — so the residual risk
+was considered acceptable for the MVP. The mediaId-based authenticated route above removes
+that residual risk entirely for the frontend-facing surface, and production publishing was
+already bypassing the anonymous route via signed object-store URLs.
+

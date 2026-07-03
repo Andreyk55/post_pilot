@@ -556,7 +556,10 @@ public class CarouselPostDtoTests
         Assert.Equal(0, dto.MediaItems![0].Order);
         Assert.Equal(1, dto.MediaItems![1].Order);
         Assert.Equal(2, dto.MediaItems![2].Order);
-        Assert.Equal("media/image1.jpg", dto.MediaItems![0].MediaUrl);
+        // No media lookup dictionary was supplied here (test builds the Post directly). A
+        // storage-key-shaped MediaUrl is never leaked raw — it is suppressed to null rather than
+        // passed through, matching the safe default PostsController relies on in production.
+        Assert.Null(dto.MediaItems![0].MediaUrl);
     }
 
     [Fact]

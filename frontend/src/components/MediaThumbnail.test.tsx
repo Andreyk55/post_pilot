@@ -6,22 +6,22 @@ describe('MediaThumbnail', () => {
   it('renders a video thumbnail image with a play overlay when thumbnail data exists', () => {
     const markup = renderToStaticMarkup(
       <MediaThumbnail
-        storageKey="users/u/workspaces/w/providers/meta-facebook/media/m/clip.mp4"
+        src="/api/media/11111111-1111-1111-1111-111111111111/file"
         mediaType="Video"
-        thumbnailStorageKey="users/u/workspaces/w/providers/meta-facebook/media/m/thumbnail.jpg"
+        thumbnailUrl="/api/media/11111111-1111-1111-1111-111111111111/file?variant=thumbnail"
         className="media-thumbnail"
       />,
     )
 
     expect(markup).toContain('<img')
     expect(markup).toContain('media-thumbnail-video-overlay')
-    expect(markup).toContain('/api/media/files/users/u/workspaces/w/providers/meta-facebook/media/m/thumbnail.jpg')
+    expect(markup).toContain('/api/media/11111111-1111-1111-1111-111111111111/file?variant=thumbnail')
   })
 
   it('renders the generic video placeholder when no thumbnail exists', () => {
     const markup = renderToStaticMarkup(
       <MediaThumbnail
-        storageKey="users/u/workspaces/w/providers/meta-facebook/media/m/clip.mp4"
+        src="/api/media/11111111-1111-1111-1111-111111111111/file"
         mediaType="Video"
         className="media-thumbnail"
       />,
@@ -34,7 +34,7 @@ describe('MediaThumbnail', () => {
   it('keeps image rendering unchanged', () => {
     const markup = renderToStaticMarkup(
       <MediaThumbnail
-        storageKey="users/u/workspaces/w/providers/meta-facebook/media/m/photo.jpg"
+        src="/api/media/11111111-1111-1111-1111-111111111111/file"
         mediaType="Image"
         className="media-thumbnail"
         alt="Preview"
@@ -50,7 +50,7 @@ describe('MediaThumbnail', () => {
   it('renders an icon-only image placeholder for scheduled cards when no preview exists', () => {
     const markup = renderToStaticMarkup(
       <MediaThumbnail
-        storageKey={null}
+        src={null}
         mediaType="Image"
         className="media-thumbnail"
         variant="scheduledCard"
@@ -65,7 +65,7 @@ describe('MediaThumbnail', () => {
   it('keeps missing default image previews hidden', () => {
     const markup = renderToStaticMarkup(
       <MediaThumbnail
-        storageKey={null}
+        src={null}
         mediaType="Image"
       />,
     )

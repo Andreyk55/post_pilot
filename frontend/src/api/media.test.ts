@@ -27,41 +27,40 @@ describe('getMediaUrl', () => {
   it('anchors to the absolute API base in production (no double /api)', async () => {
     const { getMediaUrl } = await importWithApiBaseUrl('https://post-pilot.cloud-ip.cc/api')
 
-    const url = getMediaUrl('users/abc/workspaces/def/providers/meta-facebook/media/ghi/photo.png')
+    const url = getMediaUrl('11111111-1111-1111-1111-111111111111')
 
     expect(url).toBe(
-      'https://post-pilot.cloud-ip.cc/api/media/files/users/abc/workspaces/def/providers/meta-facebook/media/ghi/photo.png',
+      'https://post-pilot.cloud-ip.cc/api/media/11111111-1111-1111-1111-111111111111/file',
     )
   })
 
-  it('matches the exact expected production preview URL for a simple key', async () => {
+  it('builds the thumbnail variant URL', async () => {
     const { getMediaUrl } = await importWithApiBaseUrl('https://post-pilot.cloud-ip.cc/api')
-    expect(getMediaUrl('media/xyz.jpg')).toBe(
-      'https://post-pilot.cloud-ip.cc/api/media/files/media/xyz.jpg',
+    expect(getMediaUrl('11111111-1111-1111-1111-111111111111', 'thumbnail')).toBe(
+      'https://post-pilot.cloud-ip.cc/api/media/11111111-1111-1111-1111-111111111111/file?variant=thumbnail',
     )
   })
 
   it('does not produce a double slash when the base has a trailing slash', async () => {
     const { getMediaUrl } = await importWithApiBaseUrl('https://post-pilot.cloud-ip.cc/api/')
-    expect(getMediaUrl('media/xyz.jpg')).toBe(
-      'https://post-pilot.cloud-ip.cc/api/media/files/media/xyz.jpg',
+    expect(getMediaUrl('11111111-1111-1111-1111-111111111111')).toBe(
+      'https://post-pilot.cloud-ip.cc/api/media/11111111-1111-1111-1111-111111111111/file',
     )
   })
 
   it('keeps a relative path when apiBaseUrl is empty (dev/proxy)', async () => {
     const { getMediaUrl } = await importWithApiBaseUrl('')
-    expect(getMediaUrl('media/xyz.jpg')).toBe('/api/media/files/media/xyz.jpg')
+    expect(getMediaUrl('11111111-1111-1111-1111-111111111111')).toBe('/api/media/11111111-1111-1111-1111-111111111111/file')
   })
 
   it('keeps a relative path when apiBaseUrl is itself relative', async () => {
     const { getMediaUrl } = await importWithApiBaseUrl('/api')
-    expect(getMediaUrl('media/xyz.jpg')).toBe('/api/media/files/media/xyz.jpg')
+    expect(getMediaUrl('11111111-1111-1111-1111-111111111111')).toBe('/api/media/11111111-1111-1111-1111-111111111111/file')
   })
 
-  it('encodes each path segment but preserves the slashes', async () => {
+  it('encodes the mediaId and variant safely', async () => {
     const { getMediaUrl } = await importWithApiBaseUrl('')
-    // Spaces and unicode in the (already sanitized server-side) filename are still encoded.
-    expect(getMediaUrl('media/a b/c.png')).toBe('/api/media/files/media/a%20b/c.png')
+    expect(getMediaUrl('abc def', 'thumbnail')).toBe('/api/media/abc%20def/file?variant=thumbnail')
   })
 
   it('returns null for null/undefined/empty keys', async () => {

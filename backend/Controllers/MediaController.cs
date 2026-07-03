@@ -42,51 +42,23 @@ public class MediaController : ControllerBase
     }
 
     /// <summary>
-    /// Returns true when the storage key belongs to a Media row in the given workspace.
-    /// Used by stateless endpoints (validate / extract-metadata) to refuse keys from
-    /// other workspaces — otherwise a member of workspace A could probe whether a key
-    /// from workspace B exists in storage, or trigger a server-side download of it.
+    /// Resolves a mediaId to its owning <see cref="Entities.Media"/> row, scoped to the current
+    /// workspace. Returns null when the row does not exist OR belongs to a different workspace —
+    /// callers must treat both cases identically (safe 404, never reveal which one it was).
     /// </summary>
-    private Task<bool> StorageKeyBelongsToWorkspaceAsync(string storageKey, Guid workspaceId, CancellationToken ct) =>
-        _db.Media.AnyAsync(m => m.StorageKey == storageKey && m.WorkspaceId == workspaceId, ct);
+    private Task<Entities.Media?> GetOwnedMediaAsync(Guid mediaId, Guid workspaceId, CancellationToken ct) =>
+        _db.Media.AsNoTracking().FirstOrDefaultAsync(m => m.Id == mediaId && m.WorkspaceId == workspaceId, ct);
 
     /// <summary>
-    /// Generates a pre-signed URL for uploading media (image or video).
-    /// Works in both local and server mode.
+    /// Builds the frontend-safe preview URL for a media item. The frontend only ever learns
+    /// this URL (or the bare mediaId) — never the underlying StorageKey.
     /// </summary>
-    [Obsolete("Use POST /api/media/uploads/init instead. This endpoint does not create a Media row.")]
-    [HttpPost("upload-url")]
-    public async Task<ActionResult<GenerateUploadUrlResponse>> GenerateUploadUrl(
-        [FromBody] GenerateUploadUrlRequest request)
+    private string BuildMediaFileUrl(Guid mediaId, string? variant = null)
     {
-        _logger.LogInformation("Legacy /api/media/upload-url called. Prefer /api/media/uploads/init.");
-
-        try
-        {
-            var result = await _mediaService.GenerateUploadUrlAsync(
-                request.FileName,
-                request.ContentType);
-
-            return Ok(new GenerateUploadUrlResponse(
-                result.UploadUrl,
-                result.StorageKey,
-                result.MediaType.ToString(),
-                _mediaService.AllowedImageTypes.ToArray(),
-                _mediaService.AllowedVideoTypes.ToArray(),
-                _mediaService.MaxImageFileSizeBytes,
-                _mediaService.MaxVideoFileSizeBytes
-            ));
-        }
-        catch (NotImplementedException ex)
-        {
-            _logger.LogWarning("Upload URL generation is not implemented for server mode: {Message}", ex.Message);
-            return StatusCode(501, new { error = ex.Message });
-        }
-        catch (ArgumentException ex)
-        {
-            _logger.LogWarning("Invalid upload request: {Message}", ex.Message);
-            return BadRequest(new { error = ex.Message });
-        }
+        var query = variant is null ? string.Empty : $"?variant={variant}";
+        if (Request?.Host.HasValue == true && !string.IsNullOrWhiteSpace(Request.Scheme))
+            return $"{Request.Scheme}://{Request.Host}/api/media/{mediaId}/file{query}";
+        return $"/api/media/{mediaId}/file{query}";
     }
 
     // ============================================
@@ -120,12 +92,12 @@ public class MediaController : ControllerBase
                 cancellationToken: ct);
             return Ok(new InitUploadResponse(
                 MediaId: result.MediaId,
-                StorageKey: result.StorageKey,
                 UploadUrl: result.UploadUrl,
                 Method: "PUT",
                 ContentType: result.ContentType,
                 ExpiresAt: result.ExpiresAt,
-                MediaType: result.MediaType.ToString()
+                MediaType: result.MediaType.ToString(),
+                PreviewUrl: BuildMediaFileUrl(result.MediaId)
             ));
         }
         catch (ArgumentException ex)
@@ -171,10 +143,10 @@ public class MediaController : ControllerBase
             var result = await _uploadService.CompleteAsync(workspaceId, request.MediaId, ct);
             return Ok(new CompleteUploadResponse(
                 MediaId: result.MediaId,
-                StorageKey: result.StorageKey,
                 SizeBytes: result.SizeBytes,
                 ContentType: result.ContentType,
-                UploadedAt: result.UploadedAt
+                UploadedAt: result.UploadedAt,
+                PreviewUrl: BuildMediaFileUrl(result.MediaId)
             ));
         }
         catch (KeyNotFoundException ex)
@@ -214,112 +186,73 @@ public class MediaController : ControllerBase
     }
 
     /// <summary>
-    /// Local mode endpoint for receiving file uploads.
-    /// In server mode, files are uploaded directly to object storage via pre-signed PUT URLs.
-    /// Route: PUT /api/media/upload/{filename} where filename is just "guid.ext"
+    /// Streams a media file by its <see cref="Entities.Media"/> id. Requires the normal
+    /// authenticated app session (controller-level <c>[Authorize]</c> — no anonymous access)
+    /// and verifies the media row belongs to the caller's CURRENT workspace, resolved
+    /// server-side via <see cref="ICurrentWorkspaceProvider"/>. The frontend only ever learns
+    /// the mediaId (and this URL) — never the underlying StorageKey.
+    ///
+    /// <para>
+    /// <c>?variant=thumbnail</c> serves the derived thumbnail (<c>Media.ThumbnailStorageKey</c>)
+    /// instead of the original asset; omitted/any other value serves the original
+    /// (<c>Media.StorageKey</c>). Unknown/foreign/missing media all return the same 404 so the
+    /// response never discloses whether a mediaId exists in another workspace.
+    /// </para>
+    ///
+    /// <para>
+    /// Replaces the former anonymous <c>GET /api/media/files/{*storageKey}</c> route (removed).
+    /// Publishing does not depend on this route: <see cref="Services.Media.IMediaService.GetPublishingUrlAsync"/>
+    /// hands Meta a short-lived signed URL straight from the object store (Supabase/S3) at
+    /// publish time. See docs/public-media-route.md for the historical rationale and migration.
+    /// </para>
     /// </summary>
-    [Obsolete("Local-disk direct upload. Prefer the /uploads/init presigned-PUT flow.")]
-    [HttpPut("upload/{filename}")]
-    [RequestSizeLimit(250 * 1024 * 1024)] // 250MB to allow for video uploads + overhead
-    public async Task<IActionResult> UploadFile(string filename)
+    [HttpGet("{mediaId:guid}/file")]
+    public async Task<IActionResult> GetMediaFile(Guid mediaId, [FromQuery] string? variant, CancellationToken ct)
     {
-        // Only available in local mode
-        if (_mediaService.RunMode != AppRunMode.Local)
+        var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(ct);
+        var media = await GetOwnedMediaAsync(mediaId, workspaceId, ct);
+        if (media == null)
         {
-            return NotFound(new { error = "Direct upload only available in local mode" });
+            return NotFound(new { error = "Media not found" });
         }
 
-        var contentType = Request.ContentType ?? "";
-        if (!_mediaService.IsValidMediaType(contentType))
+        var isThumbnail = string.Equals(variant, "thumbnail", StringComparison.OrdinalIgnoreCase);
+        string storageKey;
+        string contentType;
+        if (isThumbnail)
         {
-            return BadRequest(new { error = "Invalid content type. Allowed: images (JPEG, PNG, GIF) and videos (MP4)" });
+            if (string.IsNullOrEmpty(media.ThumbnailStorageKey))
+                return NotFound(new { error = "Media not found" });
+            storageKey = media.ThumbnailStorageKey;
+            contentType = string.IsNullOrWhiteSpace(media.ThumbnailMimeType) ? "application/octet-stream" : media.ThumbnailMimeType;
         }
-
-        // Check content length against the appropriate max size
-        var maxSize = _mediaService.GetMaxFileSizeBytes(contentType);
-        if (Request.ContentLength > maxSize)
+        else
         {
-            var maxSizeMB = maxSize / (1024 * 1024);
-            var mediaType = _mediaService.IsValidVideoType(contentType) ? "video" : "image";
-            return BadRequest(new { error = $"File too large. Maximum {mediaType} size is {maxSizeMB}MB" });
+            storageKey = media.StorageKey;
+            contentType = string.IsNullOrWhiteSpace(media.ContentType) ? "application/octet-stream" : media.ContentType;
         }
-
-        try
-        {
-            await _mediaService.StorageProvider.SaveAsync(filename, Request.Body);
-            _logger.LogInformation("File uploaded successfully: {Filename}", filename);
-            return Ok();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to save uploaded file: {Filename}", filename);
-            return StatusCode(500, new { error = "Failed to save file" });
-        }
-    }
-
-    /// <summary>
-    /// Streams a stored file by its full storage key. Catch-all route so multi-segment
-    /// keys like "users/{guid}/workspaces/{guid}/providers/meta-facebook/media/{guid}/photo.jpg"
-    /// are preserved end-to-end without slicing on the client.
-    /// Route: GET /api/media/files/{*storageKey}
-    ///
-    /// PUBLIC BY DESIGN — DO NOT add [Authorize] here without a replacement plan.
-    /// During publish, this URL is handed to Meta (via App.PublicUrl) so Facebook /
-    /// Instagram fetchers can pull the bytes directly. Those fetchers do not present
-    /// any auth, so the route MUST stay anonymous for publishing to work.
-    ///
-    /// Mitigations that make the unauth surface safe in practice:
-    ///   - Storage keys are server-chosen and carry a high-entropy GUID mediaId
-    ///     (current shape: "users/{userId}/workspaces/{ws}/providers/{provider}/media/{mediaId}/{name}.{ext}";
-    ///     the legacy "media/{guid}.{ext}" shape is still served for old objects).
-    ///     The mediaId is server-generated and never exposed except to:
-    ///       (a) the workspace member who uploaded it (via /uploads/init response),
-    ///       (b) Meta during publishing.
-    ///   - There is no enumeration endpoint that lists keys.
-    ///   - Keys are not logged in full in any surface (publishers redact them; see
-    ///     FacebookPagePublisher.RedactKey / InstagramPublisher.RedactUrl).
-    ///
-    /// Future hardening (not yet implemented):
-    ///   - Replace this with short-lived presigned URLs handed to Meta per publish.
-    ///   - Add a separate authenticated /api/media/files/{key}/private route for the
-    ///     SPA so we can drop the anonymous one once Meta migrates.
-    /// </summary>
-    [HttpGet("files/{*storageKey}")]
-    [AllowAnonymous]
-    public async Task<IActionResult> GetFile(string storageKey, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(storageKey))
-            return NotFound(new { error = "Storage key is required" });
-
-        var extension = Path.GetExtension(storageKey).ToLowerInvariant();
-        var isKnownRenderable = extension is ".jpg" or ".jpeg" or ".png" or ".gif" or ".mp4";
-        var contentType = extension switch
-        {
-            ".jpg" or ".jpeg" => "image/jpeg",
-            ".png" => "image/png",
-            ".gif" => "image/gif",
-            ".mp4" => "video/mp4",
-            // Unknown/unrecognized extension → generic binary; never a renderable/script type.
-            _ => "application/octet-stream"
-        };
 
         var stream = await _mediaService.StorageProvider.OpenReadAsync(storageKey, ct);
         if (stream == null)
         {
-            return NotFound(new { error = "File not found" });
+            return NotFound(new { error = "Media not found" });
         }
+
+        var isKnownRenderable = contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+            || contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase);
 
         // Never let the browser MIME-sniff a different (possibly executable) type than declared.
         Response.Headers["X-Content-Type-Options"] = "nosniff";
 
-        // Known image/video keep inline so thumbnails/previews render; anything else is forced to
-        // download so an unexpected type can't be rendered/executed in the browser context.
         if (!isKnownRenderable)
         {
+            // Unrecognized/unsafe content type → generic binary, forced download so it can
+            // never be rendered/executed in the browser context.
             Response.Headers["Content-Disposition"] = "attachment";
+            return File(stream, "application/octet-stream");
         }
 
-        if (contentType == "video/mp4")
+        if (string.Equals(contentType, "video/mp4", StringComparison.OrdinalIgnoreCase))
         {
             return File(stream, contentType, enableRangeProcessing: true);
         }
@@ -385,13 +318,8 @@ public class MediaController : ControllerBase
         [FromBody] ValidateMediaByKeyRequest request,
         CancellationToken ct)
     {
-        _logger.LogInformation("=== VALIDATE ENDPOINT HIT === StorageKey: {Key}, MimeType: {Mime}, Platform: {Platform}, Placement: {Placement}",
-            request.StorageKey, request.MimeType, request.Platform, request.Placement);
-
-        if (string.IsNullOrWhiteSpace(request.StorageKey))
-        {
-            return BadRequest(new { error = "Storage key is required" });
-        }
+        _logger.LogInformation("=== VALIDATE ENDPOINT HIT === MediaId: {MediaId}, MimeType: {Mime}, Platform: {Platform}, Placement: {Placement}",
+            request.MediaId, request.MimeType, request.Platform, request.Placement);
 
         // Determine media type from MIME type
         var mediaType = _mediaService.GetMediaType(request.MimeType);
@@ -400,21 +328,23 @@ public class MediaController : ControllerBase
             return BadRequest(new { error = $"Invalid MIME type: {request.MimeType}" });
         }
 
-        // Workspace ownership check: the StorageKey is supplied by the client, so we
-        // must verify it points at a Media row in the current workspace before doing
-        // anything that touches storage (download for validation, even just a HEAD).
+        // Workspace ownership check: MediaId is supplied by the client, so we must resolve it
+        // to a Media row owned by the current workspace before doing anything that touches
+        // storage (download for validation, even just a HEAD). The StorageKey never leaves
+        // the backend.
         var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(ct);
-        if (!await StorageKeyBelongsToWorkspaceAsync(request.StorageKey, workspaceId, ct))
+        var media = await GetOwnedMediaAsync(request.MediaId, workspaceId, ct);
+        if (media == null)
         {
             _logger.LogWarning(
-                "ValidateMedia: storage key {Key} not found in workspace {WorkspaceId}",
-                request.StorageKey, workspaceId);
+                "ValidateMedia: mediaId {MediaId} not found in workspace {WorkspaceId}",
+                request.MediaId, workspaceId);
             return NotFound(new { error = "Media file not found" });
         }
 
         _logger.LogInformation(
-            "Starting validation for {MediaType} file: {StorageKey}, Platform: {Platform}, Placement: {Placement}",
-            mediaType, request.StorageKey, request.Platform, request.Placement);
+            "Starting validation for {MediaType} mediaId {MediaId}, Platform: {Platform}, Placement: {Placement}",
+            mediaType, request.MediaId, request.Platform, request.Placement);
 
         // Route through the SAME authoritative gate used at create/update/publish time. This is
         // what makes the advisory status match the eventual enforcement exactly: it validates
@@ -424,13 +354,13 @@ public class MediaController : ControllerBase
         // MIME/size from the Media row.
         var result = await _mediaGate.ValidateForDisplayAsync(
             workspaceId,
-            new MediaGateItem(request.StorageKey, mediaType, 0),
+            new MediaGateItem(media.StorageKey, mediaType, 0),
             new MediaGateTarget(request.Platform, request.Placement),
             ct);
 
         _logger.LogInformation(
-            "Validation completed for {StorageKey}: Status={Status}, Errors={ErrorCount}, Warnings={WarningCount}",
-            request.StorageKey, result.Status, result.Errors.Length, result.Warnings.Length);
+            "Validation completed for mediaId {MediaId}: Status={Status}, Errors={ErrorCount}, Warnings={WarningCount}",
+            request.MediaId, result.Status, result.Errors.Length, result.Warnings.Length);
 
         return Ok(result);
     }
@@ -444,11 +374,6 @@ public class MediaController : ControllerBase
         [FromBody] ExtractMetadataRequest request,
         CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(request.StorageKey))
-        {
-            return BadRequest(new { error = "Storage key is required" });
-        }
-
         // Determine media type from MIME type
         var mediaType = _mediaService.GetMediaType(request.MimeType);
         if (mediaType == MediaType.None)
@@ -456,20 +381,22 @@ public class MediaController : ControllerBase
             return BadRequest(new { error = $"Invalid MIME type: {request.MimeType}" });
         }
 
-        // Workspace ownership check: see ValidateMedia for the rationale.
+        // Workspace ownership check: see ValidateMedia for the rationale. The StorageKey never
+        // leaves the backend — only the resolved Media row's key is used internally.
         var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(ct);
-        if (!await StorageKeyBelongsToWorkspaceAsync(request.StorageKey, workspaceId, ct))
+        var media = await GetOwnedMediaAsync(request.MediaId, workspaceId, ct);
+        if (media == null)
         {
             _logger.LogWarning(
-                "ExtractMetadata: storage key {Key} not found in workspace {WorkspaceId}",
-                request.StorageKey, workspaceId);
+                "ExtractMetadata: mediaId {MediaId} not found in workspace {WorkspaceId}",
+                request.MediaId, workspaceId);
             return NotFound(new { error = "Media file not found" });
         }
 
         // Get file path from storage key. For S3-compatible storage this downloads
         // a temp copy; the finally below deletes it. For LocalDisk it returns the
         // real path and the cleanup helper is a no-op.
-        var filePath = await _mediaService.GetLocalFilePathAsync(request.StorageKey);
+        var filePath = await _mediaService.GetLocalFilePathAsync(media.StorageKey);
         if (string.IsNullOrEmpty(filePath) || !System.IO.File.Exists(filePath))
         {
             return NotFound(new { error = "Media file not found" });
@@ -523,21 +450,6 @@ public class MediaController : ControllerBase
     }
 }
 
-public record GenerateUploadUrlRequest(
-    string FileName,
-    string ContentType
-);
-
-public record GenerateUploadUrlResponse(
-    string UploadUrl,
-    string StorageKey,
-    string MediaType,
-    string[] AllowedImageTypes,
-    string[] AllowedVideoTypes,
-    long MaxImageFileSizeBytes,
-    long MaxVideoFileSizeBytes
-);
-
 public record MediaConstraintsResponse(
     string[] AllowedImageTypes,
     string[] AllowedVideoTypes,
@@ -546,20 +458,21 @@ public record MediaConstraintsResponse(
 );
 
 /// <summary>
-/// Request to validate media by storage key (stateless).
+/// Request to validate media by mediaId (stateless — no DB write). The frontend never
+/// supplies a StorageKey; the server resolves it internally from the Media row.
 /// </summary>
 public record ValidateMediaByKeyRequest(
-    string StorageKey,
+    Guid MediaId,
     string MimeType,
     Platform Platform,
     Placement Placement
 );
 
 /// <summary>
-/// Request to extract metadata from a media file by storage key.
+/// Request to extract metadata from a media file by mediaId.
 /// </summary>
 public record ExtractMetadataRequest(
-    string StorageKey,
+    Guid MediaId,
     string MimeType
 );
 
@@ -582,24 +495,33 @@ public record InitUploadRequest(
     Platform? Platform = null
 );
 
+/// <summary>
+/// Response for the presigned-upload step. Deliberately omits StorageKey — the frontend
+/// only ever learns MediaId and the authenticated PreviewUrl built from it.
+/// </summary>
 public record InitUploadResponse(
     Guid MediaId,
-    string StorageKey,
     string UploadUrl,
     string Method,
     string ContentType,
     DateTime ExpiresAt,
-    string MediaType
+    string MediaType,
+    string PreviewUrl
 );
 
 public record CompleteUploadRequest(
     Guid MediaId
 );
 
+/// <summary>
+/// Response for the upload-complete step. Deliberately omits StorageKey — see
+/// <see cref="InitUploadResponse"/>.
+/// </summary>
 public record CompleteUploadResponse(
     Guid MediaId,
-    string StorageKey,
     long SizeBytes,
     string ContentType,
-    DateTime UploadedAt
+    DateTime UploadedAt,
+    string PreviewUrl
 );
+

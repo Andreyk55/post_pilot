@@ -4,6 +4,8 @@ export type AiAssistTab = 'text' | 'media' | 'translate'
 
 export interface AiAssistMediaItem {
   assetUrl?: string | null
+  mediaId?: string | null
+  previewUrl?: string | null
   mediaType?: MediaType | null
 }
 
@@ -25,8 +27,9 @@ function normalizeMediaItems(mediaItems: AiAssistMediaItem[] | null | undefined)
   return (mediaItems ?? []).filter((item) => item != null)
 }
 
-function hasAssetUrl(item: AiAssistMediaItem): boolean {
-  return typeof item.assetUrl === 'string' && item.assetUrl.trim().length > 0
+function hasMediaReference(item: AiAssistMediaItem): boolean {
+  return (typeof item.mediaId === 'string' && item.mediaId.trim().length > 0)
+    || (typeof item.assetUrl === 'string' && item.assetUrl.trim().length > 0)
 }
 
 export function getMediaAiUnsupportedReason(
@@ -44,7 +47,7 @@ export function getMediaAiUnsupportedReason(
 
   const [mediaItem] = normalizedMediaItems
 
-  if (!hasAssetUrl(mediaItem)) {
+  if (!hasMediaReference(mediaItem)) {
     return 'unsupported'
   }
 

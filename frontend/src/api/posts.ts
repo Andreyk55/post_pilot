@@ -25,7 +25,7 @@ export type PostStatusGroup = 'inProgress'
 export type PostType = 'Feed' | 'Story'
 
 export interface MediaThumbnailDto {
-  storageKey: string | null
+  mediaId: string | null
   url: string | null
   mimeType: string | null
   width: number | null
@@ -37,15 +37,16 @@ export interface MediaThumbnailDto {
 export interface PostMediaItem {
   id: string
   order: number
-  mediaUrl: string
+  mediaUrl: string | null
   mediaType: MediaType
   thumbnail?: MediaThumbnailDto | null
+  mediaId?: string | null
 }
 
 export interface CreatePostMediaItem {
-  mediaUrl: string
   mediaType: MediaType
   order: number
+  mediaId?: string | null
 }
 
 export interface Post {
@@ -75,6 +76,7 @@ export interface Post {
   instagramMediaType: string | null
   thumbnail?: MediaThumbnailDto | null
   mediaItems: PostMediaItem[] | null
+  mediaId?: string | null
 }
 
 export interface InstagramUserTag {
@@ -85,7 +87,6 @@ export interface InstagramUserTag {
 
 export interface CreatePostRequest {
   content?: string
-  mediaUrl?: string | null
   mediaType?: MediaType | null
   postType?: PostType
   platform: Platform
@@ -97,6 +98,7 @@ export interface CreatePostRequest {
   instagramUserTags?: InstagramUserTag[] | null
   /** Per-media-item tags for carousel posts. Key = media item order (0-based). */
   instagramMediaTags?: Record<number, InstagramUserTag[]> | null
+  mediaId?: string | null
 }
 
 export interface PaginatedResponse<T> {
@@ -143,6 +145,7 @@ export interface PostDetails {
   instagramMediaType: string | null
   thumbnail?: MediaThumbnailDto | null
   mediaItems: PostMediaItem[] | null
+  mediaId?: string | null
 }
 
 export const postsApi = {

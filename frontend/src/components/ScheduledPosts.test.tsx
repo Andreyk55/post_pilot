@@ -64,11 +64,12 @@ describe('ScheduledPosts media previews', () => {
   it('renders a scheduled video thumbnail with a centered play overlay', () => {
     const markup = renderScheduledPosts({
       ...basePost,
-      mediaUrl: 'users/u/workspaces/w/providers/meta-facebook/media/m/clip.mp4',
+      mediaUrl: '/api/media/11111111-1111-1111-1111-111111111111/file',
+      mediaId: '11111111-1111-1111-1111-111111111111',
       mediaType: 'Video',
       thumbnail: {
-        storageKey: 'users/u/workspaces/w/providers/meta-facebook/media/m/thumbnail.jpg',
-        url: null,
+        mediaId: '11111111-1111-1111-1111-111111111111',
+        url: '/api/media/11111111-1111-1111-1111-111111111111/file?variant=thumbnail',
         mimeType: 'image/jpeg',
         width: 320,
         height: 180,
@@ -82,13 +83,14 @@ describe('ScheduledPosts media previews', () => {
     expect(markup).toContain('media-thumbnail-video-overlay')
     expect(markup).toContain('video-play-icon')
     expect(markup).not.toContain('media-indicator')
-    expect(markup).toContain('/api/media/files/users/u/workspaces/w/providers/meta-facebook/media/m/thumbnail.jpg')
+    expect(markup).toContain('/api/media/11111111-1111-1111-1111-111111111111/file?variant=thumbnail')
   })
 
   it('renders the scheduled video fallback with a centered play icon when no thumbnail exists', () => {
     const markup = renderScheduledPosts({
       ...basePost,
-      mediaUrl: 'users/u/workspaces/w/providers/meta-facebook/media/m/clip.mp4',
+      mediaUrl: '/api/media/11111111-1111-1111-1111-111111111111/file',
+      mediaId: '11111111-1111-1111-1111-111111111111',
       mediaType: 'Video',
     })
 
@@ -102,13 +104,14 @@ describe('ScheduledPosts media previews', () => {
   it('keeps scheduled image previews on the shared scheduled-card thumbnail variant', () => {
     const markup = renderScheduledPosts({
       ...basePost,
-      mediaUrl: 'users/u/workspaces/w/providers/meta-facebook/media/m/photo.jpg',
+      mediaUrl: '/api/media/11111111-1111-1111-1111-111111111111/file',
+      mediaId: '11111111-1111-1111-1111-111111111111',
       mediaType: 'Image',
     })
 
     expect(markup).toContain('<img')
     expect(markup).toContain('media-thumbnail media-thumbnail--scheduled-card')
-    expect(markup).toContain('/api/media/files/users/u/workspaces/w/providers/meta-facebook/media/m/photo.jpg')
+    expect(markup).toContain('/api/media/11111111-1111-1111-1111-111111111111/file')
     expect(markup).not.toContain('media-indicator')
     expect(markup).not.toContain('media-thumbnail-video-overlay')
     expect(markup).not.toContain('media-thumbnail-video-placeholder')
@@ -117,7 +120,8 @@ describe('ScheduledPosts media previews', () => {
   it('keeps the scheduled metadata media badges outside the preview tile', () => {
     const markup = renderScheduledPosts({
       ...basePost,
-      mediaUrl: 'users/u/workspaces/w/providers/meta-facebook/media/m/clip.mp4',
+      mediaUrl: '/api/media/11111111-1111-1111-1111-111111111111/file',
+      mediaId: '11111111-1111-1111-1111-111111111111',
       mediaType: 'Video',
     })
 

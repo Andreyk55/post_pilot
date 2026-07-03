@@ -53,7 +53,7 @@ Client (React SPA)
   └─► GET  /api/meta/...       → MetaController (OAuth, pages, accounts)
   └─► POST /api/media/uploads/init     → MediaController (presigned URL + Media row)
   └─► POST /api/media/uploads/complete → MediaController (HEAD verify, flip to Uploaded)
-  └─► GET  /api/media/files/*          → MediaController (streams from configured backend)
+  └─► GET  /api/media/{mediaId}/file   → MediaController (authenticated, workspace-scoped; streams from configured backend)
   └─► POST /api/ai/text        → AiTextController (caption generation)
   └─► POST /api/ai/media       → AiMediaController (image/video analysis)
 ```
@@ -143,7 +143,7 @@ Client (React SPA)
 - **API layer**: Hand-written `fetch` wrappers in `frontend/src/api/`
 - **State**: Local React state + `useEffect`; no global state library
 - **Config**: `frontend/src/config/appConfig.ts` merges `config/common.json` + `config/{mode}.json` + optional `VITE_API_URL` env override
-- **Dev proxy**: Vite proxies `/api/media/files` → `http://localhost:5122` to allow canvas/video operations without CORS
+- **Dev proxy**: Vite proxies `/api` (including `/api/media/{mediaId}/file`) → `http://localhost:5122` to allow canvas/video operations without CORS
 
 ### Config files
 
@@ -168,17 +168,18 @@ Backend selected by `MediaStorage:Provider` (bound from `MediaStorage__Provider`
 
 ### Upload flow (new, recommended)
 
-1. `POST /api/media/uploads/init` — creates a `Media` row (status `PendingUpload`), returns `{ mediaId, storageKey, uploadUrl, method: "PUT", expiresAt, contentType }`. The `uploadUrl` is a presigned PUT against the **public** endpoint (`http://localhost:9000` locally).
+1. `POST /api/media/uploads/init` — creates a `Media` row (status `PendingUpload`), returns `{ mediaId, uploadUrl, method: "PUT", expiresAt, contentType, previewUrl }`. The `uploadUrl` is a presigned PUT against the **public** endpoint (`http://localhost:9000` locally). `StorageKey` is never returned to the frontend — only `mediaId` and the authenticated `previewUrl` built from it.
 2. Browser `PUT`s bytes to `uploadUrl` directly (no API in the data path).
 3. `POST /api/media/uploads/complete` — API does a HEAD against the **internal** endpoint (`http://minio:9000`), captures `SizeBytes`, flips the row to `Uploaded`. Idempotent.
 4. `DELETE /api/media/{mediaId}` — marks row `Deleted` and best-effort removes the object.
 
-The legacy `POST /api/media/upload-url` and `PUT /api/media/upload/{filename}` endpoints are kept marked `[Obsolete]` so frontend rollback stays safe; they will be removed in a later pass.
+The legacy `POST /api/media/upload-url` and `PUT /api/media/upload/{filename}` endpoints
+have been removed (media privacy redesign) — they are no longer reachable by any method.
 
 ### File serving / publishing URL
 
-- `GET /api/media/files/{*storageKey}` — catch-all route preserving the full key (e.g. `media/{guid}.jpg`). The API streams from whatever provider is configured (`OpenReadAsync`).
-- `IMediaService.GetPublishingUrl(storageKey)` returns `{App.PublicUrl}/api/media/files/{escaped-storageKey}` and is what publishers hand to Meta. The shape is provider-independent — switching object stores doesn't change the public URL Meta sees.
+- `GET /api/media/{mediaId}/file` — authenticated, workspace-scoped. Resolves `mediaId` to a `Media` row owned by the caller's current workspace and streams from whatever provider is configured (`OpenReadAsync`), using `StorageKey` internally only. `?variant=thumbnail` serves the derived thumbnail instead of the original.
+- `IMediaService.GetPublishingUrlAsync(storageKey)` mints a short-lived **signed URL directly from the object store** (Supabase/S3) for production backends — this is what publishers hand to Meta, and does not depend on the authenticated route above. Local-disk mode (no object store to sign against) falls back to an API-proxied URL that is no longer publicly servable now that the anonymous route is gone; see [docs/public-media-route.md](public-media-route.md).
 
 ### Two-S3-client trick (S3CompatibleMediaStorageProvider)
 

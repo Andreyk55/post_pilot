@@ -43,7 +43,7 @@ interface SchedulePostProps {
     postType: PostType
     targetPageId?: string
     targetInstagramAccountId?: string
-    mediaUrl?: string
+    mediaId?: string
     mediaType?: MediaType
     selectedThumbnailUrl?: string
     mediaItems?: CreatePostMediaItem[]
@@ -56,7 +56,7 @@ interface SchedulePostProps {
     postType: PostType
     targetPageId?: string
     targetInstagramAccountId?: string
-    mediaUrl?: string
+    mediaId?: string
     mediaType?: MediaType
     selectedThumbnailUrl?: string
     mediaItems?: CreatePostMediaItem[]
@@ -116,6 +116,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
   const [selectedInstagramAccountId, setSelectedInstagramAccountId] = useState<string>('')
   const [loadingPages, setLoadingPages] = useState(false)
   const [mediaUrl, setMediaUrl] = useState<string | null>(null)
+  const [mediaId, setMediaId] = useState<string | null>(null)
   const [mediaType, setMediaType] = useState<MediaType | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploadKey, setUploadKey] = useState(0)
@@ -168,11 +169,12 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
 
   const aiAssistMediaItems: AiAssistMediaItem[] = carouselItems.length > 0
     ? carouselItems.map((item) => ({
-        assetUrl: item.storageKey,
+        mediaId: item.mediaId,
+        previewUrl: item.previewUrl,
         mediaType: item.mediaType,
       }))
-    : (mediaUrl && mediaType && mediaType !== 'None'
-        ? [{ assetUrl: mediaUrl, mediaType }]
+    : ((mediaId || mediaUrl) && mediaType && mediaType !== 'None'
+        ? [{ mediaId, previewUrl: mediaUrl, mediaType }]
         : [])
 
   // Ref for caption textarea (used by InstagramMention for cursor position)
@@ -394,6 +396,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
     return {
       content,
       mediaUrl,
+      mediaId,
       carouselItemCount: carouselItems.length,
       mediaTagCount: mediaTags.length + carouselMediaTagCount,
       scheduledDate,
@@ -428,6 +431,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
       setSelectedInstagramAccountId('')
     }
     setMediaUrl(null)
+    setMediaId(null)
     setMediaType(null)
     setUploadError(null)
     setIsUploading(false)
@@ -526,7 +530,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
     // Build media items for carousel (feed posts only)
     const mediaItemsPayload: CreatePostMediaItem[] | undefined = hasCarousel
       ? carouselItems.map((item, index) => ({
-          mediaUrl: item.storageKey,
+          mediaId: item.mediaId,
           mediaType: item.mediaType,
           order: index,
         }))
@@ -540,7 +544,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
       postType,
       targetPageId: isFacebookSelected ? selectedPageId : undefined,
       targetInstagramAccountId: isInstagramSelected ? selectedInstagramAccountId : undefined,
-      mediaUrl: hasCarousel ? undefined : (mediaUrl || undefined),
+      mediaId: hasCarousel ? undefined : (mediaId || undefined),
       mediaType: hasCarousel ? undefined : (mediaType || undefined),
       selectedThumbnailUrl: selectedThumbnailUrl || undefined,
       mediaItems: mediaItemsPayload,
@@ -666,7 +670,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
     const hasCarousel = !isStory && (isInstagramSelected || isFacebookSelected) && carouselItems.length >= 2
     const mediaItemsPayload: CreatePostMediaItem[] | undefined = hasCarousel
       ? carouselItems.map((item, index) => ({
-          mediaUrl: item.storageKey,
+          mediaId: item.mediaId,
           mediaType: item.mediaType,
           order: index,
         }))
@@ -680,7 +684,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
         postType,
         targetPageId: isFacebookSelected ? selectedPageId : undefined,
         targetInstagramAccountId: isInstagramSelected ? selectedInstagramAccountId : undefined,
-        mediaUrl: hasCarousel ? undefined : (mediaUrl || undefined),
+        mediaId: hasCarousel ? undefined : (mediaId || undefined),
         mediaType: hasCarousel ? undefined : (mediaType || undefined),
         selectedThumbnailUrl: selectedThumbnailUrl || undefined,
         mediaItems: mediaItemsPayload,
@@ -969,6 +973,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
               }}
               onAppendText={(text) => setContent((prev) => prev + text)}
               mediaUrl={mediaUrl}
+              mediaId={mediaId}
               mediaType={mediaType}
               mediaItems={aiAssistMediaItems}
               onSelectThumbnail={(url) => setSelectedThumbnailUrl(url)}
@@ -994,14 +999,16 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
             /* Stories: single media upload with Story placement for validation */
             <MediaUpload
               key={uploadKey}
-              onUploadComplete={(storageKey, type) => {
-                setMediaUrl(storageKey)
+              onUploadComplete={(nextMediaId, previewUrl, type) => {
+                setMediaId(nextMediaId)
+                setMediaUrl(previewUrl)
                 setMediaType(type)
                 setUploadError(null)
               }}
               onUploadError={(error) => setUploadError(error)}
               onClear={() => {
                 setMediaUrl(null)
+                setMediaId(null)
                 setMediaType(null)
                 clearSingleMediaValidationState()
               }}
@@ -1021,14 +1028,17 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
                 // If user goes from multi to single (1 item), keep it in carousel state
                 // but also set legacy media for AI panel preview
                 if (items.length === 1) {
-                  setMediaUrl(items[0].storageKey)
+                  setMediaId(items[0].mediaId)
+                  setMediaUrl(items[0].previewUrl)
                   setMediaType(items[0].mediaType)
                 } else if (items.length === 0) {
                   setMediaUrl(null)
+                  setMediaId(null)
                   setMediaType(null)
                 } else {
                   // Multi-media: set first item for AI preview
-                  setMediaUrl(items[0].storageKey)
+                  setMediaId(items[0].mediaId)
+                  setMediaUrl(items[0].previewUrl)
                   setMediaType(items[0].mediaType)
                 }
               }}
@@ -1039,14 +1049,16 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
           ) : (
             <MediaUpload
               key={uploadKey}
-              onUploadComplete={(storageKey, type) => {
-                setMediaUrl(storageKey)
+              onUploadComplete={(nextMediaId, previewUrl, type) => {
+                setMediaId(nextMediaId)
+                setMediaUrl(previewUrl)
                 setMediaType(type)
                 setUploadError(null)
               }}
               onUploadError={(error) => setUploadError(error)}
               onClear={() => {
                 setMediaUrl(null)
+                setMediaId(null)
                 setMediaType(null)
                 clearSingleMediaValidationState()
               }}
@@ -1070,7 +1082,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
               caption={content}
               mediaTags={mediaTags}
               onMediaTagsChange={setMediaTags}
-              mediaStorageKey={mediaUrl}
+              mediaUrl={mediaUrl}
               disabled={!isComposerEnabled}
               isVideo={isVideoTag}
             />
@@ -1120,7 +1132,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
                     return next
                   })
                 }}
-                mediaStorageKey={carouselItems[selectedCarouselItemIndex].storageKey}
+                mediaUrl={carouselItems[selectedCarouselItemIndex].previewUrl}
                 disabled={!isComposerEnabled}
                 isVideo={carouselItems[selectedCarouselItemIndex].mediaType === 'Video'}
               />

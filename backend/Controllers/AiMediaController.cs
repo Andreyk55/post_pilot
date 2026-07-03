@@ -85,14 +85,29 @@ public class AiMediaController : ControllerBase
 
         var mediaItem = mediaSupport.MediaItem!;
 
-        // OWNERSHIP + SSRF GATE. AssetUrl is client-supplied. It MUST be a server-issued
-        // storage key owned by the current workspace — never an external URL. This blocks
+        // OWNERSHIP + SSRF GATE. The frontend should supply MediaId (resolved to the internal
+        // StorageKey below, scoped to the current workspace); AssetUrl remains only for
+        // backward-compatible direct-storage-key callers and MUST be a server-issued storage
+        // key owned by the current workspace — never an external URL. This blocks
         // (a) SSRF: fetching arbitrary http/https/file/ftp/localhost/private-network targets
         // server-side, and (b) cross-workspace reads: resolving another workspace's storage
-        // key. Reject before rate-limiting or resolving any bytes. The raw AssetUrl is never
-        // echoed back so a caller can't probe which keys exist.
+        // key. Reject before rate-limiting or resolving any bytes. The raw AssetUrl/StorageKey
+        // is never echoed back so a caller can't probe which keys exist.
         var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync(cancellationToken);
-        if (!await _mediaOwnership.IsOwnedStorageKeyAsync(mediaItem.AssetUrl, workspaceId, cancellationToken))
+        if (mediaItem.MediaId.HasValue)
+        {
+            var media = await _db.Media.AsNoTracking()
+                .FirstOrDefaultAsync(m => m.Id == mediaItem.MediaId.Value && m.WorkspaceId == workspaceId, cancellationToken);
+            if (media == null)
+            {
+                _logger.LogWarning(
+                    "AI media request rejected: mediaId not found in workspace {WorkspaceId}.",
+                    workspaceId);
+                return NotFound(new { error = "media_not_found" });
+            }
+            mediaItem = mediaItem with { AssetUrl = media.StorageKey };
+        }
+        else if (!await _mediaOwnership.IsOwnedStorageKeyAsync(mediaItem.AssetUrl, workspaceId, cancellationToken))
         {
             _logger.LogWarning(
                 "AI media request rejected: asset is not a storage key owned by workspace {WorkspaceId}.",
@@ -299,9 +314,9 @@ public class AiMediaController : ControllerBase
             {
                 var mediaItem = request.MediaItems[index];
 
-                if (string.IsNullOrWhiteSpace(mediaItem.AssetUrl))
+                if (string.IsNullOrWhiteSpace(mediaItem.AssetUrl) && !mediaItem.MediaId.HasValue)
                 {
-                    errors[$"mediaItems[{index}].assetUrl"] = new[] { "Asset URL is required." };
+                    errors[$"mediaItems[{index}].assetUrl"] = new[] { "Either mediaId or assetUrl is required." };
                 }
 
                 if (string.IsNullOrWhiteSpace(mediaItem.AssetType))
