@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace PostPilot.Api.Controllers;
@@ -18,6 +19,7 @@ public class InternalController : ControllerBase
     /// <summary>
     /// Health check endpoint for internal services.
     /// </summary>
+    [AllowAnonymous] // Liveness probe — no session required (private-by-default FallbackPolicy).
     [HttpGet("health")]
     public IActionResult Health()
     {

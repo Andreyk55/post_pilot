@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PostPilot.Api.Services.PrivateAccess;
 using PostPilot.Api.Settings;
@@ -17,6 +18,7 @@ namespace PostPilot.Api.Controllers;
 /// even when the gate is enabled.
 /// </summary>
 [ApiController]
+[AllowAnonymous] // The password gate itself must be reachable before any session exists.
 [Route("api/private-access")]
 public class PrivateAccessController : ControllerBase
 {

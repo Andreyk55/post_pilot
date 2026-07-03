@@ -49,6 +49,7 @@ public class AuthController : ControllerBase
         _logger = logger;
     }
 
+    [AllowAnonymous]
     [HttpGet("google/start")]
     public IActionResult GoogleStart([FromQuery] string? returnUrl)
     {
@@ -63,6 +64,7 @@ public class AuthController : ControllerBase
         return Challenge(props, GoogleDefaults.AuthenticationScheme);
     }
 
+    [AllowAnonymous]
     [HttpGet("google/callback")]
     public async Task<IActionResult> GoogleCallback()
     {
@@ -178,6 +180,7 @@ public class AuthController : ControllerBase
         });
     }
 
+    [AllowAnonymous]
     [HttpPost("logout")]
     public async Task<IActionResult> Logout()
     {

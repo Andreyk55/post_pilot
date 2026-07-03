@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
 using PostPilot.Api.Extensions;
@@ -217,7 +218,19 @@ public class Startup
                 options.ClaimActions.MapJsonKey("urn:google:picture", "picture");
             });
 
-        services.AddAuthorization();
+        // Private-by-default: every endpoint requires an authenticated user UNLESS it is
+        // explicitly opted out with [AllowAnonymous] (or .AllowAnonymous() for minimal
+        // endpoints). This turns a forgotten [Authorize] on a future controller/action from a
+        // silent public exposure into a safe 401. The intentionally public endpoints
+        // (health probes, the Google login start/callback, the private-access gate, Meta's
+        // data-deletion callback + status page, /api/meta/limits, and the local-mode media
+        // frame route) carry [AllowAnonymous] and are unaffected.
+        services.AddAuthorization(options =>
+        {
+            options.FallbackPolicy = new AuthorizationPolicyBuilder()
+                .RequireAuthenticatedUser()
+                .Build();
+        });
     }
 
     public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
@@ -277,7 +290,7 @@ public class Startup
             {
                 status = "healthy",
                 timestamp = DateTime.UtcNow
-            }));
+            })).AllowAnonymous(); // liveness probe — must answer without a session (see FallbackPolicy above).
 
             endpoints.MapControllers();
         });
