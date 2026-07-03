@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using PostPilot.Api.Data;
 using PostPilot.Api.DTOs;
@@ -183,9 +184,6 @@ public class MetaOAuthService : IMetaOAuthService
             throw new InvalidOperationException("Failed to obtain access token");
         }
 
-        await DebugWhoLoggedInAsync(tokenData.AccessToken);
-        await DebugPermissionsAsync(tokenData.AccessToken);
-
         // Exchange for long-lived token
         var longLivedTokenUrl = $"{_graphApiBaseUrl}/oauth/access_token?" +
             $"grant_type=fb_exchange_token" +
@@ -255,15 +253,15 @@ public class MetaOAuthService : IMetaOAuthService
 
         if (!tokenResponse.IsSuccessStatusCode)
         {
-            var errorBody = await tokenResponse.Content.ReadAsStringAsync();
-            _logger.LogError("Token exchange failed. Status: {Status}, Body: {Body}", tokenResponse.StatusCode, errorBody);
-            throw new InvalidOperationException($"Failed to exchange code for token: {errorBody}");
+            var safeBody = RedactSensitive(await tokenResponse.Content.ReadAsStringAsync());
+            _logger.LogError("Token exchange failed. Status: {Status}, Body: {Body}", tokenResponse.StatusCode, safeBody);
+            throw new InvalidOperationException($"Failed to exchange code for token: {safeBody}");
         }
         var tokenJson = await tokenResponse.Content.ReadAsStringAsync();
         var tokenData = JsonSerializer.Deserialize<MetaTokenResponse>(tokenJson);
         if (tokenData?.AccessToken == null)
         {
-            _logger.LogError("Token response did not contain access_token. Response: {Json}", tokenJson);
+            _logger.LogError("Token response did not contain access_token. Response: {Json}", RedactSensitive(tokenJson));
             throw new InvalidOperationException("Failed to obtain access token");
         }
 
@@ -288,7 +286,7 @@ public class MetaOAuthService : IMetaOAuthService
         }
         else
         {
-            var errorBody = await longLivedResponse.Content.ReadAsStringAsync();
+            var errorBody = RedactSensitive(await longLivedResponse.Content.ReadAsStringAsync());
             _logger.LogWarning("Long-lived token exchange failed (will use short-lived token). Status: {Status}, Body: {Body}", longLivedResponse.StatusCode, errorBody);
         }
 
@@ -542,15 +540,6 @@ public class MetaOAuthService : IMetaOAuthService
             .FirstOrDefaultAsync();
     }
 
-    private async Task DebugWhoLoggedInAsync(string accessToken)
-    {
-        var resp = await _httpClient.GetAsync(
-            $"{_graphApiBaseUrl}/me?fields=id,name&access_token={accessToken}");
-
-        var body = await resp.Content.ReadAsStringAsync();
-        _logger.LogInformation("Meta /me response: {Body}", body);
-    }
-
     /// <summary>
     /// Look up the stable Meta user identity (FB user id + name) for the supplied
     /// token. This is the <c>ProviderAccountId</c> we persist on the MetaConnection
@@ -563,15 +552,15 @@ public class MetaOAuthService : IMetaOAuthService
     {
         try
         {
-            var resp = await _httpClient.GetAsync(
-                $"{_graphApiBaseUrl}/me?fields=id,name&access_token={accessToken}");
+            var resp = await GraphGetAsync($"{_graphApiBaseUrl}/me?fields=id,name", accessToken);
             var body = await resp.Content.ReadAsStringAsync();
 
             if (!resp.IsSuccessStatusCode)
             {
+                // Log status only — the body may echo request context; never log it raw.
                 _logger.LogWarning(
-                    "Meta /me failed while resolving provider identity. Status: {Status}, Body: {Body}",
-                    resp.StatusCode, body);
+                    "Meta /me failed while resolving provider identity. Status: {Status}",
+                    resp.StatusCode);
                 return (null, null);
             }
 
@@ -583,15 +572,6 @@ public class MetaOAuthService : IMetaOAuthService
             _logger.LogWarning(ex, "Failed to resolve Meta provider identity from /me");
             return (null, null);
         }
-    }
-
-    private async Task DebugPermissionsAsync(string accessToken)
-    {
-        var resp = await _httpClient.GetAsync(
-            $"{_graphApiBaseUrl}/me/permissions?access_token={accessToken}");
-
-        var body = await resp.Content.ReadAsStringAsync();
-        _logger.LogInformation("Meta /me/permissions response: {Body}", body);
     }
 
     public async Task<MetaDiscoverInstagramResponse> DiscoverInstagramAccountsAsync(string tempToken, List<string> pageIds, Guid workspaceId)
@@ -637,8 +617,8 @@ public class MetaOAuthService : IMetaOAuthService
                 // Step 1: Try with subfield expansion for full profile details
                 var fields = "name,instagram_business_account{id,username,name,profile_picture_url}," +
                              "connected_instagram_account{id,username,name,profile_picture_url}";
-                var igUrl = $"{_graphApiBaseUrl}/{page.Id}?fields={fields}&access_token={page.AccessToken}";
-                var response = await _httpClient.GetAsync(igUrl);
+                var igUrl = $"{_graphApiBaseUrl}/{page.Id}?fields={fields}";
+                var response = await GraphGetAsync(igUrl, page.AccessToken);
 
                 if (!response.IsSuccessStatusCode) continue;
 
@@ -651,8 +631,8 @@ public class MetaOAuthService : IMetaOAuthService
                 if (ig == null || string.IsNullOrEmpty(ig.Id))
                 {
                     var plainFields = "name,instagram_business_account,connected_instagram_account";
-                    var plainUrl = $"{_graphApiBaseUrl}/{page.Id}?fields={plainFields}&access_token={page.AccessToken}";
-                    var plainResponse = await _httpClient.GetAsync(plainUrl);
+                    var plainUrl = $"{_graphApiBaseUrl}/{page.Id}?fields={plainFields}";
+                    var plainResponse = await GraphGetAsync(plainUrl, page.AccessToken);
 
                     if (plainResponse.IsSuccessStatusCode)
                     {
@@ -1089,8 +1069,7 @@ public class MetaOAuthService : IMetaOAuthService
         {
             try
             {
-                var revokeUrl = $"{_graphApiBaseUrl}/me/permissions?access_token={accessTokenToRevoke}";
-                await _httpClient.DeleteAsync(revokeUrl);
+                await GraphDeleteAsync($"{_graphApiBaseUrl}/me/permissions", accessTokenToRevoke);
             }
             catch (Exception ex)
             {
@@ -1143,86 +1122,56 @@ public class MetaOAuthService : IMetaOAuthService
         if (connection == null)
             return new { error = "No Meta connection found" };
 
-        // 1) Check token permissions
-        string? permissionsJson = null;
+        // 1) Granted permission NAMES only. The raw /me/permissions body is never returned;
+        //    tokens never appear in this endpoint's output.
+        string grantedPermissions;
         try
         {
-            var permResp = await _httpClient.GetAsync(
-                $"{_graphApiBaseUrl}/me/permissions?access_token={connection.AccessToken}");
-            permissionsJson = await permResp.Content.ReadAsStringAsync();
+            var permResp = await GraphGetAsync($"{_graphApiBaseUrl}/me/permissions", connection.AccessToken);
+            grantedPermissions = SummarizePermissions(await permResp.Content.ReadAsStringAsync());
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            permissionsJson = $"ERROR: {ex.Message}";
+            grantedPermissions = "(error)";
         }
 
         // 2) Requested OAuth scopes
         var requestedScopes = "pages_show_list,pages_read_engagement,pages_manage_posts,business_management,public_profile";
 
-        // 3) Fetch pages with their tokens
+        // 3) Fetch pages (page ids/names are already shown in-app; page tokens are NOT surfaced).
         var allPages = await FetchUserPagesAsync(connection.AccessToken);
 
-        // 4) For each page, make BOTH expanded and plain IG queries
+        // 4) For each page, resolve IG linkage. We return ONLY the computed linkage result and
+        //    HTTP status codes — never raw Graph JSON (which can carry tokens/PII) or token prefixes.
         var pageResults = new List<object>();
         foreach (var page in allPages)
         {
-            // Query A: with subfield expansion
             var expandedFields = "name,instagram_business_account{id,username,name,profile_picture_url}," +
                          "connected_instagram_account{id,username,name,profile_picture_url}";
-            var expandedUrl = $"{_graphApiBaseUrl}/{page.Id}?fields={expandedFields}&access_token={page.AccessToken}";
+            var plainFields = "name,instagram_business_account,connected_instagram_account";
 
-            string? expandedResponse = null;
             int expandedStatus = 0;
             MetaPageInstagramResponse? expandedData = null;
             try
             {
-                var response = await _httpClient.GetAsync(expandedUrl);
+                var response = await GraphGetAsync($"{_graphApiBaseUrl}/{page.Id}?fields={expandedFields}", page.AccessToken);
                 expandedStatus = (int)response.StatusCode;
-                expandedResponse = await response.Content.ReadAsStringAsync();
                 if (response.IsSuccessStatusCode)
-                    expandedData = JsonSerializer.Deserialize<MetaPageInstagramResponse>(expandedResponse);
+                    expandedData = JsonSerializer.Deserialize<MetaPageInstagramResponse>(await response.Content.ReadAsStringAsync());
             }
-            catch (Exception ex)
-            {
-                expandedResponse = $"ERROR: {ex.Message}";
-            }
+            catch (Exception) { /* status stays 0; linkage falls back to plain query */ }
 
-            // Query B: without subfield expansion (plain)
-            var plainFields = "name,instagram_business_account,connected_instagram_account";
-            var plainUrl = $"{_graphApiBaseUrl}/{page.Id}?fields={plainFields}&access_token={page.AccessToken}";
-
-            string? plainResponse = null;
             int plainStatus = 0;
             MetaPageInstagramResponse? plainData = null;
             try
             {
-                var resp2 = await _httpClient.GetAsync(plainUrl);
+                var resp2 = await GraphGetAsync($"{_graphApiBaseUrl}/{page.Id}?fields={plainFields}", page.AccessToken);
                 plainStatus = (int)resp2.StatusCode;
-                plainResponse = await resp2.Content.ReadAsStringAsync();
                 if (resp2.IsSuccessStatusCode)
-                    plainData = JsonSerializer.Deserialize<MetaPageInstagramResponse>(plainResponse);
+                    plainData = JsonSerializer.Deserialize<MetaPageInstagramResponse>(await resp2.Content.ReadAsStringAsync());
             }
-            catch (Exception ex)
-            {
-                plainResponse = $"ERROR: {ex.Message}";
-            }
+            catch (Exception) { /* status stays 0 */ }
 
-            // Query C: with USER token instead of page token
-            string? userTokenResponse = null;
-            int userTokenStatus = 0;
-            try
-            {
-                var userUrl = $"{_graphApiBaseUrl}/{page.Id}?fields={expandedFields}&access_token={connection.AccessToken}";
-                var resp3 = await _httpClient.GetAsync(userUrl);
-                userTokenStatus = (int)resp3.StatusCode;
-                userTokenResponse = await resp3.Content.ReadAsStringAsync();
-            }
-            catch (Exception ex)
-            {
-                userTokenResponse = $"ERROR: {ex.Message}";
-            }
-
-            // Compute linkage result
             var igExpanded = expandedData?.InstagramBusinessAccount ?? expandedData?.ConnectedInstagramAccount;
             var igPlain = plainData?.InstagramBusinessAccount ?? plainData?.ConnectedInstagramAccount;
             var effectiveIgId = (igExpanded != null && !string.IsNullOrEmpty(igExpanded.Id))
@@ -1234,24 +1183,8 @@ public class MetaOAuthService : IMetaOAuthService
                 pageId = page.Id,
                 pageName = page.Name,
                 hasPageToken = !string.IsNullOrEmpty(page.AccessToken),
-                pageTokenPrefix = page.AccessToken?.Substring(0, Math.Min(20, page.AccessToken?.Length ?? 0)) + "...",
-                expandedQuery = new
-                {
-                    fields = expandedFields,
-                    status = expandedStatus,
-                    rawJson = expandedResponse,
-                    deserializedIBA = expandedData?.InstagramBusinessAccount?.Id ?? "null",
-                    deserializedCIA = expandedData?.ConnectedInstagramAccount?.Id ?? "null"
-                },
-                plainQuery = new
-                {
-                    fields = plainFields,
-                    status = plainStatus,
-                    rawJson = plainResponse,
-                    deserializedIBA = plainData?.InstagramBusinessAccount?.Id ?? "null",
-                    deserializedCIA = plainData?.ConnectedInstagramAccount?.Id ?? "null"
-                },
-                withUserToken = new { status = userTokenStatus, rawJson = userTokenResponse },
+                expandedQueryStatus = expandedStatus,
+                plainQueryStatus = plainStatus,
                 computedResult = new
                 {
                     linked = effectiveIgId != null,
@@ -1267,8 +1200,7 @@ public class MetaOAuthService : IMetaOAuthService
         {
             graphApiVersion = "v21.0",
             requestedOAuthScopes = requestedScopes,
-            grantedPermissions = permissionsJson,
-            userTokenPrefix = connection.AccessToken?.Substring(0, Math.Min(20, connection.AccessToken?.Length ?? 0)) + "...",
+            grantedPermissions,
             pageCount = allPages.Count,
             pages = pageResults
         };
@@ -1330,20 +1262,20 @@ public class MetaOAuthService : IMetaOAuthService
             var expandedFields = "name," +
                          "instagram_business_account{id,username,name,profile_picture_url}," +
                          "connected_instagram_account{id,username,name,profile_picture_url}";
-            var igUrl = $"{_graphApiBaseUrl}/{page.Id}?fields={expandedFields}&access_token={page.AccessToken}";
+            var igUrl = $"{_graphApiBaseUrl}/{page.Id}?fields={expandedFields}";
 
             _logger.LogDebug(
                 "IG discovery: querying page {PageId} ({PageName}), fields={Fields}, tokenType=page_token, graphVersion=v21.0",
                 page.Id, page.Name, expandedFields);
 
-            var response = await _httpClient.GetAsync(igUrl);
+            var response = await GraphGetAsync(igUrl, page.AccessToken);
 
             if (!response.IsSuccessStatusCode)
             {
                 var errorBody = await response.Content.ReadAsStringAsync();
                 _logger.LogWarning(
                     "IG discovery: API call FAILED for page {PageId}: status={Status}, body={Body}",
-                    page.Id, response.StatusCode, errorBody);
+                    page.Id, response.StatusCode, RedactSensitive(errorBody));
 
                 if ((int)response.StatusCode == 403 || errorBody.Contains("OAuthException"))
                 {
@@ -1355,8 +1287,8 @@ public class MetaOAuthService : IMetaOAuthService
                     "Could not check Instagram status for this Page.");
             }
 
+            // Do NOT log the raw Graph body; only the deserialized (non-sensitive) IG ids below.
             var json = await response.Content.ReadAsStringAsync();
-            _logger.LogDebug("IG discovery: raw Graph response for page {PageId}: {Json}", page.Id, json);
 
             var data = JsonSerializer.Deserialize<MetaPageInstagramResponse>(json);
 
@@ -1376,17 +1308,16 @@ public class MetaOAuthService : IMetaOAuthService
             if (!hasIgFromExpanded)
             {
                 var plainFields = "name,instagram_business_account,connected_instagram_account";
-                var plainUrl = $"{_graphApiBaseUrl}/{page.Id}?fields={plainFields}&access_token={page.AccessToken}";
+                var plainUrl = $"{_graphApiBaseUrl}/{page.Id}?fields={plainFields}";
 
                 _logger.LogDebug(
                     "IG discovery: retrying page {PageId} without subfield expansion, fields={Fields}",
                     page.Id, plainFields);
 
-                var plainResponse = await _httpClient.GetAsync(plainUrl);
+                var plainResponse = await GraphGetAsync(plainUrl, page.AccessToken);
                 if (plainResponse.IsSuccessStatusCode)
                 {
                     var plainJson = await plainResponse.Content.ReadAsStringAsync();
-                    _logger.LogDebug("IG discovery: plain response for page {PageId}: {Json}", page.Id, plainJson);
 
                     var plainData = JsonSerializer.Deserialize<MetaPageInstagramResponse>(plainJson);
 
@@ -1406,7 +1337,7 @@ public class MetaOAuthService : IMetaOAuthService
                     var plainError = await plainResponse.Content.ReadAsStringAsync();
                     _logger.LogWarning(
                         "IG discovery: plain query also failed for page {PageId}: status={Status}, body={Body}",
-                        page.Id, plainResponse.StatusCode, plainError);
+                        page.Id, plainResponse.StatusCode, RedactSensitive(plainError));
                 }
             }
 
@@ -1424,12 +1355,12 @@ public class MetaOAuthService : IMetaOAuthService
     {
         try
         {
-            var resp = await _httpClient.GetAsync(
-                $"{_graphApiBaseUrl}/me/permissions?access_token={accessToken}");
+            var resp = await GraphGetAsync($"{_graphApiBaseUrl}/me/permissions", accessToken);
             if (resp.IsSuccessStatusCode)
             {
-                var body = await resp.Content.ReadAsStringAsync();
-                _logger.LogInformation("Instagram discovery - token scopes: {Scopes}", body);
+                // Log permission NAMES only (the raw body carries no tokens, but we summarize anyway).
+                var summary = SummarizePermissions(await resp.Content.ReadAsStringAsync());
+                _logger.LogInformation("Instagram discovery - granted scopes: {Scopes}", summary);
             }
         }
         catch (Exception ex)
@@ -1441,15 +1372,17 @@ public class MetaOAuthService : IMetaOAuthService
     private async Task<List<FacebookPageDto>> FetchUserPagesAsync(string accessToken)
     {
         var pages = new List<FacebookPageDto>();
-        var url = $"{_graphApiBaseUrl}/me/accounts?fields=id,name,category,picture{{url}},access_token&access_token={accessToken}";
+        // access_token is requested as a FIELD (pages carry their own tokens) but the AUTH
+        // token travels in the Authorization header, not the URL — see GraphGetAsync.
+        var url = $"{_graphApiBaseUrl}/me/accounts?fields=id,name,category,picture{{url}},access_token";
 
         while (!string.IsNullOrEmpty(url))
         {
-            var response = await _httpClient.GetAsync(url);
+            var response = await GraphGetAsync(url, accessToken);
             response.EnsureSuccessStatusCode();
 
+            // Do NOT log the raw /me/accounts body: it contains per-page access tokens.
             var json = await response.Content.ReadAsStringAsync();
-            _logger.LogDebug("RAW /me/accounts JSON: {Json}", json);
             var data = JsonSerializer.Deserialize<MetaPagesResponse>(json);
 
             if (data?.Data != null)
@@ -1469,7 +1402,86 @@ public class MetaOAuthService : IMetaOAuthService
             url = data?.Paging?.Next;
         }
 
+        // Safe summary only: count + page ids/names (both are already displayed in-app). No tokens.
+        _logger.LogInformation(
+            "Fetched {Count} Meta page(s): {PageIds}",
+            pages.Count,
+            string.Join(", ", pages.Select(p => $"{p.Id}:{p.Name}")));
+
         return pages;
+    }
+
+    // ── Graph HTTP helpers ────────────────────────────────────────────────────
+    // Send the access token via the Authorization: Bearer header instead of an
+    // access_token query parameter, so tokens never appear in request URLs (and thus
+    // never leak into any HTTP/proxy access logs). Any access_token already present in the
+    // URL's query is stripped first; a bare `access_token` requested as a FIELD is preserved.
+
+    private Task<HttpResponseMessage> GraphGetAsync(string url, string? accessToken, CancellationToken ct = default)
+        => SendGraphAsync(HttpMethod.Get, url, accessToken, ct);
+
+    private Task<HttpResponseMessage> GraphDeleteAsync(string url, string? accessToken, CancellationToken ct = default)
+        => SendGraphAsync(HttpMethod.Delete, url, accessToken, ct);
+
+    private Task<HttpResponseMessage> SendGraphAsync(HttpMethod method, string url, string? accessToken, CancellationToken ct)
+    {
+        var request = new HttpRequestMessage(method, StripAccessTokenFromQuery(url));
+        if (!string.IsNullOrEmpty(accessToken))
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        return _httpClient.SendAsync(request, ct);
+    }
+
+    // Removes an `access_token=...` AUTH parameter from the query while preserving a bare
+    // `access_token` field request (e.g. ...fields=...,access_token). Only matches when a '='
+    // follows, which never happens for the field form.
+    private static readonly Regex AccessTokenQueryRegex =
+        new(@"([?&])access_token=[^&]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    internal static string StripAccessTokenFromQuery(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return url;
+        var stripped = AccessTokenQueryRegex.Replace(url, "$1");
+        stripped = stripped.Replace("?&", "?").Replace("&&", "&");
+        return stripped.TrimEnd('?', '&');
+    }
+
+    // Redacts secret values from a JSON/query-like string before it is ever logged. Matches
+    // access_token, token, user/page token, refresh_token, authorization, and client_secret in
+    // "key":"value" (JSON), key=value (query), and "Authorization: Bearer <token>" (header) forms.
+    private static readonly Regex SensitiveValueRegex =
+        new(@"(""?(?:access_token|refresh_token|client_secret|authorization|user_?token|page_?token|token)""?\s*[:=]\s*(?:Bearer\s+)?""?)([^""&,}\s]+)",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    internal static string RedactSensitive(string? body)
+    {
+        if (string.IsNullOrEmpty(body)) return body ?? string.Empty;
+        return SensitiveValueRegex.Replace(body, "$1[REDACTED]");
+    }
+
+    // Parses a Graph /me/permissions payload into a safe "name=status" summary (no tokens are
+    // present in permissions responses, but we still avoid logging the raw body verbatim).
+    private static string SummarizePermissions(string? permissionsJson)
+    {
+        if (string.IsNullOrWhiteSpace(permissionsJson)) return "(none)";
+        try
+        {
+            using var doc = JsonDocument.Parse(permissionsJson);
+            if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
+                return "(none)";
+            var parts = new List<string>();
+            foreach (var perm in data.EnumerateArray())
+            {
+                var name = perm.TryGetProperty("permission", out var p) ? p.GetString() : null;
+                var status = perm.TryGetProperty("status", out var s) ? s.GetString() : null;
+                if (!string.IsNullOrEmpty(name))
+                    parts.Add(status is null ? name : $"{name}={status}");
+            }
+            return parts.Count == 0 ? "(none)" : string.Join(", ", parts);
+        }
+        catch (JsonException)
+        {
+            return "(unparseable)";
+        }
     }
 
     private static string GenerateSecureState()

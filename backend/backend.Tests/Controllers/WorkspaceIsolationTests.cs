@@ -742,11 +742,18 @@ public class WorkspaceIsolationTests : IDisposable
     // ICurrentWorkspaceProvider — never from the client. The service layer is
     // mocked: its own scoping is covered by MetaOAuthService unit tests below.
 
-    private MetaController NewMetaController(Mock<PostPilot.Api.Services.IMetaOAuthService> svc) => new(
-        svc.Object,
-        _userMock.Object,
-        _workspaceMock.Object,
-        NullLogger<MetaController>.Instance);
+    private MetaController NewMetaController(Mock<PostPilot.Api.Services.IMetaOAuthService> svc)
+    {
+        var env = new Mock<Microsoft.AspNetCore.Hosting.IWebHostEnvironment>();
+        env.SetupGet(e => e.EnvironmentName).Returns("Production");
+        return new MetaController(
+            svc.Object,
+            _userMock.Object,
+            _workspaceMock.Object,
+            env.Object,
+            new PostPilot.Api.Settings.MetaOptions(),
+            NullLogger<MetaController>.Instance);
+    }
 
     /// <summary>MetaController wired to the REAL workspace provider for <paramref name="userId"/>.</summary>
     private MetaController NewRealMetaControllerFor(Guid userId, Mock<PostPilot.Api.Services.IMetaOAuthService> svc)
@@ -755,8 +762,12 @@ public class WorkspaceIsolationTests : IDisposable
         realUser.Setup(u => u.GetCurrentUserId()).Returns(userId);
         var realWorkspace = new CurrentWorkspaceProvider(
             _db, realUser.Object, NullLogger<CurrentWorkspaceProvider>.Instance);
+        var env = new Mock<Microsoft.AspNetCore.Hosting.IWebHostEnvironment>();
+        env.SetupGet(e => e.EnvironmentName).Returns("Production");
         return new MetaController(
-            svc.Object, realUser.Object, realWorkspace, NullLogger<MetaController>.Instance);
+            svc.Object, realUser.Object, realWorkspace,
+            env.Object, new PostPilot.Api.Settings.MetaOptions(),
+            NullLogger<MetaController>.Instance);
     }
 
     [Fact]

@@ -26,8 +26,12 @@ public class MetaControllerMismatchTests
         var user = new Mock<ICurrentUserProvider>();
         user.Setup(u => u.GetCurrentUserId()).Returns(UserId);
         var workspace = new Mock<ICurrentWorkspaceProvider>();
+        var env = new Mock<Microsoft.AspNetCore.Hosting.IWebHostEnvironment>();
+        env.SetupGet(e => e.EnvironmentName).Returns("Production");
         return new MetaController(
-            meta.Object, user.Object, workspace.Object, NullLogger<MetaController>.Instance);
+            meta.Object, user.Object, workspace.Object,
+            env.Object, new PostPilot.Api.Settings.MetaOptions(),
+            NullLogger<MetaController>.Instance);
     }
 
     [Fact]

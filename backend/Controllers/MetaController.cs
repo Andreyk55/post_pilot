@@ -4,6 +4,7 @@ using PostPilot.Api.DTOs;
 using PostPilot.Api.Services;
 using PostPilot.Api.Services.Auth;
 using PostPilot.Api.Services.Providers;
+using PostPilot.Api.Settings;
 
 namespace PostPilot.Api.Controllers;
 
@@ -15,19 +16,31 @@ public class MetaController : ControllerBase
     private readonly IMetaOAuthService _metaOAuthService;
     private readonly ICurrentUserProvider _currentUser;
     private readonly ICurrentWorkspaceProvider _currentWorkspace;
+    private readonly IWebHostEnvironment _env;
+    private readonly MetaOptions _metaOptions;
     private readonly ILogger<MetaController> _logger;
 
     public MetaController(
         IMetaOAuthService metaOAuthService,
         ICurrentUserProvider currentUser,
         ICurrentWorkspaceProvider currentWorkspace,
+        IWebHostEnvironment env,
+        MetaOptions metaOptions,
         ILogger<MetaController> logger)
     {
         _metaOAuthService = metaOAuthService;
         _currentUser = currentUser;
         _currentWorkspace = currentWorkspace;
+        _env = env;
+        _metaOptions = metaOptions;
         _logger = logger;
     }
+
+    /// <summary>
+    /// Whether the Meta diagnostic endpoints may run: only in Development, or when explicitly
+    /// enabled via Meta:EnableDebugEndpoints. Off (→ 404) in production by default.
+    /// </summary>
+    private bool DebugEndpointsEnabled => _env.IsDevelopment() || _metaOptions.EnableDebugEndpoints;
 
     [HttpPost("oauth/start")]
     public async Task<ActionResult<MetaOAuthStartResponse>> StartOAuth()
@@ -309,6 +322,13 @@ public class MetaController : ControllerBase
     [HttpGet("instagram/debug")]
     public async Task<ActionResult<object>> DebugInstagramDiscovery()
     {
+        // Diagnostic endpoint: hidden (404) in production unless explicitly enabled. Checked
+        // before resolving the workspace so a disabled endpoint reveals nothing about state.
+        if (!DebugEndpointsEnabled)
+        {
+            return NotFound();
+        }
+
         var workspaceId = await _currentWorkspace.GetCurrentWorkspaceIdAsync();
         try
         {
