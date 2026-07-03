@@ -108,6 +108,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IValidateOptions<PublishingOptions>, PublishingOptionsValidator>();
         services.AddSingleton(sp => sp.GetRequiredService<IOptions<PublishingOptions>>().Value);
 
+        // ── Scheduling guardrails (past/far-future/active-cap) ───────────────
+        services.AddOptions<SchedulingOptions>()
+            .Bind(configuration.GetSection(SchedulingOptions.SectionName));
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<SchedulingOptions>>().Value);
+
         // ── Media options ────────────────────────────────────────────────────
         services.AddOptions<MediaOptions>()
             .Bind(configuration.GetSection(MediaOptions.SectionName))

@@ -11,6 +11,7 @@ using PostPilot.Api.Services.Auth;
 using PostPilot.Api.Services.Publishing;
 using PostPilot.Api.Services.Scheduling;
 using PostPilot.Api.Services.Validation;
+using PostPilot.Api.Settings;
 
 namespace PostPilot.Api.Controllers;
 
@@ -24,6 +25,7 @@ public class PostsController : ControllerBase
     private readonly IFacebookInsightsService _facebookInsights;
     private readonly ICurrentWorkspaceProvider _currentWorkspace;
     private readonly IMediaValidationGate _mediaGate;
+    private readonly ScheduleGuard _scheduleGuard;
     private readonly ILogger<PostsController> _logger;
 
     public PostsController(
@@ -32,13 +34,17 @@ public class PostsController : ControllerBase
         IFacebookInsightsService facebookInsights,
         ICurrentWorkspaceProvider currentWorkspace,
         IMediaValidationGate mediaGate,
-        ILogger<PostsController> logger)
+        ILogger<PostsController> logger,
+        SchedulingOptions? schedulingOptions = null)
     {
         _context = context;
         _scheduler = scheduler;
         _facebookInsights = facebookInsights;
         _currentWorkspace = currentWorkspace;
         _mediaGate = mediaGate;
+        // Optional so existing callers/tests keep working; production DI injects the configured
+        // options. Falls back to safe defaults (past-grace 2m, max 365d, cap 500) when absent.
+        _scheduleGuard = new ScheduleGuard(context, schedulingOptions ?? new SchedulingOptions());
         _logger = logger;
     }
 
@@ -443,6 +449,16 @@ public class PostsController : ControllerBase
         {
             return ValidationProblem(new ValidationProblemDetails(validationErrors));
         }
+
+        // SCHEDULE GUARD: reject past-dated / far-future schedules and enforce the per-workspace
+        // active scheduled-post cap server-side (the SPA also checks, but that is advisory).
+        var timingError = _scheduleGuard.ValidateTiming(request.ScheduledAt);
+        if (timingError != null)
+            return ScheduleProblem(StatusCodes.Status400BadRequest, timingError.Value);
+
+        var capError = await _scheduleGuard.ValidateActiveCapAsync(workspaceId);
+        if (capError != null)
+            return ScheduleProblem(StatusCodes.Status409Conflict, capError.Value);
 
         // For Facebook posts, verify the target page is connected and has a valid token
         if (request.Platform == Platform.Facebook)
@@ -887,6 +903,17 @@ public class PostsController : ControllerBase
             return ValidationProblem(new ValidationProblemDetails(validationErrors));
         }
 
+        // SCHEDULE GUARD: the post stays Scheduled after an edit, so re-validate the (possibly
+        // changed) schedule time. The cap check excludes THIS post — an in-place edit of an
+        // already-counted scheduled post must never be blocked by the workspace being at cap.
+        var timingError = _scheduleGuard.ValidateTiming(request.ScheduledAt);
+        if (timingError != null)
+            return ScheduleProblem(StatusCodes.Status400BadRequest, timingError.Value);
+
+        var capError = await _scheduleGuard.ValidateActiveCapAsync(workspaceId, excludePostId: post.Id);
+        if (capError != null)
+            return ScheduleProblem(StatusCodes.Status409Conflict, capError.Value);
+
         // For Facebook posts, verify the target page is connected and has a valid token
         if (request.Platform == Platform.Facebook)
         {
@@ -1317,6 +1344,24 @@ public class PostsController : ControllerBase
                 ["mediaErrors"] = mediaErrors,
             }
         };
+    }
+
+    /// <summary>
+    /// Builds a ProblemDetails for a schedule-guard rejection, carrying the machine-readable
+    /// <c>code</c> in Extensions (same shape as the media-gate errors). 400 for timing errors,
+    /// 409 for the active-cap limit.
+    /// </summary>
+    private ObjectResult ScheduleProblem(int statusCode, ScheduleValidationError error)
+    {
+        _logger.LogInformation("Schedule guard rejected post: code={Code}", error.Code);
+        var problem = new ProblemDetails
+        {
+            Title = "Invalid schedule",
+            Detail = error.Message,
+            Status = statusCode,
+        };
+        problem.Extensions["code"] = error.Code;
+        return StatusCode(statusCode, problem);
     }
 
     private static Dictionary<string, string[]> ValidateCreatePostRequest(CreatePostRequest request)
