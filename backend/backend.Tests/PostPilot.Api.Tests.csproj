@@ -21,6 +21,11 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.*" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.*" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.1" />
+    <!-- EF Core 10's Sqlite provider pulls SQLitePCLRaw 2.1.11, whose native lib
+         (SQLitePCLRaw.lib.e_sqlite3) is vulnerable (GHSA-2m69-gcr7-jv3q) with no patched
+         2.x. The 3.x bundle replaces it with SourceGear.sqlite3; this direct pin forces it.
+         Test-only: SQLite is never referenced by the production API/Publisher projects. -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
   </ItemGroup>
 
   <ItemGroup>
