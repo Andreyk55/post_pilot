@@ -76,9 +76,11 @@ public interface IMediaService
     /// </para>
     ///
     /// <para>
-    /// For local-disk (development) this falls back to the API's
-    /// <c>/api/media/files/{storageKey}</c> route rooted at <c>App.PublicUrl</c>, which the API
-    /// streams from local storage.
+    /// Backends that cannot mint a signed URL (local-disk, the server stub) are no longer
+    /// supported for publishing and throw <see cref="NotSupportedException"/> instead of
+    /// returning a URL. The former <c>/api/media/files/{storageKey}</c> proxy fallback was
+    /// removed with the media-privacy redesign, so there is no dead-URL fallback: a signing
+    /// failure fails the publish attempt.
     /// </para>
     /// </summary>
     Task<string> GetPublishingUrlAsync(string storageKey, TimeSpan? expiration = null, CancellationToken cancellationToken = default);

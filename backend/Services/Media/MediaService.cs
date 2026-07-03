@@ -17,7 +17,6 @@ public class MediaService : IMediaService
     private readonly TimeSpan _defaultPublishingUrlExpiration;
     private readonly ILogger<MediaService> _logger;
     private readonly long _maxVideoFileSizeBytes;
-    private readonly string _publishingBaseUrl;
 
     // Final product policy: JPG/JPEG + PNG only. WebP/GIF/BMP/TIFF are rejected at upload init
     // so we never accept a format that platform validation or the publisher would later block.
@@ -54,7 +53,6 @@ public class MediaService : IMediaService
         TimeSpan uploadUrlExpiration,
         long maxImageFileSizeBytes,
         long maxVideoFileSizeBytes,
-        string publishingBaseUrl,
         TimeSpan? defaultPublishingUrlExpiration = null)
     {
         _storage = storage;
@@ -64,7 +62,6 @@ public class MediaService : IMediaService
         _uploadUrlExpiration = uploadUrlExpiration;
         _maxImageFileSizeBytes = maxImageFileSizeBytes;
         _maxVideoFileSizeBytes = maxVideoFileSizeBytes;
-        _publishingBaseUrl = publishingBaseUrl.TrimEnd('/');
         _defaultPublishingUrlExpiration = defaultPublishingUrlExpiration ?? TimeSpan.FromHours(1);
     }
 
@@ -146,28 +143,23 @@ public class MediaService : IMediaService
     {
         var exp = expiration ?? _defaultPublishingUrlExpiration;
 
-        // For object-storage backends, hand Meta a short-lived signed URL pointing
-        // directly at the bucket. This is regenerated every time the worker publishes,
-        // so a 30-day-future scheduled post still gets a fresh URL at publish time.
-        // local-disk falls back to the API-proxied route because there's no bucket to
-        // sign against.
-        if (_storageOpts.IsSupabase || _storageOpts.IsS3Compatible)
+        // Publishing needs a short-lived, PRIVATE signed URL that Meta can fetch directly from
+        // the object store. Only Supabase / S3-compatible backends can mint one. The old
+        // anonymous GET /api/media/files/{storageKey} proxy route was removed in the media-privacy
+        // redesign, so there is no proxy fallback any more: a backend that cannot sign a URL must
+        // fail the publish clearly rather than hand Meta a dead URL that would 404.
+        if (!_storageOpts.IsSupabase && !_storageOpts.IsS3Compatible)
         {
-            try
-            {
-                return await _storage.CreateDownloadUrlAsync(storageKey, exp, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                // Fall back to the API-proxy route if signing failed for any reason
-                // (e.g. Supabase outage). The proxy reads via the service-role key and
-                // streams bytes to Meta, so publishing still works while we get paged.
-                _logger.LogWarning(ex,
-                    "Failed to mint signed publishing URL for {Key}; falling back to API proxy.", storageKey);
-            }
+            throw new NotSupportedException(
+                "Cannot produce a media publishing URL: the configured MediaStorage provider cannot " +
+                "mint a signed download URL, and the legacy /api/media/files proxy route was removed. " +
+                "Publishing requires MediaStorage__Provider=supabase or s3-compatible.");
         }
 
-        return BuildProxiedPublishingUrl(storageKey);
+        // Freshly signed on every call, so a post scheduled far in the future still gets a valid
+        // URL at publish time. A signing failure (e.g. a Supabase outage) propagates and fails the
+        // publish attempt — we intentionally do NOT fall back to a dead proxy URL.
+        return await _storage.CreateDownloadUrlAsync(storageKey, exp, cancellationToken);
     }
 
     public string GetPublishingUrl(string storageKey, TimeSpan? expiration = null)
@@ -175,14 +167,6 @@ public class MediaService : IMediaService
         // Sync wrapper for legacy callers — blocking on object-storage signing here.
         // Prefer GetPublishingUrlAsync from publish/worker code paths.
         return GetPublishingUrlAsync(storageKey, expiration).GetAwaiter().GetResult();
-    }
-
-    private string BuildProxiedPublishingUrl(string storageKey)
-    {
-        // The full storageKey (including any prefix like "media/" or "workspaces/.../")
-        // is preserved in the path — MediaController.GetFile uses a catch-all route.
-        var encoded = string.Join('/', storageKey.Split('/').Select(Uri.EscapeDataString));
-        return $"{_publishingBaseUrl}/api/media/files/{encoded}";
     }
 
     public bool IsStorageKey(string? mediaUrl)

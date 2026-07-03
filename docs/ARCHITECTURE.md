@@ -179,7 +179,7 @@ have been removed (media privacy redesign) — they are no longer reachable by a
 ### File serving / publishing URL
 
 - `GET /api/media/{mediaId}/file` — authenticated, workspace-scoped. Resolves `mediaId` to a `Media` row owned by the caller's current workspace and streams from whatever provider is configured (`OpenReadAsync`), using `StorageKey` internally only. `?variant=thumbnail` serves the derived thumbnail instead of the original.
-- `IMediaService.GetPublishingUrlAsync(storageKey)` mints a short-lived **signed URL directly from the object store** (Supabase/S3) for production backends — this is what publishers hand to Meta, and does not depend on the authenticated route above. Local-disk mode (no object store to sign against) falls back to an API-proxied URL that is no longer publicly servable now that the anonymous route is gone; see [docs/public-media-route.md](public-media-route.md).
+- `IMediaService.GetPublishingUrlAsync(storageKey)` mints a short-lived **signed URL directly from the object store** (Supabase/S3) for production backends — this is what publishers hand to Meta, and does not depend on the authenticated route above. Backends that cannot sign a URL (local-disk, the server stub) throw `NotSupportedException` rather than returning a URL: the old `/api/media/files` proxy fallback was removed, so local-disk publishing is intentionally unsupported and a signing failure fails the publish instead of producing a dead URL. See [docs/public-media-route.md](public-media-route.md).
 
 ### Two-S3-client trick (S3CompatibleMediaStorageProvider)
 

@@ -55,7 +55,6 @@ public class MediaUploadServiceInstagramDerivativeTests : IDisposable
         uploadUrlExpiration: TimeSpan.FromMinutes(15),
         maxImageFileSizeBytes: 20 * 1024 * 1024,
         maxVideoFileSizeBytes: 200 * 1024 * 1024,
-        publishingBaseUrl: "https://post-pilot.cloud-ip.cc",
         defaultPublishingUrlExpiration: TimeSpan.FromHours(1));
 
     private MediaUploadService NewUploadService(AppDbContext db, RecordingStorage storage) => new(

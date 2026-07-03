@@ -96,6 +96,26 @@ public class LocalDiskMediaStorageProviderTraversalTests
         await NewProvider().DeleteAsync("../secret.txt");
     }
 
+    // ── old proxy-route URL generation is gone (media-privacy redesign) ────────────
+
+    [Fact]
+    public async Task CreateUploadUrl_throws_and_never_builds_legacy_upload_route()
+    {
+        // The PUT /api/media/upload/{filename} route was removed; local-disk must not hand the
+        // browser a URL that would 404. Throwing (rather than returning any URL) is the guarantee.
+        await Assert.ThrowsAsync<NotSupportedException>(
+            () => NewProvider().CreateUploadUrlAsync("media/foo.png", "image/png", TimeSpan.FromMinutes(15)));
+    }
+
+    [Fact]
+    public async Task CreateDownloadUrl_throws_and_never_builds_legacy_files_route()
+    {
+        // The GET /api/media/files/{storageKey} proxy route was removed; local-disk cannot mint a
+        // private signed URL, so it fails loudly instead of returning a dead proxy URL.
+        await Assert.ThrowsAsync<NotSupportedException>(
+            () => NewProvider().CreateDownloadUrlAsync("media/foo.png", TimeSpan.FromMinutes(15)));
+    }
+
     // ── round-trip for a legitimate key still works ───────────────────────────────
 
     [Fact]

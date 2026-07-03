@@ -33,17 +33,25 @@ StorageKey or a `/api/media/files/...` path.
 
 At publish time the worker/publishers ask `IMediaService.GetPublishingUrlAsync` for the
 URL to hand Meta. For the production storage backends (Supabase, S3-compatible) this
-already mints a **short-lived signed URL directly from the object store** — the old
-anonymous proxy route was never in that path. It was only used:
+mints a **short-lived signed URL directly from the object store** — the old anonymous
+proxy route was never in that path.
 
-1. In local-disk dev mode (no object store to sign against), and
-2. As a rare fallback if signing an object-store URL throws.
+**Follow-up cleanup (done):** the backend no longer *generates* the old proxy/upload URLs
+at all. `MediaService.BuildProxiedPublishingUrl` was removed, and
+`LocalDiskMediaStorageProvider.CreateUploadUrlAsync` / `CreateDownloadUrlAsync` no longer
+construct `/api/media/upload/...` or `/api/media/files/...` strings. Because those routes
+are gone, there is nothing to fall back to:
 
-Both of those fallback paths now produce a URL that 404s (the route is gone). This is an
-accepted, deliberate trade-off of the redesign — the production critical path (Supabase
-signed URLs) is unaffected — but local-disk-mode Meta publishing and the signing-failure
-fallback are known follow-up items if they need to keep working; see the doc comments on
-`MediaService.GetPublishingUrlAsync`.
+- `GetPublishingUrlAsync` now throws `NotSupportedException` for any backend that cannot
+  mint a signed URL (local-disk, the server stub), and a signing failure on Supabase/S3
+  **propagates** (fails the publish) instead of returning a dead proxy URL.
+- Local-disk browser upload and local-disk publishing are therefore **intentionally
+  unsupported**: both provider methods throw `NotSupportedException` with a message
+  pointing at object storage. There is no safe authenticated replacement for local-disk
+  publishing (Meta cannot reach a dev host anyway), so this is left unsupported by design.
+
+Production behavior is unchanged: Supabase/S3 publishing still mints signed object-store
+URLs exactly as before.
 
 ## Related code
 

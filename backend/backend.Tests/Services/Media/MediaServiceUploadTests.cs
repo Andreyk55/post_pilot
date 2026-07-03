@@ -35,7 +35,6 @@ public class MediaServiceUploadTests
             uploadUrlExpiration: TimeSpan.FromMinutes(15),
             maxImageFileSizeBytes: 20 * 1024 * 1024,
             maxVideoFileSizeBytes: 200 * 1024 * 1024,
-            publishingBaseUrl: "https://post-pilot.cloud-ip.cc",
             defaultPublishingUrlExpiration: TimeSpan.FromHours(1));
         return (svc, fake);
     }
@@ -213,9 +212,9 @@ public class MediaServiceUploadTests
     public async Task GetPublishingUrlAsync_OnSupabase_CallsCreateDownloadUrl()
     {
         // The whole point of the Supabase migration: at publish time the worker
-        // hands Meta a SIGNED URL pointing at supabase.co, not a stable
-        // /api/media/files/... proxy. This is what makes 30-day-future scheduled
-        // posts work — they ask for a fresh signed URL when publishing fires.
+        // hands Meta a SIGNED URL pointing at supabase.co, not a stable API-proxied
+        // URL. This is what makes 30-day-future scheduled posts work — they ask for
+        // a fresh signed URL when publishing fires.
         var (svc, fake) = Build("supabase");
         fake.NextDownloadUrl = "https://abc.supabase.co/storage/v1/object/sign/postpilot-media/key?token=fresh";
 
@@ -240,16 +239,27 @@ public class MediaServiceUploadTests
     }
 
     [Fact]
-    public async Task GetPublishingUrlAsync_OnLocalDisk_FallsBackToApiProxy()
+    public async Task GetPublishingUrlAsync_OnLocalDisk_Throws_NoProxyFallback()
     {
-        // local-disk has no bucket to sign against — fall back to the
-        // /api/media/files/... proxy rooted at App.PublicUrl.
+        // local-disk has no bucket to sign against, and the old /api/media/files proxy route
+        // was removed in the media-privacy redesign. Publishing must now fail loudly rather than
+        // hand Meta a dead proxy URL, so no download-URL signing is even attempted.
         var (svc, fake) = Build("local-disk");
 
-        var url = await svc.GetPublishingUrlAsync("media/foo.png");
-
+        await Assert.ThrowsAsync<NotSupportedException>(() => svc.GetPublishingUrlAsync("media/foo.png"));
         Assert.Equal(0, fake.CreateDownloadUrlCalls);
-        Assert.Equal("https://post-pilot.cloud-ip.cc/api/media/files/media/foo.png", url);
+    }
+
+    [Fact]
+    public async Task GetPublishingUrlAsync_OnSupabase_SigningFailure_Propagates_NoProxyFallback()
+    {
+        // If signing throws (e.g. a Supabase outage) the failure must propagate and fail the
+        // publish — we must NOT silently fall back to the removed /api/media/files proxy URL.
+        var (svc, fake) = Build("supabase");
+        fake.DownloadShouldThrow = true;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.GetPublishingUrlAsync("media/foo.png"));
+        Assert.Equal(1, fake.CreateDownloadUrlCalls);
     }
 
     [Fact]
@@ -276,12 +286,18 @@ public class MediaServiceUploadTests
         public int CreateDownloadUrlCalls;
         public string NextDownloadUrl { get; set; } = "https://example/signed";
 
+        // When true, CreateDownloadUrlAsync simulates a signing failure (e.g. object-store outage)
+        // so tests can prove GetPublishingUrlAsync propagates instead of falling back to a proxy URL.
+        public bool DownloadShouldThrow { get; set; }
+
         public Task<string> CreateUploadUrlAsync(string storageKey, string contentType, TimeSpan expires, CancellationToken cancellationToken = default)
             => Task.FromResult("https://example/upload/" + storageKey);
 
         public Task<string> CreateDownloadUrlAsync(string storageKey, TimeSpan expires, CancellationToken cancellationToken = default)
         {
             CreateDownloadUrlCalls++;
+            if (DownloadShouldThrow)
+                throw new InvalidOperationException("Simulated signing failure.");
             return Task.FromResult(NextDownloadUrl);
         }
 

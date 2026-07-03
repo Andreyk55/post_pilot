@@ -224,7 +224,6 @@ public static class ServiceCollectionExtensions
                 uploadUrlExpiration: TimeSpan.FromMinutes(mediaOpts.UploadUrlExpirationMinutes),
                 maxImageFileSizeBytes: mediaOpts.MaxImageFileSizeBytes,
                 maxVideoFileSizeBytes: mediaOpts.MaxVideoFileSizeBytes,
-                publishingBaseUrl: mediaOpts.EffectiveBaseUrl,
                 defaultPublishingUrlExpiration: defaultPublishExpiry);
         });
 

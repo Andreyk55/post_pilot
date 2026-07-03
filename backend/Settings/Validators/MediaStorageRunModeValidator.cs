@@ -6,11 +6,12 @@ namespace PostPilot.Api.Settings.Validators;
 /// Cross-validates MediaStorage against AppOptions.RunMode.
 ///
 /// Server mode hands presigned upload URLs to a remote browser; the bytes must
-/// land in object storage that survives container replacement. local-disk
-/// writes to the API container's ephemeral filesystem and also routes uploads
-/// through the legacy PUT /api/media/upload/{file} endpoint, which is gated to
-/// Local mode and returns 404 in Server mode. Combining the two silently breaks
-/// image uploads in production, so reject it at startup.
+/// land in object storage that survives container replacement. local-disk writes
+/// to the API container's ephemeral filesystem and cannot produce a browser upload
+/// URL at all — its CreateUploadUrlAsync throws NotSupportedException since the
+/// legacy PUT /api/media/upload/{file} route was removed (media privacy redesign).
+/// Combining local-disk with Server mode would break image uploads, so reject it
+/// at startup.
 ///
 /// Supabase + S3-compatible both satisfy the "real object storage" requirement.
 /// </summary>
@@ -33,9 +34,9 @@ public class MediaStorageRunModeValidator : IValidateOptions<MediaStorageOptions
             return ValidateOptionsResult.Fail(
                 "MediaStorage:Provider='local-disk' is not supported when App:RunMode='server'. " +
                 "Server mode requires object storage. Set MediaStorage__Provider=supabase " +
-                "(recommended) or MediaStorage__Provider=s3-compatible. Local-disk storage in " +
-                "Server mode would silently break image uploads — the API hands the browser " +
-                "/api/media/upload/{file}, which 404s outside Local mode.");
+                "(recommended) or MediaStorage__Provider=s3-compatible. Local-disk storage " +
+                "cannot mint browser upload URLs — its CreateUploadUrlAsync throws because the " +
+                "legacy /api/media/upload route was removed — so uploads would break entirely.");
         }
 
         return ValidateOptionsResult.Success;

@@ -635,8 +635,7 @@ public class WorkspaceIsolationTests : IDisposable
             logger: NullLogger<PostPilot.Api.Services.Media.MediaService>.Instance,
             uploadUrlExpiration: TimeSpan.FromMinutes(15),
             maxImageFileSizeBytes: 20 * 1024 * 1024,
-            maxVideoFileSizeBytes: 200 * 1024 * 1024,
-            publishingBaseUrl: "https://example.test");
+            maxVideoFileSizeBytes: 200 * 1024 * 1024);
 
         var uploadSvc = new PostPilot.Api.Services.Media.MediaUploadService(
             _db, mediaService, storageOpts,

@@ -28,27 +28,26 @@ public class LocalDiskMediaStorageProvider : IMediaStorageProvider
     }
 
     public Task<string> CreateUploadUrlAsync(string storageKey, string contentType, TimeSpan expires, CancellationToken cancellationToken = default)
-    {
-        var fileName = ExtractFileName(storageKey);
-        var uploadUrl = $"{_baseUrl}/api/media/upload/{fileName}";
-
-        _logger.LogInformation("Generated local upload URL for key {Key}", storageKey);
-        return Task.FromResult(uploadUrl);
-    }
+        // The legacy PUT /api/media/upload/{filename} route this used to hand the browser was
+        // removed in the media-privacy redesign, so local-disk can no longer accept a direct
+        // browser upload. Fail loudly instead of returning a URL that 404s — use object storage
+        // (Supabase / S3-compatible) with the presigned URL from /api/media/uploads/init.
+        => throw new NotSupportedException(
+            "Local-disk browser upload is not supported: the PUT /api/media/upload/{filename} " +
+            "route was removed. Configure MediaStorage__Provider=supabase or s3-compatible.");
 
     public Task<string> CreateDownloadUrlAsync(string storageKey, TimeSpan expires, CancellationToken cancellationToken = default)
-    {
-        var fileName = ExtractFileName(storageKey);
-        var downloadUrl = $"{_baseUrl}/api/media/files/{fileName}";
-
-        _logger.LogDebug("Generated local download URL for key {Key}", storageKey);
-        return Task.FromResult(downloadUrl);
-    }
+        // The legacy GET /api/media/files/{storageKey} proxy route this used to point Meta at was
+        // removed in the media-privacy redesign. Local-disk cannot mint a private signed URL, so
+        // it can no longer produce a publishing download URL — publish from object storage instead.
+        => throw new NotSupportedException(
+            "Local-disk publishing download URLs are not supported: the GET /api/media/files/" +
+            "{storageKey} route was removed. Configure MediaStorage__Provider=supabase or s3-compatible.");
 
     public Task<Stream?> OpenReadAsync(string storageKey, CancellationToken cancellationToken = default)
     {
-        // Unsafe keys resolve to "not found" (null) rather than throwing, so the anonymous
-        // /api/media/files reader can't be used to probe or read outside the upload root.
+        // Unsafe keys resolve to "not found" (null) rather than throwing, so the authenticated
+        // GET /api/media/{mediaId}/file reader can't be used to probe or read outside the upload root.
         if (!TryResolveLocalPath(storageKey, out var localPath) || !File.Exists(localPath))
             return Task.FromResult<Stream?>(null);
 
