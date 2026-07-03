@@ -197,7 +197,7 @@ A new `Media` table tracks upload lifecycle (`PendingUpload` / `Uploaded` / `Del
 
 - Allowed types: `image/jpeg`, `image/png`, `image/gif`, `video/mp4`.
 - Frames endpoint (`/api/media/frames/{filename}`) still serves from local disk inside the API container; not migrated yet.
-- Image processing: `SixLabors.ImageSharp 3.1.7`.
+- Image processing: `SixLabors.ImageSharp 3.1.11`.
 
 ---
 
