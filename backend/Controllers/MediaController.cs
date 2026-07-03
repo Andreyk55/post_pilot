@@ -292,12 +292,14 @@ public class MediaController : ControllerBase
             return NotFound(new { error = "Storage key is required" });
 
         var extension = Path.GetExtension(storageKey).ToLowerInvariant();
+        var isKnownRenderable = extension is ".jpg" or ".jpeg" or ".png" or ".gif" or ".mp4";
         var contentType = extension switch
         {
             ".jpg" or ".jpeg" => "image/jpeg",
             ".png" => "image/png",
             ".gif" => "image/gif",
             ".mp4" => "video/mp4",
+            // Unknown/unrecognized extension → generic binary; never a renderable/script type.
             _ => "application/octet-stream"
         };
 
@@ -305,6 +307,16 @@ public class MediaController : ControllerBase
         if (stream == null)
         {
             return NotFound(new { error = "File not found" });
+        }
+
+        // Never let the browser MIME-sniff a different (possibly executable) type than declared.
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+
+        // Known image/video keep inline so thumbnails/previews render; anything else is forced to
+        // download so an unexpected type can't be rendered/executed in the browser context.
+        if (!isKnownRenderable)
+        {
+            Response.Headers["Content-Disposition"] = "attachment";
         }
 
         if (contentType == "video/mp4")
@@ -330,14 +342,32 @@ public class MediaController : ControllerBase
             return NotFound(new { error = "Direct file access only available in local mode" });
         }
 
-        var framesDirectory = Path.Combine(Directory.GetCurrentDirectory(), "uploads", "frames");
-        var framePath = Path.Combine(framesDirectory, filename);
+        var framesDirectory = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "uploads", "frames"));
+        var framesRootWithSep = framesDirectory.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
 
-        if (!System.IO.File.Exists(framePath))
+        // Reject traversal: empty, absolute/rooted, or anything resolving outside the frames dir.
+        if (string.IsNullOrWhiteSpace(filename) || Path.IsPathRooted(filename))
         {
             return NotFound(new { error = "Frame not found" });
         }
 
+        string framePath;
+        try
+        {
+            framePath = Path.GetFullPath(Path.Combine(framesDirectory, filename));
+        }
+        catch
+        {
+            return NotFound(new { error = "Frame not found" });
+        }
+
+        if (!framePath.StartsWith(framesRootWithSep, StringComparison.OrdinalIgnoreCase)
+            || !System.IO.File.Exists(framePath))
+        {
+            return NotFound(new { error = "Frame not found" });
+        }
+
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
         var stream = new FileStream(framePath, FileMode.Open, FileAccess.Read);
         return File(stream, "image/jpeg");
     }

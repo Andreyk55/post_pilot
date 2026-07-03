@@ -55,7 +55,14 @@ public class MediaPublicFetchTests
             new Mock<IMediaValidationGate>().Object,
             new Mock<ICurrentWorkspaceProvider>().Object,
             db,
-            NullLogger<MediaController>.Instance);
+            NullLogger<MediaController>.Instance)
+        {
+            // GetFile writes response headers (nosniff / content-disposition); give it a context.
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext(),
+            },
+        };
     }
 
     /// <summary>

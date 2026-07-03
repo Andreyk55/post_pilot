@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -25,9 +26,15 @@ public class Startup
 
     public IConfiguration Configuration { get; }
 
-    public Startup(IConfiguration configuration)
+    // Whether the app is running in the Development environment. Drives dev-only conveniences
+    // such as allowing http://localhost:* CORS origins. Optional so existing callers/tests that
+    // only pass configuration default to the safe (non-development) behavior.
+    private readonly bool _isDevelopment;
+
+    public Startup(IConfiguration configuration, IWebHostEnvironment? environment = null)
     {
         Configuration = configuration;
+        _isDevelopment = environment?.IsDevelopment() ?? false;
     }
 
     public void ConfigureServices(IServiceCollection services)
@@ -80,9 +87,9 @@ public class Startup
         ConfigureAuthentication(services);
 
         // ── CORS ─────────────────────────────────────────────────────────────
-        // Localhost dev origins are always allowed; production origins come
-        // from Auth:AllowedOrigins (preferred) or legacy Cors:AllowedOrigins.
-        // Never AllowAnyOrigin in production. AllowCredentials is required
+        // Localhost dev origins are allowed ONLY in the Development environment;
+        // production origins come from Auth:AllowedOrigins (preferred) or legacy
+        // Cors:AllowedOrigins. Never AllowAnyOrigin. AllowCredentials is required
         // because both the private-access cookie and the session cookie are
         // sent cross-site.
         var authAllowed = Configuration
@@ -100,21 +107,38 @@ public class Startup
             })
             .Select(NormalizeOrigin)
             .Where(origin => !string.IsNullOrEmpty(origin))
+            .Select(origin => origin!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
+        var isDevelopment = _isDevelopment;
         services.AddCors(options =>
         {
             options.AddPolicy("AllowFrontend", policy =>
             {
-                policy.SetIsOriginAllowed(origin =>
-                          origin.StartsWith("http://localhost:", StringComparison.OrdinalIgnoreCase) ||
-                          allowedOrigins.Contains(NormalizeOrigin(origin), StringComparer.OrdinalIgnoreCase))
+                policy.SetIsOriginAllowed(origin => IsOriginAllowed(origin, isDevelopment, allowedOrigins))
                       .AllowAnyHeader()
                       .AllowAnyMethod()
                       .AllowCredentials();
             });
         });
+    }
+
+    /// <summary>
+    /// CORS origin policy. Configured production frontend origins are always allowed; loopback
+    /// dev origins (<c>http://localhost:*</c>) are allowed ONLY in the Development environment,
+    /// so production never trusts an arbitrary localhost page. Origins are compared after
+    /// normalization (scheme+host+port, no trailing slash).
+    /// </summary>
+    internal static bool IsOriginAllowed(string origin, bool isDevelopment, IReadOnlyCollection<string> allowedOrigins)
+    {
+        if (string.IsNullOrEmpty(origin))
+            return false;
+
+        if (isDevelopment && origin.StartsWith("http://localhost:", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return allowedOrigins.Contains(NormalizeOrigin(origin), StringComparer.OrdinalIgnoreCase);
     }
 
     private void ConfigureAuthentication(IServiceCollection services)
@@ -207,10 +231,9 @@ public class Startup
                              | ForwardedHeaders.XForwardedProto
                              | ForwardedHeaders.XForwardedHost,
         };
-        // Trust any proxy on the compose network — we don't know nginx's
-        // container IP up front and the API is not directly reachable.
-        forwardedHeaderOptions.KnownNetworks.Clear();
-        forwardedHeaderOptions.KnownProxies.Clear();
+        // Trust forwarded headers only from known proxies — never from any peer. See
+        // ConfigureForwardedHeaders for the config keys and the safe private-network default.
+        ConfigureForwardedHeaders(forwardedHeaderOptions, Configuration);
         app.UseForwardedHeaders(forwardedHeaderOptions);
 
         // Configure the HTTP request pipeline.
@@ -335,5 +358,49 @@ public class Startup
             return trimmed;
 
         return uri.GetLeftPart(UriPartial.Authority);
+    }
+
+    /// <summary>
+    /// Restricts which peers may set X-Forwarded-* to a known set instead of trusting any peer.
+    /// Explicit config wins:
+    ///   <c>ForwardedHeaders:KnownProxies</c>  — array of proxy IPs (e.g. the nginx container IP)
+    ///   <c>ForwardedHeaders:KnownNetworks</c> — array of CIDRs (e.g. "172.18.0.0/16")
+    /// When neither is configured we fall back to loopback + RFC1918 private ranges. This keeps
+    /// the Docker/nginx deployment working out of the box (the API binds to 127.0.0.1 and only
+    /// nginx — on loopback or the compose network — reaches it) while still refusing forwarded
+    /// headers from any public peer, so HTTPS scheme detection behind nginx is preserved. The
+    /// end state is never empty (we never "trust any peer").
+    /// </summary>
+    internal static void ConfigureForwardedHeaders(ForwardedHeadersOptions options, IConfiguration configuration)
+    {
+        // Replace the framework defaults (IPv6 loopback only) with a set we fully control.
+        options.KnownProxies.Clear();
+        options.KnownIPNetworks.Clear();
+
+        var proxies = configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? Array.Empty<string>();
+        foreach (var proxy in proxies)
+        {
+            if (IPAddress.TryParse(proxy?.Trim(), out var ip))
+                options.KnownProxies.Add(ip);
+        }
+
+        var networks = configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? Array.Empty<string>();
+        foreach (var cidr in networks)
+        {
+            if (System.Net.IPNetwork.TryParse(cidr?.Trim() ?? string.Empty, out var network))
+                options.KnownIPNetworks.Add(network);
+        }
+
+        // Nothing configured → trust loopback + private (RFC1918 / ULA) ranges so the reverse
+        // proxy is trusted regardless of the exact container/gateway IP, but public peers are not.
+        if (options.KnownProxies.Count == 0 && options.KnownIPNetworks.Count == 0)
+        {
+            options.KnownIPNetworks.Add(new System.Net.IPNetwork(IPAddress.Parse("127.0.0.0"), 8)); // 127.0.0.0/8
+            options.KnownIPNetworks.Add(new System.Net.IPNetwork(IPAddress.IPv6Loopback, 128));    // ::1/128
+            options.KnownIPNetworks.Add(new System.Net.IPNetwork(IPAddress.Parse("10.0.0.0"), 8)); // 10.0.0.0/8
+            options.KnownIPNetworks.Add(new System.Net.IPNetwork(IPAddress.Parse("172.16.0.0"), 12)); // 172.16.0.0/12
+            options.KnownIPNetworks.Add(new System.Net.IPNetwork(IPAddress.Parse("192.168.0.0"), 16)); // 192.168.0.0/16
+            options.KnownIPNetworks.Add(new System.Net.IPNetwork(IPAddress.Parse("fd00::"), 8));   // fc00::/7 ULA (approx via fd00::/8)
+        }
     }
 }
