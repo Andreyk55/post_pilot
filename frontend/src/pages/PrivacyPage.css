@@ -60,6 +60,23 @@
   margin-top: 2rem;
 }
 
+.privacy-links-home {
+  margin: 0;
+}
+
+.privacy-links-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0;
+  margin-top: 0.75rem;
+}
+
+.privacy-links-nav a + a::before {
+  content: "\00b7";
+  color: rgba(24, 33, 47, 0.55);
+  margin: 0 0.6rem;
+}
+
 @media (max-width: 640px) {
   .privacy-page {
     padding: 24px 12px;

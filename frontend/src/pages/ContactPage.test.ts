@@ -80,7 +80,7 @@ describe('Public /data-deletion page - informational only', () => {
   })
 
   it('keeps the page informational and does not embed contact form logic', () => {
-    expect(dataDeletionSource).toMatch(/Back to Publish Harbor/)
+    expect(dataDeletionSource).toMatch(/LegalPageFooter/)
     expect(dataDeletionSource).not.toMatch(/supportApi\.sendContactMessage/)
   })
 })

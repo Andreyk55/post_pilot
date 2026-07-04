@@ -3,6 +3,7 @@ import appSource from '../App.tsx?raw'
 import loginScreenSource from '../components/LoginScreen.tsx?raw'
 import settingsPageSource from './SettingsPage.tsx?raw'
 import termsPageSource from './TermsPage.tsx?raw'
+import legalPageFooterSource from '../components/LegalPageFooter.tsx?raw'
 
 describe('Public /terms page', () => {
   it('is registered as an ungated public route', () => {
@@ -13,6 +14,8 @@ describe('Public /terms page', () => {
     expect(termsPageSource).toMatch(/ReactMarkdown/)
     expect(termsPageSource).toMatch(/terms\.md\?raw/)
     expect(termsPageSource).toMatch(/\.\/PrivacyPage\.css/)
+    expect(termsPageSource).toMatch(/LegalPageFooter/)
+    expect(legalPageFooterSource).toMatch(/Back to Publish Harbor/)
   })
 
   it('is linked from the login screen and authenticated settings page', () => {

@@ -1,6 +1,6 @@
-import { Link } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import termsMarkdown from '../../content/terms.md?raw'
+import { LegalPageFooter } from '../components/LegalPageFooter'
 import './PrivacyPage.css'
 
 export function TermsPage() {
@@ -8,9 +8,7 @@ export function TermsPage() {
     <div className="privacy-page">
       <article className="privacy-card">
         <ReactMarkdown>{termsMarkdown}</ReactMarkdown>
-        <p className="privacy-links">
-          <Link to="/">Back to Publish Harbor</Link>
-        </p>
+        <LegalPageFooter />
       </article>
     </div>
   )

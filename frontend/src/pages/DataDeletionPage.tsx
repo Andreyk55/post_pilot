@@ -1,6 +1,6 @@
-import { Link } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import dataDeletionMarkdown from '../../content/data-deletion.md?raw'
+import { LegalPageFooter } from '../components/LegalPageFooter'
 import './PrivacyPage.css'
 
 export function DataDeletionPage() {
@@ -8,9 +8,7 @@ export function DataDeletionPage() {
     <div className="privacy-page">
       <article className="privacy-card">
         <ReactMarkdown>{dataDeletionMarkdown}</ReactMarkdown>
-        <p className="privacy-links">
-          <Link to="/">Back to Publish Harbor</Link>
-        </p>
+        <LegalPageFooter />
       </article>
     </div>
   )

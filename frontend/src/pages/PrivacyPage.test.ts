@@ -3,6 +3,7 @@ import appSource from '../App.tsx?raw'
 import loginScreenSource from '../components/LoginScreen.tsx?raw'
 import settingsPageSource from './SettingsPage.tsx?raw'
 import privacyPageSource from './PrivacyPage.tsx?raw'
+import legalPageFooterSource from '../components/LegalPageFooter.tsx?raw'
 
 describe('Public /privacy page', () => {
   it('is registered as an ungated public route', () => {
@@ -12,6 +13,11 @@ describe('Public /privacy page', () => {
   it('renders markdown content through react-markdown', () => {
     expect(privacyPageSource).toMatch(/ReactMarkdown/)
     expect(privacyPageSource).toMatch(/privacy\.md\?raw/)
+    expect(privacyPageSource).toMatch(/LegalPageFooter/)
+    expect(legalPageFooterSource).toMatch(/Back to Publish Harbor/)
+    expect(legalPageFooterSource).toMatch(/Privacy Policy/)
+    expect(legalPageFooterSource).toMatch(/Terms of Service/)
+    expect(legalPageFooterSource).toMatch(/Data Deletion/)
   })
 
   it('is linked from the login screen', () => {
