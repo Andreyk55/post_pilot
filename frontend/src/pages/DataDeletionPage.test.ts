@@ -17,5 +17,6 @@ describe('Public /data-deletion page', () => {
   it('is linked from an authenticated account/settings page', () => {
     expect(settingsPageSource).toMatch(/to="\/data-deletion"/)
     expect(settingsPageSource).toMatch(/Data Deletion Instructions/)
+    expect(settingsPageSource).toMatch(/Legal:/)
   })
 })

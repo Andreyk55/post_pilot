@@ -56,7 +56,17 @@ export function SettingsPage() {
           </dl>
         )}
         <p>
-          Need the public deletion request steps? <Link to="/data-deletion">Data Deletion Instructions</Link>
+          Legal:
+          {' '}
+          <Link to="/terms">Terms of Service</Link>
+          {' '}
+          <span aria-hidden>·</span>
+          {' '}
+          <Link to="/privacy">Privacy Policy</Link>
+          {' '}
+          <span aria-hidden>·</span>
+          {' '}
+          <Link to="/data-deletion">Data Deletion Instructions</Link>
         </p>
       </section>
 

@@ -48,7 +48,8 @@ export function LoginScreen({ error }: LoginScreenProps) {
         </button>
 
         <div className="login-legal-links">
-          <Link to="/privacy">Privacy Policy</Link>
+          By continuing, you agree to the <Link to="/terms">Terms of Service</Link> and
+          acknowledge the <Link to="/privacy">Privacy Policy</Link>.
         </div>
       </div>
     </div>

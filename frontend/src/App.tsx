@@ -13,6 +13,7 @@ import { HomePage } from './pages/HomePage'
 import { DataDeletionPage } from './pages/DataDeletionPage'
 import { DataDeletionStatusPage } from './pages/DataDeletionStatusPage'
 import { PrivacyPage } from './pages/PrivacyPage'
+import { TermsPage } from './pages/TermsPage'
 import { PasswordGate } from './components/PasswordGate'
 import { LoginScreen } from './components/LoginScreen'
 import { AuthProvider, useAuth } from './hooks/useAuth'
@@ -113,6 +114,7 @@ function App() {
         {/* Public, ungated pages. Meta's reviewers and end-users reach these
             WITHOUT the private-access password or a login. Declared before the
             catch-all so they are never swallowed by the gated app. */}
+        <Route path="/terms" element={<TermsPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/data-deletion" element={<DataDeletionPage />} />
         <Route path="/data-deletion/status/:confirmationCode" element={<DataDeletionStatusPage />} />
