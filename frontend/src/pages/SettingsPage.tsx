@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import {
   accountApi,
@@ -54,6 +55,9 @@ export function SettingsPage() {
             </div>
           </dl>
         )}
+        <p>
+          Need the public deletion request steps? <Link to="/data-deletion">Data Deletion Instructions</Link>
+        </p>
       </section>
 
       <section className="settings-section settings-danger">

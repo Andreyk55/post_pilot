@@ -7,14 +7,14 @@ import sidebarSource from '../components/Sidebar.tsx?raw'
 import appSource from '../App.tsx?raw'
 import dataDeletionSource from './DataDeletionPage.tsx?raw'
 
-describe('Sidebar — Contact Us entry', () => {
+describe('Sidebar - Contact Us entry', () => {
   it('lists a Contact Us nav item (visible only inside the logged-in app)', () => {
     expect(sidebarSource).toMatch(/id:\s*'contact'/)
     expect(sidebarSource).toMatch(/label:\s*'Contact Us'/)
   })
 })
 
-describe('ContactPage — form', () => {
+describe('ContactPage - form', () => {
   it('renders the Contact Us title and the help description', () => {
     expect(contactPageSource).toMatch(/<h1>Contact Us<\/h1>/)
     expect(contactPageSource).toMatch(/Need help with Publish Harbor\? Send us a message/)
@@ -62,25 +62,25 @@ describe('ContactPage — form', () => {
   })
 })
 
-describe('Contact Us route — authenticated only, not public', () => {
+describe('Contact Us route - authenticated only, not public', () => {
   it('is wired through the gated MainApp page switch, not a public <Route>', () => {
-    // Rendered via the in-app page switch (reached from the sidebar)…
+    // Rendered via the in-app page switch (reached from the sidebar)...
     expect(appSource).toMatch(/case 'contact':/)
     expect(appSource).toMatch(/<ContactPage \/>/)
-    // …and NOT registered as a public route alongside the data-deletion pages.
+    // ...and NOT registered as a public route alongside the data-deletion pages.
     expect(appSource).not.toMatch(/path="\/contact"/)
   })
 })
 
-describe('Public /data-deletion page — informational only', () => {
-  it('exposes no support email / mailto and no contact form', () => {
-    expect(dataDeletionSource).not.toMatch(/mailto:/)
-    expect(dataDeletionSource).not.toMatch(/support@/)
+describe('Public /data-deletion page - informational only', () => {
+  it('renders markdown content and no contact form', () => {
+    expect(dataDeletionSource).toMatch(/ReactMarkdown/)
+    expect(dataDeletionSource).toMatch(/data-deletion\.md\?raw/)
     expect(dataDeletionSource).not.toMatch(/<form/)
   })
 
-  it('directs logged-in users to in-app Contact Us', () => {
-    expect(dataDeletionSource).toMatch(/sign in to Publish Harbor and use/)
-    expect(dataDeletionSource).toMatch(/Contact Us/)
+  it('keeps the page informational and does not embed contact form logic', () => {
+    expect(dataDeletionSource).toMatch(/Back to Publish Harbor/)
+    expect(dataDeletionSource).not.toMatch(/supportApi\.sendContactMessage/)
   })
 })
