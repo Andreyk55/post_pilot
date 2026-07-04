@@ -41,13 +41,11 @@
 .sidebar-logo__mark {
   width: 42px;
   height: 42px;
-  padding: 0.2rem;
-  border: 1px solid rgba(17, 173, 197, 0.34);
+  padding: 0.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 12px;
-  background:
-    linear-gradient(145deg, rgba(8, 28, 64, 0.9), rgba(5, 15, 38, 0.72)),
-    rgba(255, 255, 255, 0.02);
-  box-shadow: 0 10px 24px rgba(0, 169, 196, 0.12);
+  background: #f8fbff;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
   flex-shrink: 0;
 }
 

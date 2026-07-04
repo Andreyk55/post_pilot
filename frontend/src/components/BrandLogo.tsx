@@ -9,7 +9,7 @@ interface BrandLogoProps {
 }
 
 const BRAND_LOGO_SRC: Record<BrandLogoVariant, string> = {
-  icon: '/branding/icon-transparent.png',
+  icon: '/branding/icon-login.png',
   full: '/branding/logo-transparent.png',
 }
 

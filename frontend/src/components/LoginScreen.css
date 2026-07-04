@@ -34,15 +34,13 @@
 .login-brand__logo {
   width: 64px;
   height: 64px;
-  padding: 0.45rem;
+  padding: 0.5rem;
   border-radius: 16px;
-  border: 1px solid rgba(34, 191, 210, 0.34);
-  background:
-    radial-gradient(circle at 70% 18%, rgba(255, 99, 77, 0.16), transparent 32%),
-    linear-gradient(145deg, rgba(8, 28, 64, 0.96), rgba(7, 17, 39, 0.88));
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  background: #f8fbff;
   box-shadow:
-    0 16px 40px rgba(0, 0, 0, 0.34),
-    0 0 34px rgba(34, 191, 210, 0.14);
+    0 12px 28px rgba(0, 0, 0, 0.24),
+    0 0 0 1px rgba(34, 191, 210, 0.06);
 }
 
 .login-brand__logo .brand-logo {
