@@ -32,6 +32,9 @@ export function LoginScreen({ error }: LoginScreenProps) {
         </div>
 
         <p className="login-tagline">Sign in to continue.</p>
+        <p className="login-description">
+          Publish Harbor helps you schedule and publish content to connected social media accounts.
+        </p>
 
         {error && <div className="login-error">{describeError(error)}</div>}
 

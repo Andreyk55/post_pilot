@@ -55,6 +55,14 @@
   font-size: 0.95rem;
 }
 
+.login-description {
+  margin: -0.5rem 0 0;
+  text-align: center;
+  color: #c1c8d4;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
 .login-error {
   padding: 0.6rem 0.75rem;
   border-radius: 8px;

@@ -21,6 +21,7 @@ describe('Public /privacy page', () => {
   })
 
   it('is linked from the login screen', () => {
+    expect(loginScreenSource).toMatch(/Publish Harbor helps you schedule and publish content to connected social media accounts\./)
     expect(loginScreenSource).toMatch(/to="\/privacy"/)
     expect(loginScreenSource).toMatch(/acknowledge the/)
     expect(loginScreenSource).toMatch(/Privacy Policy/)
