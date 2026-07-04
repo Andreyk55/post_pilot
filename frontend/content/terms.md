@@ -54,4 +54,4 @@ To the maximum extent allowed by law, Publish Harbor is provided on an "as is" a
 
 ## Contact
 
-If you have questions about these Terms, contact support@publishharbor.com.
+If you have a Publish Harbor account and need help, sign in and use the in-app Contact Us page.
