@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { authApi } from '../api/auth'
 import './LoginScreen.css'
 
@@ -45,6 +46,10 @@ export function LoginScreen({ error }: LoginScreenProps) {
           </span>
           {redirecting ? 'Redirecting…' : 'Continue with Google'}
         </button>
+
+        <div className="login-legal-links">
+          <Link to="/privacy">Privacy Policy</Link>
+        </div>
       </div>
     </div>
   )

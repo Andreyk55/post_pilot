@@ -95,3 +95,17 @@
   align-items: center;
   justify-content: center;
 }
+
+.login-legal-links {
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.login-legal-links a {
+  color: #9db8ff;
+  text-decoration: none;
+}
+
+.login-legal-links a:hover {
+  text-decoration: underline;
+}
