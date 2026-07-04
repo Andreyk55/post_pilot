@@ -9,8 +9,8 @@ interface BrandLogoProps {
 }
 
 const BRAND_LOGO_SRC: Record<BrandLogoVariant, string> = {
-  icon: '/branding/icon.png',
-  full: '/branding/logo.png',
+  icon: '/branding/icon-transparent.png',
+  full: '/branding/logo-transparent.png',
 }
 
 export function BrandLogo({ variant, alt = 'Publish Harbor', className = '' }: BrandLogoProps) {

@@ -28,13 +28,13 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
     <aside className="sidebar">
       <div className="sidebar-content">
         <button className="sidebar-logo sidebar-logo--btn" onClick={() => onNavigate('home')} aria-label="Publish Harbor home">
-          <div className="sidebar-logo__full" aria-hidden>
-            <BrandLogo variant="full" alt="" className="sidebar-logo__full-image" />
+          <div className="sidebar-logo__mark" aria-hidden>
+            <BrandLogo variant="icon" alt="" className="sidebar-logo__image" />
           </div>
-          <div className="sidebar-logo__icon" aria-hidden>
-            <BrandLogo variant="icon" alt="" className="sidebar-logo__icon-image" />
-          </div>
-          <span className="sidebar-logo__sr-text">Publish Harbor</span>
+          <span className="sidebar-logo__name">
+            <span>Publish</span>
+            <span className="sidebar-logo__name-accent">Harbor</span>
+          </span>
         </button>
 
         {user && <WorkspaceSwitcher />}
