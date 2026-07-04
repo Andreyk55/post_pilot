@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: July 4, 2026
+Last updated: July 5, 2026
 
 Publish Harbor ("we", "us", and "our") provides tools for creating, scheduling, and managing social media content. This Privacy Policy explains what information we collect, how we use it, and the choices you have when you use our website, applications, and related services.
 
@@ -29,6 +29,14 @@ We use personal information to:
 ## Connected Platforms
 
 If you connect third-party services such as Google or Meta platforms, we receive the information and permissions you authorize through those services. Your use of those integrations is also subject to the privacy policies and terms of the relevant third party.
+
+## Cookies and Similar Technologies
+
+We use necessary cookies and similar technologies to keep users signed in, secure sessions, prevent abuse, and support authentication and provider connection flows such as Google login and Meta account connection. These cookies are required for the service to function. We do not use analytics, advertising, or marketing cookies.
+
+Third-party services such as Google and Meta may use their own cookies when users interact with their login or connection flows.
+
+You can control cookies through your browser settings, but blocking necessary cookies may prevent Publish Harbor from working correctly.
 
 ## How We Share Information
 
