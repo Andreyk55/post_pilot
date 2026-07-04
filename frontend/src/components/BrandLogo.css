@@ -1,0 +1,14 @@
+.brand-logo {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.brand-logo--icon {
+  aspect-ratio: 1 / 1;
+}
+
+.brand-logo--full {
+  width: 100%;
+}
