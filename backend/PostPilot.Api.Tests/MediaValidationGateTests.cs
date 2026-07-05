@@ -367,13 +367,41 @@ public class MediaValidationGateTests : IDisposable
     public async Task Video_InstagramFeed_TooLong_IsBlocked()
     {
         var path = SeedRawMedia("v-ig-long", "video/mp4", 10L * 1024 * 1024);
-        var gate = CreateGate(new() { ["v-ig-long"] = path }, FakeVideo(1080, 1080, 75)); // 75s > 60s
+        var gate = CreateGate(new() { ["v-ig-long"] = path }, FakeVideo(1080, 1080, 181)); // 181s > 180s MVP cap
 
         var result = await gate.ValidateAsync(Ws,
             new[] { new MediaGateItem("v-ig-long", MediaType.Video, 0) }, new[] { Ig });
 
         Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.DurationTooLong);
+        Assert.Contains(result.Errors, e =>
+            e.Code == DTOs.MediaValidationErrorCodes.DurationTooLong
+            && e.Message == "Feed videos must be between 3 and 180 seconds.");
+    }
+
+    [Fact]
+    public async Task Video_InstagramFeed_180Seconds_Passes()
+    {
+        var path = SeedRawMedia("v-ig-180", "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-ig-180"] = path }, FakeVideo(1080, 1080, 180));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-ig-180", MediaType.Video, 0) }, new[] { Ig });
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task Video_InstagramFeed_Vertical9x16_Passes()
+    {
+        // A single IG feed video publishes as a Reel; the standard vertical 9:16 format
+        // (previously blocked by the 0.8 aspect floor) must pass.
+        var path = SeedRawMedia("v-ig-reel", "video/mp4", 20L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-ig-reel"] = path }, FakeVideo(1080, 1920, 30));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-ig-reel", MediaType.Video, 0) }, new[] { Ig });
+
+        Assert.True(result.IsValid);
     }
 
     [Fact]
@@ -393,13 +421,109 @@ public class MediaValidationGateTests : IDisposable
     public async Task Video_FacebookStory_TooLong_IsBlocked()
     {
         var path = SeedRawMedia("v-fb-story-long", "video/mp4", 10L * 1024 * 1024);
-        var gate = CreateGate(new() { ["v-fb-story-long"] = path }, FakeVideo(1080, 1920, 150)); // 150s > 120s
+        var gate = CreateGate(new() { ["v-fb-story-long"] = path }, FakeVideo(1080, 1920, 61)); // 61s > 60s Meta cap
 
         var result = await gate.ValidateAsync(Ws,
             new[] { new MediaGateItem("v-fb-story-long", MediaType.Video, 0) }, new[] { FbStory });
 
         Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e =>
+            e.Code == DTOs.MediaValidationErrorCodes.DurationTooLong
+            && e.Message == "Story videos must be between 3 and 60 seconds.");
+    }
+
+    // ── Story video duration boundaries: 3–60s on both platforms (Meta limit) ───
+
+    [Theory]
+    [InlineData(Platform.Facebook)]
+    [InlineData(Platform.Instagram)]
+    public async Task Video_Story_60Seconds_Passes(Platform platform)
+    {
+        var key = $"v-story-60-{platform}";
+        var path = SeedRawMedia(key, "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { [key] = path }, FakeVideo(1080, 1920, 60));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem(key, MediaType.Video, 0) },
+            new[] { new MediaGateTarget(platform, Placement.Story) });
+
+        Assert.True(result.IsValid);
+    }
+
+    [Theory]
+    [InlineData(Platform.Facebook)]
+    [InlineData(Platform.Instagram)]
+    public async Task Video_Story_61Seconds_IsBlocked(Platform platform)
+    {
+        var key = $"v-story-61-{platform}";
+        var path = SeedRawMedia(key, "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { [key] = path }, FakeVideo(1080, 1920, 61));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem(key, MediaType.Video, 0) },
+            new[] { new MediaGateTarget(platform, Placement.Story) });
+
+        Assert.False(result.IsValid);
         Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.DurationTooLong);
+    }
+
+    [Theory]
+    [InlineData(Platform.Facebook)]
+    [InlineData(Platform.Instagram)]
+    public async Task Video_Story_Under3Seconds_IsBlocked(Platform platform)
+    {
+        var key = $"v-story-2s-{platform}";
+        var path = SeedRawMedia(key, "video/mp4", 5L * 1024 * 1024);
+        var gate = CreateGate(new() { [key] = path }, FakeVideo(1080, 1920, 2));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem(key, MediaType.Video, 0) },
+            new[] { new MediaGateTarget(platform, Placement.Story) });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.DurationTooShort);
+    }
+
+    // ── FB story video: Meta minimum resolution (540x960) and frame rate ────────
+
+    [Fact]
+    public async Task Video_FacebookStory_BelowMinResolution_IsBlocked()
+    {
+        var path = SeedRawMedia("v-fb-story-small", "video/mp4", 5L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-fb-story-small"] = path }, FakeVideo(480, 854, 30)); // < 540x960
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-fb-story-small", MediaType.Video, 0) }, new[] { FbStory });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.DimensionsTooSmall);
+    }
+
+    [Fact]
+    public async Task Video_FacebookStory_LowFps_IsBlocked()
+    {
+        var path = SeedRawMedia("v-fb-story-lowfps", "video/mp4", 5L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-fb-story-lowfps"] = path }, FakeVideo(1080, 1920, 30, fps: 15));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-fb-story-lowfps", MediaType.Video, 0) }, new[] { FbStory });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.FpsTooLow);
+    }
+
+    [Fact]
+    public async Task Video_FacebookStory_NtscFilmRate_Passes()
+    {
+        // Meta documents 24-60 fps; the rule floor is 23 so NTSC 23.976 footage (ffprobe
+        // reports 23.98) is not falsely rejected.
+        var path = SeedRawMedia("v-fb-story-ntsc", "video/mp4", 5L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-fb-story-ntsc"] = path }, FakeVideo(1080, 1920, 30, fps: 23.98));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-fb-story-ntsc", MediaType.Video, 0) }, new[] { FbStory });
+
+        Assert.True(result.IsValid);
     }
 
     [Fact]
@@ -427,6 +551,49 @@ public class MediaValidationGateTests : IDisposable
 
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.FileTooLarge);
+    }
+
+    // ── FB feed video duration: 3–180s MVP cap (was 240 minutes) ────────────────
+
+    [Fact]
+    public async Task Video_FacebookFeed_180Seconds_Passes()
+    {
+        var path = SeedRawMedia("v-fb-180", "video/mp4", 50L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-fb-180"] = path }, FakeVideo(1280, 720, 180));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-fb-180", MediaType.Video, 0) }, new[] { Fb });
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task Video_FacebookFeed_181Seconds_IsBlocked()
+    {
+        var path = SeedRawMedia("v-fb-181", "video/mp4", 50L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-fb-181"] = path }, FakeVideo(1280, 720, 181));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-fb-181", MediaType.Video, 0) }, new[] { Fb });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e =>
+            e.Code == DTOs.MediaValidationErrorCodes.DurationTooLong
+            && e.Message == "Feed videos must be between 3 and 180 seconds.");
+    }
+
+    [Fact]
+    public async Task Video_FacebookFeed_HourLong_PreviouslyAllowed_NowBlocked()
+    {
+        // The old rule allowed up to 240 minutes; the MVP cap is 180 seconds.
+        var path = SeedRawMedia("v-fb-hour", "video/mp4", 100L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-fb-hour"] = path }, FakeVideo(1280, 720, 60 * 60));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-fb-hour", MediaType.Video, 0) }, new[] { Fb });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.DurationTooLong);
     }
 
     [Fact]
@@ -532,7 +699,7 @@ public class MediaValidationGateTests : IDisposable
     public async Task ValidateForDisplay_InvalidVideo_IsInvalid()
     {
         var path = SeedRawMedia("d-vid-long", "video/mp4", 10L * 1024 * 1024);
-        var gate = CreateGate(new() { ["d-vid-long"] = path }, FakeVideo(1080, 1080, 75));
+        var gate = CreateGate(new() { ["d-vid-long"] = path }, FakeVideo(1080, 1080, 181)); // > 180s MVP cap
 
         var result = await gate.ValidateForDisplayAsync(Ws,
             new MediaGateItem("d-vid-long", MediaType.Video, 0), Ig);

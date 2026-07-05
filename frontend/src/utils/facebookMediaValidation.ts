@@ -49,12 +49,17 @@ export function validateFacebookSelection(
   const existingHasVideo = existingFiles.some(f => isVideoFile(f))
   const existingHasImage = existingFiles.some(f => isImageFile(f))
 
-  // Check for unsupported file types
+  // Check for unsupported file types (HEIC gets dedicated copy — it is the most
+  // common phone-photo format and a known product limitation, not a corrupt file).
   const unsupported = newFiles.filter(f => !isImageFile(f) && !isVideoFile(f))
   if (unsupported.length > 0) {
+    const first = unsupported[0]
+    const isHeic = /heic|heif/.test(first.type.toLowerCase()) || /\.heic$|\.heif$/.test(first.name.toLowerCase())
     return {
       ok: false,
-      errorMessage: `Unsupported file type: ${unsupported[0].name}. Facebook accepts JPG, PNG, MP4, or MOV.`,
+      errorMessage: isHeic
+        ? 'HEIC is not supported yet. Please upload a JPG or PNG image.'
+        : `Unsupported file type: ${first.name}. Facebook accepts JPG, PNG, MP4, or MOV.`,
       nextFiles: [...existingFiles],
     }
   }
@@ -159,9 +164,9 @@ export function getFacebookUploaderLabel(mode: FacebookMediaMode, count: number)
 /** Dynamic format hint text */
 export function getFacebookFormatHint(mode: FacebookMediaMode): string {
   switch (mode) {
-    case 'empty': return 'JPG, PNG, MP4, or MOV'
-    case 'single_video': return 'MP4 or MOV'
-    case 'single_image': return 'JPG/PNG'
+    case 'empty': return 'Photos: JPG/PNG up to 10MB. Videos: MP4/MOV, 3–180 seconds. HEIC is not supported yet.'
+    case 'single_video': return 'MP4 or MOV, 3–180 seconds'
+    case 'single_image': return 'JPG/PNG up to 10MB'
     case 'multi_photo': return 'JPG/PNG only (carousel)'
   }
 }

@@ -285,8 +285,8 @@ public class PublisherMediaGuardTests : IDisposable
         var post = SeedIgImagePost(key, ig, MediaType.Video);
 
         var mediaService = BuildMediaService();
-        // 75s exceeds the IG feed 60s max → blocked.
-        var publisher = BuildIgPublisher(mediaService, BuildGate(mediaService, FakeVideo(1080, 1080, 75)));
+        // 181s exceeds the IG feed 180s MVP cap → blocked.
+        var publisher = BuildIgPublisher(mediaService, BuildGate(mediaService, FakeVideo(1080, 1080, 181)));
 
         var guardError = await publisher.GuardMediaAsync(post, Placement.Feed, CancellationToken.None);
 

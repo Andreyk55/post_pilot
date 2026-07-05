@@ -44,7 +44,7 @@ public class InstagramVideoValidationTests
         var rules = MediaValidationRules.GetRules(Platform.Instagram, Placement.Feed, MediaType.Video)!;
 
         Assert.Equal(3, rules.DurationMinSeconds);
-        Assert.Equal(60, rules.DurationMaxSeconds);
+        Assert.Equal(180, rules.DurationMaxSeconds); // product/MVP cap (Reels allow far longer)
     }
 
     [Fact]
@@ -52,7 +52,7 @@ public class InstagramVideoValidationTests
     {
         var rules = MediaValidationRules.GetRules(Platform.Instagram, Placement.Feed, MediaType.Video)!;
 
-        Assert.Equal(0.8, rules.AspectRatioMin); // 4:5
+        Assert.Equal(0.5625, rules.AspectRatioMin); // 9:16 — the standard vertical Reel must pass
         Assert.Equal(1.91, rules.AspectRatioMax);
     }
 
@@ -99,8 +99,8 @@ public class InstagramVideoValidationTests
     [InlineData(2.0, true)]  // Too short
     [InlineData(3.0, false)] // Exactly at minimum
     [InlineData(30.0, false)] // Middle of range
-    [InlineData(60.0, false)] // Exactly at maximum
-    [InlineData(61.0, true)] // Too long
+    [InlineData(180.0, false)] // Exactly at the MVP maximum
+    [InlineData(181.0, true)] // Too long
     public void Duration_InstagramFeedVideo_ValidatesCorrectly(double durationSeconds, bool shouldFail)
     {
         var rules = MediaValidationRules.GetRules(Platform.Instagram, Placement.Feed, MediaType.Video)!;

@@ -351,7 +351,7 @@ public class PostCreateMediaGateTests : IDisposable
     {
         var igId = SeedInstagramAccount();
         var media = SeedVideoMedia("ig-vid-long", "video/mp4", 10L * 1024 * 1024);
-        UseVideoMetadata(1080, 1080, durationSeconds: 75); // > 60s for IG feed
+        UseVideoMetadata(1080, 1080, durationSeconds: 181); // > 180s MVP cap for IG feed
 
         var req = new CreatePostRequest(
             Content: "hi", MediaUrl: null, MediaType: MediaType.Video, Platform: Platform.Instagram,

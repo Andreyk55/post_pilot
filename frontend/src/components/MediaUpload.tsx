@@ -326,7 +326,9 @@ export function MediaUpload({
     }
   }
 
-  // Get dynamic hints based on selected platform
+  // Get dynamic hints based on selected platform. Always names the supported formats
+  // and the HEIC limitation; with a platform selected the size/duration limits come
+  // from the mirrored rule table.
   const getUploadHints = () => {
     if (selectedPlatform) {
       const imageRule = getClientValidationRule(selectedPlatform, placement, 'Image')
@@ -334,11 +336,15 @@ export function MediaUpload({
 
       const imageMaxMB = imageRule ? Math.round(imageRule.maxBytes / (1024 * 1024)) : DEFAULT_MAX_IMAGE_SIZE_MB
       const videoMaxMB = videoRule ? Math.round(videoRule.maxBytes / (1024 * 1024)) : DEFAULT_MAX_VIDEO_SIZE_MB
+      const durationHint = videoRule?.durationMinSeconds != null && videoRule?.durationMaxSeconds != null
+        ? `, ${videoRule.durationMinSeconds}–${videoRule.durationMaxSeconds}s`
+        : ''
 
       return (
         <>
-          <span className="upload-hint">Images: max {imageMaxMB}MB</span>
-          <span className="upload-hint">Videos: max {videoMaxMB}MB</span>
+          <span className="upload-hint">Images: JPG/PNG, max {imageMaxMB}MB</span>
+          <span className="upload-hint">Videos: MP4/MOV, max {videoMaxMB}MB{durationHint}</span>
+          <span className="upload-hint">HEIC is not supported yet</span>
         </>
       )
     }
@@ -347,6 +353,7 @@ export function MediaUpload({
       <>
         <span className="upload-hint">Images: JPG, PNG (max {DEFAULT_MAX_IMAGE_SIZE_MB}MB)</span>
         <span className="upload-hint">Videos: MP4, MOV (max {DEFAULT_MAX_VIDEO_SIZE_MB}MB)</span>
+        <span className="upload-hint">HEIC is not supported yet</span>
       </>
     )
   }

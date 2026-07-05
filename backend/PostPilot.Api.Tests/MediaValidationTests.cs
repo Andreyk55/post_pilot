@@ -16,7 +16,7 @@ public class MediaValidationTests
         Assert.NotNull(rules);
         Assert.Contains("image/jpeg", rules.AllowedMimeTypes);
         Assert.Contains("image/png", rules.AllowedMimeTypes);
-        Assert.Equal(4L * 1024 * 1024, rules.MaxBytes); // 4MB
+        Assert.Equal(10L * 1024 * 1024, rules.MaxBytes); // 10MB — MVP-supported limit
         Assert.Equal(320, rules.MinWidth);
         Assert.Equal(320, rules.MinHeight);
     }
@@ -28,9 +28,9 @@ public class MediaValidationTests
 
         Assert.NotNull(rules);
         Assert.Contains("video/mp4", rules.AllowedMimeTypes);
-        Assert.Equal(200L * 1024 * 1024, rules.MaxBytes); // 200MB — the real app upload cap (not Meta's 1GB)
-        Assert.Equal(1, rules.DurationMinSeconds);
-        Assert.Equal(240 * 60, rules.DurationMaxSeconds); // 240 minutes
+        Assert.Equal(200L * 1024 * 1024, rules.MaxBytes); // 200MB — product/MVP upload cap
+        Assert.Equal(3, rules.DurationMinSeconds);
+        Assert.Equal(180, rules.DurationMaxSeconds); // product/MVP cap: small social videos only
     }
 
     // ── Final product policy: supported formats per platform ────────────────────
@@ -113,8 +113,9 @@ public class MediaValidationRulesEvaluationTests
     // These tests validate the rule evaluation logic
 
     [Theory]
-    [InlineData(5L * 1024 * 1024, true)] // 5MB > 4MB limit
-    [InlineData(4L * 1024 * 1024, false)] // Exactly at limit
+    [InlineData(11L * 1024 * 1024, true)] // 11MB > 10MB limit
+    [InlineData(10L * 1024 * 1024, false)] // Exactly at limit
+    [InlineData(5L * 1024 * 1024, false)] // Over the old 4MB cap but within the new 10MB limit
     [InlineData(1L * 1024 * 1024, false)] // Under limit
     public void FileTooLarge_FacebookImage_ValidatesCorrectly(long sizeBytes, bool shouldFail)
     {
@@ -172,11 +173,12 @@ public class MediaValidationRulesEvaluationTests
     }
 
     [Theory]
-    [InlineData(0.5, true)] // Too short
-    [InlineData(1, false)] // Exactly minimum
+    [InlineData(2, true)] // Too short (< 3s)
+    [InlineData(3, false)] // Exactly minimum
     [InlineData(60, false)] // 1 minute
-    [InlineData(240 * 60, false)] // 4 hours - exactly at max
-    [InlineData(240 * 60 + 1, true)] // Over 4 hours
+    [InlineData(180, false)] // Exactly at the MVP max
+    [InlineData(181, true)] // Just over the MVP max
+    [InlineData(240 * 60, true)] // 4 hours — allowed by the old 240-minute rule, now blocked
     public void VideoDuration_FacebookFeedVideo_ValidatesCorrectly(double durationSeconds, bool shouldFail)
     {
         var rules = MediaValidationRules.GetRules(Platform.Facebook, Placement.Feed, MediaType.Video)!;
@@ -212,10 +214,10 @@ public class InstagramValidationRulesTests
         var rules = MediaValidationRules.GetRules(Platform.Instagram, Placement.Feed, MediaType.Image);
 
         Assert.NotNull(rules);
-        Assert.Equal(8L * 1024 * 1024, rules.MaxBytes); // 8MB
+        Assert.Equal(8L * 1024 * 1024, rules.MaxBytes); // 8MB — Instagram platform limit
         Assert.Equal(320, rules.MinWidth);
         Assert.Equal(1440, rules.MaxWidth);
-        Assert.Equal(0.5625, rules.AspectRatioMin); // 9:16
+        Assert.Equal(0.8, rules.AspectRatioMin); // 4:5 — Meta rejects feed images below 4:5
         Assert.Equal(1.91, rules.AspectRatioMax);
     }
 
@@ -292,7 +294,18 @@ public class InstagramValidationRulesTests
 
         Assert.NotNull(rules);
         Assert.Equal(3, rules.DurationMinSeconds);
-        Assert.Equal(60, rules.DurationMaxSeconds); // 60 seconds max for feed
+        Assert.Equal(180, rules.DurationMaxSeconds); // product/MVP cap (Reels allow far longer)
+    }
+
+    // A single IG feed video is published as a Reel; vertical 9:16 is the standard Reel
+    // format and must be inside the allowed aspect range.
+    [Fact]
+    public void GetRules_InstagramFeedVideo_AllowsVertical9x16()
+    {
+        var rules = MediaValidationRules.GetRules(Platform.Instagram, Placement.Feed, MediaType.Video)!;
+
+        Assert.True(rules.AspectRatioMin <= 0.5625);
+        Assert.True(rules.AspectRatioMax >= 1.0);
     }
 }
 
@@ -467,8 +480,11 @@ public class MediaValidationServiceImageBehaviorTests
     }
 
     [Fact]
-    public async Task InstagramFeed_Portrait1024x1536_HasNoWarning()
+    public async Task InstagramFeed_Portrait1024x1536_IsRejected_TallerThan4x5()
     {
+        // 1024x1536 is 2:3 (0.667) — taller than Instagram's 4:5 feed-image floor. Meta
+        // rejects it at publish time, so the gate must block it up front. (The same file
+        // stays valid for Facebook Feed — see FacebookFeed_Portrait1024x1536_HasNoWarning.)
         var svc = CreateService();
         var path = WriteTempImage("jpeg", 1024, 1536);
         try
@@ -477,9 +493,8 @@ public class MediaValidationServiceImageBehaviorTests
             var result = await svc.ValidateFileAsync(
                 path, "image/jpeg", size, MediaType.Image, Platform.Instagram, Placement.Feed);
 
-            Assert.Equal(ValidationStatus.Valid, result.Status);
-            Assert.Empty(result.Errors);
-            Assert.Empty(result.Warnings);
+            Assert.Equal(ValidationStatus.Invalid, result.Status);
+            Assert.Contains(result.Errors, e => e.Code == MediaValidationErrorCodes.AspectRatioInvalid);
         }
         finally { File.Delete(path); }
     }
@@ -586,7 +601,7 @@ public class MediaValidationServiceImageBehaviorTests
     }
 
     [Fact]
-    public async Task FacebookFeed_FileTooLarge_IsHardError()
+    public async Task FacebookFeed_FileTooLarge_IsHardError_WithActionableMessage()
     {
         var svc = CreateService();
         var path = WriteTempImage("jpeg", 1200, 630);
@@ -595,16 +610,116 @@ public class MediaValidationServiceImageBehaviorTests
             var result = await svc.ValidateFileAsync(
                 path,
                 "image/jpeg",
-                4L * 1024 * 1024 + 1,
+                10L * 1024 * 1024 + 1,
                 MediaType.Image,
                 Platform.Facebook,
                 Placement.Feed);
 
             Assert.Equal(ValidationStatus.Invalid, result.Status);
-            Assert.Contains(result.Errors, e => e.Code == MediaValidationErrorCodes.FileTooLarge);
+            // Oversized images must produce a specific, actionable message — never a bare "Too large."
+            Assert.Contains(result.Errors, e =>
+                e.Code == MediaValidationErrorCodes.FileTooLarge
+                && e.Message == "This image is too large. Facebook images can be up to 10MB. Large phone photos may need to be resized before upload.");
         }
         finally { File.Delete(path); }
     }
+
+    // ── MVP size limits: FB images 10MB (was 4MB), IG images stay 8MB ───────────
+
+    [Theory]
+    [InlineData(Placement.Feed, 1200, 630)]
+    [InlineData(Placement.Story, 1080, 1920)]
+    public async Task Facebook_Image_Between4And10MB_IsAccepted(Placement placement, int width, int height)
+    {
+        // 5MB was over the old 4MB Facebook cap; under the 10MB MVP limit it must pass.
+        var svc = CreateService();
+        var path = WriteTempImage("jpeg", width, height);
+        try
+        {
+            var result = await svc.ValidateFileAsync(
+                path, "image/jpeg", 5L * 1024 * 1024, MediaType.Image, Platform.Facebook, placement);
+
+            Assert.Equal(ValidationStatus.Valid, result.Status);
+            Assert.Empty(result.Errors);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Theory]
+    [InlineData(Placement.Feed, 1080, 1350)]
+    [InlineData(Placement.Story, 1080, 1920)]
+    public async Task Instagram_Image_Over8MB_IsRejected_WithActionableMessage(Placement placement, int width, int height)
+    {
+        var svc = CreateService();
+        var path = WriteTempImage("jpeg", width, height);
+        try
+        {
+            var result = await svc.ValidateFileAsync(
+                path, "image/jpeg", 8L * 1024 * 1024 + 1, MediaType.Image, Platform.Instagram, placement);
+
+            Assert.Equal(ValidationStatus.Invalid, result.Status);
+            Assert.Contains(result.Errors, e =>
+                e.Code == MediaValidationErrorCodes.FileTooLarge
+                && e.Message == "This image is too large. Instagram images can be up to 8MB. Large phone photos may need to be resized before upload.");
+        }
+        finally { File.Delete(path); }
+    }
+
+    // ── IG feed image aspect ratio: 4:5–1.91:1 (9:16 is video-only) ─────────────
+
+    [Fact]
+    public async Task InstagramFeed_Image_9x16_IsRejected()
+    {
+        var svc = CreateService();
+        var path = WriteTempImage("jpeg", 1080, 1920); // 0.5625 < 0.8 → Meta rejects feed images
+        try
+        {
+            var size = new FileInfo(path).Length;
+            var result = await svc.ValidateFileAsync(
+                path, "image/jpeg", size, MediaType.Image, Platform.Instagram, Placement.Feed);
+
+            Assert.Equal(ValidationStatus.Invalid, result.Status);
+            Assert.Contains(result.Errors, e =>
+                e.Code == MediaValidationErrorCodes.AspectRatioInvalid
+                && e.Message == "Instagram Feed images must use an aspect ratio between 4:5 and 1.91:1.");
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task InstagramFeed_Image_4x5_IsAccepted()
+    {
+        var svc = CreateService();
+        var path = WriteTempImage("jpeg", 1080, 1350); // exactly 4:5
+        try
+        {
+            var size = new FileInfo(path).Length;
+            var result = await svc.ValidateFileAsync(
+                path, "image/jpeg", size, MediaType.Image, Platform.Instagram, Placement.Feed);
+
+            Assert.Equal(ValidationStatus.Valid, result.Status);
+            Assert.Empty(result.Errors);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task InstagramFeed_Image_1_91Landscape_IsAccepted()
+    {
+        var svc = CreateService();
+        var path = WriteTempImage("jpeg", 1337, 700); // exactly 1.91:1, within max width
+        try
+        {
+            var size = new FileInfo(path).Length;
+            var result = await svc.ValidateFileAsync(
+                path, "image/jpeg", size, MediaType.Image, Platform.Instagram, Placement.Feed);
+
+            Assert.Equal(ValidationStatus.Valid, result.Status);
+            Assert.Empty(result.Errors);
+        }
+        finally { File.Delete(path); }
+    }
+
 
     /// <summary>Video extractor stub — image tests must never call it.</summary>
     private sealed class ThrowingVideoExtractor : IVideoMetadataExtractor

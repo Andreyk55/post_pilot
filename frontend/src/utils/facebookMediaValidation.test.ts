@@ -29,8 +29,10 @@ describe('facebook media format validation — final product policy', () => {
   })
 
   it('advertises MP4 or MOV (never AVI/GIF/WebP) in the format hint', () => {
-    expect(getFacebookFormatHint('empty')).toBe('JPG, PNG, MP4, or MOV')
-    expect(getFacebookFormatHint('single_video')).toBe('MP4 or MOV')
+    expect(getFacebookFormatHint('empty')).toBe(
+      'Photos: JPG/PNG up to 10MB. Videos: MP4/MOV, 3–180 seconds. HEIC is not supported yet.',
+    )
+    expect(getFacebookFormatHint('single_video')).toBe('MP4 or MOV, 3–180 seconds')
     const hints = [
       getFacebookFormatHint('empty'),
       getFacebookFormatHint('single_video'),
@@ -40,6 +42,25 @@ describe('facebook media format validation — final product policy', () => {
     for (const banned of ['AVI', 'WebM', 'GIF', 'WebP', 'BMP', 'TIFF']) {
       expect(hints).not.toContain(banned)
     }
+  })
+
+  it('names the 10MB image limit and the 3–180s video range in the empty-state hint', () => {
+    const hint = getFacebookFormatHint('empty')
+    expect(hint).toContain('JPG/PNG')
+    expect(hint).toContain('10MB')
+    expect(hint).toContain('MP4/MOV')
+    expect(hint).toContain('3–180 seconds')
+  })
+
+  it('rejects HEIC with dedicated product-limitation copy', () => {
+    const byMime = validateFacebookSelection([], [info('IMG_0001.heic', 'image/heic')])
+    expect(byMime.ok).toBe(false)
+    expect(byMime.errorMessage).toBe('HEIC is not supported yet. Please upload a JPG or PNG image.')
+
+    // Browsers sometimes report an empty MIME type for HEIC — the extension still catches it.
+    const byName = validateFacebookSelection([], [info('IMG_0002.HEIC', '')])
+    expect(byName.ok).toBe(false)
+    expect(byName.errorMessage).toBe('HEIC is not supported yet. Please upload a JPG or PNG image.')
   })
 
   // ── Matrix behavior: FB Feed allows single image, single video, 2–10 image carousel ──

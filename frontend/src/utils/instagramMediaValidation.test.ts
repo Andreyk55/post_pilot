@@ -37,11 +37,30 @@ describe('instagram media format validation', () => {
     expect(selection.errorMessage).toBeNull()
   })
 
-  it('explains PNG auto-conversion and WebP unsupported copy', () => {
+  it('explains PNG auto-conversion and WebP/HEIC unsupported copy', () => {
     expect(INSTAGRAM_IMAGE_FORMAT_HINT).toBe(
-      'Instagram requires JPEG. PNG images will be converted automatically. WebP is not supported.'
+      'Instagram requires JPEG. PNG images will be converted automatically. WebP and HEIC are not supported yet.'
     )
     expect(getInstagramFormatHint('empty')).toContain('PNG is converted to JPEG')
-    expect(getInstagramFormatHint('empty')).toContain('WebP not supported')
+    expect(getInstagramFormatHint('empty')).toContain('WebP and HEIC are not supported')
+  })
+
+  it('names formats, the 8MB image limit, and the 3–180s video range in the empty-state hint', () => {
+    const hint = getInstagramFormatHint('empty')
+    expect(hint).toContain('JPG/PNG')
+    expect(hint).toContain('8MB')
+    expect(hint).toContain('MP4/MOV')
+    expect(hint).toContain('3–180 seconds')
+  })
+
+  it('rejects HEIC with dedicated product-limitation copy', () => {
+    const byMime = validateInstagramSelection([], [{ name: 'IMG_0001.heic', type: 'image/heic' }])
+    expect(byMime.ok).toBe(false)
+    expect(byMime.errorMessage).toBe('HEIC is not supported yet. Please upload a JPG or PNG image.')
+
+    // Browsers sometimes report an empty MIME type for HEIC — the extension still catches it.
+    const byName = validateInstagramSelection([], [{ name: 'IMG_0002.HEIC', type: '' }])
+    expect(byName.ok).toBe(false)
+    expect(byName.errorMessage).toBe('HEIC is not supported yet. Please upload a JPG or PNG image.')
   })
 })

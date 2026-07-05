@@ -153,11 +153,16 @@ describe('MediaValidationCard', () => {
 
 describe('MediaRequirementHint', () => {
   it('renders the placement-driven requirement copy through one shared component', () => {
-    expect(renderToStaticMarkup(<MediaRequirementHint platform="facebook" placement="Story" />)).toBe(
-      '<div class="media-requirement-hint">1 photo or 1 video — vertical 9:16 recommended</div>',
-    )
-    expect(renderToStaticMarkup(<MediaRequirementHint platform="instagram" placement="Feed" />)).toContain(
-      'Photo or video supported',
-    )
+    const storyMarkup = renderToStaticMarkup(<MediaRequirementHint platform="facebook" placement="Story" />)
+    expect(storyMarkup).toContain('class="media-requirement-hint"')
+    expect(storyMarkup).toContain('1 photo or 1 video — vertical 9:16 recommended')
+    expect(storyMarkup).toContain('3–60 seconds')
+
+    const feedMarkup = renderToStaticMarkup(<MediaRequirementHint platform="instagram" placement="Feed" />)
+    expect(feedMarkup).toContain('JPG or PNG')
+    expect(feedMarkup).toContain('up to 8MB')
+    expect(feedMarkup).toContain('MP4 or MOV')
+    expect(feedMarkup).toContain('3–180 seconds')
+    expect(feedMarkup).toContain('HEIC is not supported yet')
   })
 })

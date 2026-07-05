@@ -3,17 +3,33 @@ import {
   getMediaRequirementHint,
   resolveClientMediaError,
   resolveClientDimensionError,
+  HEIC_NOT_SUPPORTED_MESSAGE,
 } from './mediaRequirements'
 
-const f = (type: string, size = 1000) => ({ type, size })
+const f = (type: string, size = 1000, name?: string) => ({ type, size, name })
 
 describe('getMediaRequirementHint', () => {
-  it('uses identical, placement-driven copy for Facebook and Instagram', () => {
-    expect(getMediaRequirementHint('facebook', 'Feed')).toBe('Photo or video supported')
-    expect(getMediaRequirementHint('instagram', 'Feed')).toBe('Photo or video supported')
-    expect(getMediaRequirementHint('facebook', 'Story')).toBe('1 photo or 1 video — vertical 9:16 recommended')
-    // FB Story and IG Story read the same.
-    expect(getMediaRequirementHint('instagram', 'Story')).toBe(getMediaRequirementHint('facebook', 'Story'))
+  it('names formats, image max size, video duration, and the HEIC limitation for Feed', () => {
+    expect(getMediaRequirementHint('facebook', 'Feed')).toBe(
+      'Photos: JPG or PNG, up to 10MB. Videos: MP4 or MOV, 3–180 seconds. HEIC is not supported yet — very large phone photos may need to be resized before upload.',
+    )
+    expect(getMediaRequirementHint('instagram', 'Feed')).toBe(
+      'Photos: JPG or PNG, up to 8MB. Videos: MP4 or MOV, 3–180 seconds. HEIC is not supported yet — very large phone photos may need to be resized before upload.',
+    )
+  })
+
+  it('uses the Story duration limit (3–60s) and keeps the 9:16 recommendation', () => {
+    expect(getMediaRequirementHint('facebook', 'Story')).toBe(
+      '1 photo or 1 video — vertical 9:16 recommended. Photos: JPG or PNG, up to 10MB. Videos: MP4 or MOV, 3–60 seconds. HEIC is not supported yet.',
+    )
+    expect(getMediaRequirementHint('instagram', 'Story')).toBe(
+      '1 photo or 1 video — vertical 9:16 recommended. Photos: JPG or PNG, up to 8MB. Videos: MP4 or MOV, 3–60 seconds. HEIC is not supported yet.',
+    )
+  })
+
+  it('shows both platform image limits when no platform is selected', () => {
+    expect(getMediaRequirementHint(null, 'Feed')).toContain('Facebook up to 10MB, Instagram up to 8MB')
+    expect(getMediaRequirementHint(null, 'Feed')).toContain('HEIC is not supported yet')
   })
 })
 
@@ -22,15 +38,33 @@ describe('resolveClientMediaError — friendly, specific copy', () => {
     expect(resolveClientMediaError(f('image/webp'), 'instagram', 'Story')).toBe('Images must be JPG or PNG.')
   })
 
-  it('reports the exact image size limit (Instagram = 8MB)', () => {
+  it('rejects HEIC with dedicated copy (product limitation, by MIME or extension)', () => {
+    expect(resolveClientMediaError(f('image/heic'), 'facebook', 'Feed')).toBe(HEIC_NOT_SUPPORTED_MESSAGE)
+    expect(resolveClientMediaError(f('image/heif'), 'instagram', 'Feed')).toBe(HEIC_NOT_SUPPORTED_MESSAGE)
+    // Browsers sometimes report an empty MIME type for HEIC — the extension still catches it.
+    expect(resolveClientMediaError(f('', 1000, 'IMG_0001.HEIC'), 'facebook', 'Feed')).toBe(HEIC_NOT_SUPPORTED_MESSAGE)
+  })
+
+  it('reports the Instagram image limit (8MB) with resize guidance', () => {
     expect(resolveClientMediaError(f('image/jpeg', 9 * 1024 * 1024), 'instagram', 'Story')).toBe(
-      'Image is larger than 8MB.',
+      'This image is too large. Instagram images can be up to 8MB. Large phone photos may need to be resized before upload.',
     )
+  })
+
+  it('reports the Facebook image limit (10MB) and accepts sizes between the old 4MB cap and 10MB', () => {
+    expect(resolveClientMediaError(f('image/jpeg', 11 * 1024 * 1024), 'facebook', 'Feed')).toBe(
+      'This image is too large. Facebook images can be up to 10MB. Large phone photos may need to be resized before upload.',
+    )
+    // 5MB was over the old 4MB Facebook cap; it must pass now.
+    expect(resolveClientMediaError(f('image/jpeg', 5 * 1024 * 1024), 'facebook', 'Feed')).toBeNull()
+    expect(resolveClientMediaError(f('image/jpeg', 5 * 1024 * 1024), 'facebook', 'Story')).toBeNull()
+    // At the limit exactly → passes.
+    expect(resolveClientMediaError(f('image/jpeg', 10 * 1024 * 1024), 'facebook', 'Feed')).toBeNull()
   })
 
   it('reports the exact video size limit (Instagram = 100MB)', () => {
     expect(resolveClientMediaError(f('video/mp4', 101 * 1024 * 1024), 'instagram', 'Story')).toBe(
-      'Video is larger than 100MB.',
+      'This video is too large. Instagram videos can be up to 100MB.',
     )
   })
 
@@ -82,11 +116,25 @@ describe('resolveClientDimensionError — Story 9:16 and friends', () => {
     )
   })
 
-  it('does not reject normal portrait feed images before server validation', () => {
+  it('rejects Instagram Feed images taller than 4:5 with the ratio-range message', () => {
+    // 9:16 (0.5625) is video-only on Instagram Feed — Meta rejects images below 4:5.
+    expect(resolveClientDimensionError(1080, 1920, 'instagram', 'Feed')).toBe(
+      'Instagram Feed images must use an aspect ratio between 4:5 and 1.91:1.',
+    )
+    expect(resolveClientDimensionError(1024, 1536, 'instagram', 'Feed')).toBe(
+      'Instagram Feed images must use an aspect ratio between 4:5 and 1.91:1.',
+    )
+  })
+
+  it('accepts Instagram Feed images at 4:5 and 1.91:1 exactly', () => {
+    expect(resolveClientDimensionError(1080, 1350, 'instagram', 'Feed')).toBeNull() // 4:5
+    expect(resolveClientDimensionError(1337, 700, 'instagram', 'Feed')).toBeNull() // 1.91:1
+    expect(resolveClientDimensionError(1080, 1080, 'instagram', 'Feed')).toBeNull() // 1:1
+  })
+
+  it('keeps taller portraits valid for Facebook Feed (FB floor stays 9:16)', () => {
     expect(resolveClientDimensionError(1024, 1536, 'facebook', 'Feed')).toBeNull()
-    expect(resolveClientDimensionError(1024, 1536, 'instagram', 'Feed')).toBeNull()
-    expect(resolveClientDimensionError(1080, 1080, 'instagram', 'Feed')).toBeNull()
-    expect(resolveClientDimensionError(1080, 1350, 'instagram', 'Feed')).toBeNull()
+    expect(resolveClientDimensionError(1080, 1920, 'facebook', 'Feed')).toBeNull()
   })
 
   it('lets small-but-publishable feed images upload so the server can warn', () => {

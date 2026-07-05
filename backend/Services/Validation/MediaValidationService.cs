@@ -144,7 +144,7 @@ public class MediaValidationService : IMediaValidationService
         }
 
         // Validate against rules
-        ValidateRules(rules, mimeType, sizeBytes, metadata, errors, warnings);
+        ValidateRules(rules, mimeType, sizeBytes, metadata, errors, warnings, platform, placement, mediaType);
 
         // Determine final status
         var status = errors.Count > 0
@@ -239,15 +239,24 @@ public class MediaValidationService : IMediaValidationService
         long sizeBytes,
         ExtractedMediaMetadata? metadata,
         List<MediaValidationError> errors,
-        List<MediaValidationWarning> warnings)
+        List<MediaValidationWarning> warnings,
+        Platform platform,
+        Placement placement,
+        MediaType mediaType)
     {
         // 1. Validate MIME type
         if (!rules.AllowedMimeTypes.Contains(mimeType, StringComparer.OrdinalIgnoreCase))
         {
+            // HEIC/HEIF (iPhone default capture format) gets dedicated copy: it is a known
+            // product limitation, not a corrupt file.
+            var isHeic = mimeType.Contains("heic", StringComparison.OrdinalIgnoreCase)
+                || mimeType.Contains("heif", StringComparison.OrdinalIgnoreCase);
             errors.Add(new MediaValidationError(
                 MediaValidationErrorCodes.UnsupportedMimeType,
                 "mimeType",
-                $"File type '{mimeType}' is not supported. Allowed types: {string.Join(", ", rules.AllowedMimeTypes)}",
+                isHeic
+                    ? "HEIC is not supported yet. Please upload a JPG or PNG image."
+                    : $"File type '{mimeType}' is not supported. Allowed types: {string.Join(", ", rules.AllowedMimeTypes)}",
                 string.Join(", ", rules.AllowedMimeTypes),
                 mimeType));
         }
@@ -260,8 +269,10 @@ public class MediaValidationService : IMediaValidationService
             errors.Add(new MediaValidationError(
                 MediaValidationErrorCodes.FileTooLarge,
                 "sizeBytes",
-                $"File size ({actualMB:F1}MB) exceeds maximum allowed ({maxMB:F1}MB)",
-                $"{maxMB:F1}MB",
+                mediaType == MediaType.Video
+                    ? $"This video is too large. {platform} videos can be up to {maxMB:F0}MB."
+                    : $"This image is too large. {platform} images can be up to {maxMB:F0}MB. Large phone photos may need to be resized before upload.",
+                $"{maxMB:F0}MB",
                 $"{actualMB:F1}MB"));
         }
 
@@ -329,15 +340,19 @@ public class MediaValidationService : IMediaValidationService
 
             if (aspectRatio < rules.AspectRatioMin || aspectRatio > rules.AspectRatioMax)
             {
+                // Story rules carry a preferred ratio and keep the recognizable 9:16 copy;
+                // feed rules name the platform and the friendly ratio bounds (e.g.
+                // "Instagram Feed images must use an aspect ratio between 4:5 and 1.91:1.").
+                var mediaNoun = mediaType == MediaType.Video ? "videos" : "images";
                 errors.Add(new MediaValidationError(
                     MediaValidationErrorCodes.AspectRatioInvalid,
                     "aspectRatio",
                     hasPreferredAspectRatio
                         ? "Story media should be vertical 9:16."
-                        : $"Aspect ratio ({aspectRatio:F2}) is outside allowed range ({rules.AspectRatioMin:F2} to {rules.AspectRatioMax:F2})",
+                        : $"{platform} {placement} {mediaNoun} must use an aspect ratio between {FormatRatio(rules.AspectRatioMin)} and {FormatRatio(rules.AspectRatioMax)}.",
                     hasPreferredAspectRatio
                         ? "9:16"
-                        : $"{rules.AspectRatioMin:F2} to {rules.AspectRatioMax:F2}",
+                        : $"{FormatRatio(rules.AspectRatioMin)} to {FormatRatio(rules.AspectRatioMax)}",
                     $"{aspectRatio:F2}"));
             }
             else if (hasPreferredAspectRatio
@@ -356,26 +371,33 @@ public class MediaValidationService : IMediaValidationService
         {
             var duration = metadata.DurationSeconds.Value;
 
+            // "Story videos must be between 3 and 60 seconds." / "Feed videos must be
+            // between 3 and 180 seconds." — the same actionable range copy for too-short
+            // and too-long, since the fix is the same (pick a video inside the range).
+            var durationRangeMessage = rules.DurationMinSeconds.HasValue && rules.DurationMaxSeconds.HasValue
+                ? $"{placement} videos must be between {rules.DurationMinSeconds.Value:0.##} and {rules.DurationMaxSeconds.Value:0.##} seconds."
+                : null;
+
             if (rules.DurationMinSeconds.HasValue && duration < rules.DurationMinSeconds.Value)
             {
                 errors.Add(new MediaValidationError(
                     MediaValidationErrorCodes.DurationTooShort,
                     "durationSeconds",
-                    $"Video duration ({duration:F1}s) is shorter than minimum ({rules.DurationMinSeconds.Value}s)",
-                    $"{rules.DurationMinSeconds.Value}s",
+                    durationRangeMessage
+                        ?? $"Video duration ({duration:F1}s) is shorter than minimum ({rules.DurationMinSeconds.Value}s)",
+                    $"{rules.DurationMinSeconds.Value:0.##}s",
                     $"{duration:F1}s"));
             }
 
             if (rules.DurationMaxSeconds.HasValue && duration > rules.DurationMaxSeconds.Value)
             {
-                var maxMinutes = rules.DurationMaxSeconds.Value / 60.0;
-                var actualMinutes = duration / 60.0;
                 errors.Add(new MediaValidationError(
                     MediaValidationErrorCodes.DurationTooLong,
                     "durationSeconds",
-                    $"Video duration ({actualMinutes:F1} min) exceeds maximum ({maxMinutes:F1} min)",
-                    $"{maxMinutes:F1} min",
-                    $"{actualMinutes:F1} min"));
+                    durationRangeMessage
+                        ?? $"Video duration ({duration:F1}s) exceeds maximum ({rules.DurationMaxSeconds.Value}s)",
+                    $"{rules.DurationMaxSeconds.Value:0.##}s",
+                    $"{duration:F1}s"));
             }
         }
 
@@ -447,4 +469,18 @@ public class MediaValidationService : IMediaValidationService
             }
         }
     }
+
+    /// <summary>
+    /// Renders a width/height ratio bound as the familiar social-media label
+    /// (0.8 → "4:5", 0.5625 → "9:16") instead of a bare decimal, falling back to
+    /// "{x:F2}:1" for bounds that have no common name.
+    /// </summary>
+    private static string FormatRatio(double ratio) => ratio switch
+    {
+        0.5625 => "9:16",
+        0.75 => "3:4",
+        0.8 => "4:5",
+        1.0 => "1:1",
+        _ => $"{ratio:F2}:1",
+    };
 }

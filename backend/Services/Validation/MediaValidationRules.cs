@@ -41,7 +41,7 @@ public static class MediaValidationRules
             // Final product policy: JPG/JPEG + PNG only (no GIF/BMP/TIFF/WebP — they are
             // neither advertised in the UI nor accepted by upload init).
             AllowedMimeTypes = ["image/jpeg", "image/png"],
-            MaxBytes = 4L * 1024 * 1024, // 4MB (Facebook limit)
+            MaxBytes = 10L * 1024 * 1024, // 10MB — MVP-supported limit, aligned with the current Facebook Page photo cap
             MinWidth = 320,
             MinHeight = 320,
             MaxWidth = 2048, // Recommended max (larger images are resized)
@@ -63,15 +63,15 @@ public static class MediaValidationRules
             AllowedContainers = ["mp4", "mov"],
             AllowedVideoCodecs = ["h264", "hevc"],
             AllowedAudioCodecs = ["aac"],
-            MaxBytes = 200L * 1024 * 1024, // 200MB — the real app upload cap (not Meta's 1GB API limit)
+            MaxBytes = 200L * 1024 * 1024, // 200MB — product/MVP upload cap (well below Meta's API limit)
             MinWidth = 120,
             MinHeight = 120,
             MaxWidth = 4096,
             MaxHeight = 4096,
             AspectRatioMin = 0.5625, // 9:16 (portrait)
             AspectRatioMax = 1.91, // ~1.91:1 (landscape)
-            DurationMinSeconds = 1,
-            DurationMaxSeconds = 240 * 60, // 240 minutes (4 hours)
+            DurationMinSeconds = 3, // product/MVP: small social videos only
+            DurationMaxSeconds = 180, // product/MVP duration cap, NOT Meta's maximum (Meta allows hours)
             MaxFps = 60,
             RecommendedWidth = 1280,
             RecommendedHeight = 720,
@@ -86,7 +86,7 @@ public static class MediaValidationRules
         {
             // Final product policy: JPG/JPEG + PNG only.
             AllowedMimeTypes = ["image/jpeg", "image/png"],
-            MaxBytes = 4L * 1024 * 1024, // 4MB
+            MaxBytes = 10L * 1024 * 1024, // 10MB — MVP-supported limit, aligned with the current Facebook photo cap
             MinWidth = 320,
             MinHeight = 320,
             MaxWidth = 1080,
@@ -102,7 +102,8 @@ public static class MediaValidationRules
         },
 
         // Facebook Story Video Rules
-        // Source: https://developers.facebook.com/docs/graph-api/reference/page/video_stories/
+        // Source: https://developers.facebook.com/docs/page-stories-api (Meta: 9:16, min 540x960,
+        // 24-60 fps, 3-60 seconds).
         [(Platform.Facebook, Placement.Story, MediaType.Video)] = new MediaValidationRule
         {
             // Final product policy: MP4 + MOV only (MOV for iPhone compatibility).
@@ -110,17 +111,20 @@ public static class MediaValidationRules
             AllowedContainers = ["mp4", "mov"],
             AllowedVideoCodecs = ["h264", "hevc"],
             AllowedAudioCodecs = ["aac"],
-            MaxBytes = 200L * 1024 * 1024, // 200MB — the real app upload cap
-            MinWidth = 320,
-            MinHeight = 320,
+            MaxBytes = 200L * 1024 * 1024, // 200MB — product/MVP upload cap
+            MinWidth = 540, // Meta/platform minimum (540x960)
+            MinHeight = 960,
             MaxWidth = 1080,
             MaxHeight = 1920,
             AspectRatioMin = 0.50,
             AspectRatioMax = 0.75,
             PreferredAspectRatio = 0.5625, // 9:16
             AspectRatioWarningTolerance = 0.02,
-            DurationMinSeconds = 1,
-            DurationMaxSeconds = 120, // 2 minutes for FB stories
+            DurationMinSeconds = 3, // Meta/platform limit: story videos are 3-60 seconds
+            DurationMaxSeconds = 60,
+            // Meta documents 24-60 fps; 23 tolerates NTSC 23.976 footage (ffprobe reports 23.98),
+            // matching the Instagram video rules below.
+            MinFps = 23,
             MaxFps = 60,
             RecommendedWidth = 1080,
             RecommendedHeight = 1920,
@@ -138,19 +142,20 @@ public static class MediaValidationRules
         [(Platform.Instagram, Placement.Feed, MediaType.Image)] = new MediaValidationRule
         {
             AllowedMimeTypes = ["image/jpeg"],
-            MaxBytes = 8L * 1024 * 1024, // 8MB
+            MaxBytes = 8L * 1024 * 1024, // 8MB — Instagram platform limit
             MinWidth = 320,
             MinHeight = 320,
             MaxWidth = 1440,
             MaxHeight = 2560,
             MaxWidthIsAdvisory = true, // Meta downscales > 1440px instead of rejecting
-            AspectRatioMin = 0.5625, // 9:16 (portrait)
+            AspectRatioMin = 0.8, // 4:5 (portrait) — Meta rejects feed IMAGES below 4:5 (9:16 is video-only)
             AspectRatioMax = 1.91, // 1.91:1 (landscape)
             QualityWarningMinWidth = 600,
             QualityWarningMinHeight = 600,
         },
 
-        // Instagram Feed Video Rules
+        // Instagram Feed Video Rules (a single IG feed video is published by Meta as a Reel;
+        // vertical 9:16 is the standard Reel format and MUST pass).
         [(Platform.Instagram, Placement.Feed, MediaType.Video)] = new MediaValidationRule
         {
             // MP4 + MOV (MOV for iPhone compatibility). H.264 or HEVC/H.265, AAC audio.
@@ -158,15 +163,15 @@ public static class MediaValidationRules
             AllowedContainers = ["mp4", "mov"],
             AllowedVideoCodecs = ["h264", "hevc"],
             AllowedAudioCodecs = ["aac"],
-            MaxBytes = 100L * 1024 * 1024, // 100MB for feed videos
+            MaxBytes = 100L * 1024 * 1024, // 100MB — product/MVP cap (Meta allows more for Reels)
             MinWidth = 500,
             MinHeight = 500,
             MaxWidth = 1920,
             MaxHeight = 1920,
-            AspectRatioMin = 0.8, // 4:5 (portrait)
+            AspectRatioMin = 0.5625, // 9:16 (vertical Reel) — Meta accepts far wider; this keeps sane bounds
             AspectRatioMax = 1.91, // 1.91:1 (landscape)
             DurationMinSeconds = 3,
-            DurationMaxSeconds = 60, // 60 seconds for feed videos
+            DurationMaxSeconds = 180, // product/MVP duration cap, NOT Meta's maximum (Reels allow 15 min)
             MinFps = 23,
             MaxFps = 60,
             RecommendedWidth = 1080,
@@ -184,7 +189,7 @@ public static class MediaValidationRules
             // a PNG upload is validated against its Instagram JPEG derivative instead (see
             // EffectiveMediaResolver), so PNG users are not rejected for being non-JPEG.
             AllowedMimeTypes = ["image/jpeg"],
-            MaxBytes = 8L * 1024 * 1024, // 8MB
+            MaxBytes = 8L * 1024 * 1024, // 8MB — Instagram platform limit
             MinWidth = 320,
             MinHeight = 320,
             MaxWidth = 1080,
@@ -207,7 +212,7 @@ public static class MediaValidationRules
             AllowedContainers = ["mp4", "mov"],
             AllowedVideoCodecs = ["h264", "hevc"],
             AllowedAudioCodecs = ["aac"],
-            MaxBytes = 100L * 1024 * 1024, // 100MB
+            MaxBytes = 100L * 1024 * 1024, // 100MB — Instagram platform limit for story videos
             MinWidth = 320,
             MinHeight = 320,
             MaxWidth = 1080,
@@ -216,8 +221,8 @@ public static class MediaValidationRules
             AspectRatioMax = 0.75,
             PreferredAspectRatio = 0.5625, // 9:16
             AspectRatioWarningTolerance = 0.02,
-            DurationMinSeconds = 3,
-            DurationMaxSeconds = 60, // 60 seconds for IG stories
+            DurationMinSeconds = 3, // Meta/platform limit: story videos are 3-60 seconds
+            DurationMaxSeconds = 60,
             MinFps = 23,
             MaxFps = 60,
             RecommendedWidth = 1080,

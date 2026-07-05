@@ -82,7 +82,7 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
   // Facebook Feed Image
   'facebook:feed:image': {
     allowedMimeTypes: ['image/jpeg', 'image/png'],
-    maxBytes: 4 * 1024 * 1024, // 4MB
+    maxBytes: 10 * 1024 * 1024, // 10MB — MVP-supported limit, aligned with the current Facebook photo cap
     minWidth: 320,
     minHeight: 320,
     maxWidth: 2048,
@@ -94,21 +94,21 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
   // Facebook Feed Video
   'facebook:feed:video': {
     allowedMimeTypes: ['video/mp4', 'video/quicktime'],
-    maxBytes: 200 * 1024 * 1024, // 200MB — the real app upload cap (not Meta's 1GB API limit)
+    maxBytes: 200 * 1024 * 1024, // 200MB — product/MVP upload cap
     minWidth: 120,
     minHeight: 120,
     maxWidth: 4096,
     maxHeight: 4096,
     aspectRatioMin: 0.5625,
     aspectRatioMax: 1.91,
-    durationMinSeconds: 1,
-    durationMaxSeconds: 240 * 60, // 4 hours
+    durationMinSeconds: 3, // product/MVP: small social videos only
+    durationMaxSeconds: 180, // product/MVP cap, NOT Meta's maximum
   },
 
   // Facebook Story Image
   'facebook:story:image': {
     allowedMimeTypes: ['image/jpeg', 'image/png'],
-    maxBytes: 4 * 1024 * 1024, // 4MB
+    maxBytes: 10 * 1024 * 1024, // 10MB — MVP-supported limit
     minWidth: 320,
     minHeight: 320,
     maxWidth: 1080,
@@ -122,17 +122,17 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
   // Facebook Story Video
   'facebook:story:video': {
     allowedMimeTypes: ['video/mp4', 'video/quicktime'],
-    maxBytes: 200 * 1024 * 1024, // 200MB — the real app upload cap
-    minWidth: 320,
-    minHeight: 320,
+    maxBytes: 200 * 1024 * 1024, // 200MB — product/MVP upload cap
+    minWidth: 540, // Meta/platform minimum (540x960)
+    minHeight: 960,
     maxWidth: 1080,
     maxHeight: 1920,
     aspectRatioMin: 0.5,
     aspectRatioMax: 0.75,
     preferredAspectRatio: 0.5625,
     aspectRatioWarningTolerance: 0.02,
-    durationMinSeconds: 1,
-    durationMaxSeconds: 120, // 2 minutes
+    durationMinSeconds: 3, // Meta/platform limit: story videos are 3-60 seconds
+    durationMaxSeconds: 60,
   },
 
   // Instagram Feed Image
@@ -141,28 +141,28 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
   // is still NOT supported. (Carousel items reuse this rule; placement is always 'Feed'.)
   'instagram:feed:image': {
     allowedMimeTypes: ['image/jpeg', 'image/png'],
-    maxBytes: 8 * 1024 * 1024, // 8MB
+    maxBytes: 8 * 1024 * 1024, // 8MB — Instagram platform limit
     minWidth: 320,
     minHeight: 320,
     maxWidth: 1440,
     maxHeight: 2560,
     maxWidthIsAdvisory: true,
-    aspectRatioMin: 0.5625, // 9:16
+    aspectRatioMin: 0.8, // 4:5 — Meta rejects feed IMAGES below 4:5 (9:16 is video-only)
     aspectRatioMax: 1.91,
   },
 
-  // Instagram Feed Video
+  // Instagram Feed Video (published by Meta as a Reel; vertical 9:16 must pass)
   'instagram:feed:video': {
     allowedMimeTypes: ['video/mp4', 'video/quicktime'],
-    maxBytes: 100 * 1024 * 1024, // 100MB
+    maxBytes: 100 * 1024 * 1024, // 100MB — product/MVP cap
     minWidth: 500,
     minHeight: 500,
     maxWidth: 1920,
     maxHeight: 1920,
-    aspectRatioMin: 0.8,
+    aspectRatioMin: 0.5625, // 9:16 vertical Reel
     aspectRatioMax: 1.91,
     durationMinSeconds: 3,
-    durationMaxSeconds: 60, // 60 seconds
+    durationMaxSeconds: 180, // product/MVP cap, NOT Meta's maximum (Reels allow 15 min)
   },
 
   // Instagram Story Image
@@ -170,7 +170,7 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
   // auto-converted to an Instagram-safe JPEG by the backend; WebP remains unsupported.
   'instagram:story:image': {
     allowedMimeTypes: ['image/jpeg', 'image/png'],
-    maxBytes: 8 * 1024 * 1024, // 8MB
+    maxBytes: 8 * 1024 * 1024, // 8MB — Instagram platform limit
     minWidth: 320,
     minHeight: 320,
     maxWidth: 1080,
@@ -184,7 +184,7 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
   // Instagram Story Video
   'instagram:story:video': {
     allowedMimeTypes: ['video/mp4', 'video/quicktime'],
-    maxBytes: 100 * 1024 * 1024, // 100MB
+    maxBytes: 100 * 1024 * 1024, // 100MB — Instagram platform limit for story videos
     minWidth: 320,
     minHeight: 320,
     maxWidth: 1080,
@@ -193,8 +193,8 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
     aspectRatioMax: 0.75,
     preferredAspectRatio: 0.5625,
     aspectRatioWarningTolerance: 0.02,
-    durationMinSeconds: 3,
-    durationMaxSeconds: 60, // 60 seconds
+    durationMinSeconds: 3, // Meta/platform limit: story videos are 3-60 seconds
+    durationMaxSeconds: 60,
   },
 
   // Twitter/X Feed Image

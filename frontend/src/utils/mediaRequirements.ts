@@ -21,16 +21,42 @@ import type { PlatformId } from '../constants/validationLimits'
 const isStory = (placement: Placement | string): boolean =>
   String(placement).toLowerCase() === 'story'
 
+/** 'facebook' → 'Facebook' — display name for requirement/error copy. */
+function platformLabel(platform: PlatformId | string | null | undefined): string | null {
+  switch (String(platform ?? '').toLowerCase()) {
+    case 'facebook': return 'Facebook'
+    case 'instagram': return 'Instagram'
+    case 'twitter': return 'Twitter'
+    case 'linkedin': return 'LinkedIn'
+    default: return null
+  }
+}
+
+/**
+ * The image size limit phrase for the hint line: platform-specific when a platform is
+ * selected ("up to 10MB"), both platforms when not ("Facebook up to 10MB, Instagram up
+ * to 8MB"). Values mirror the backend rule table.
+ */
+function imageSizePhrase(platform: PlatformId | string | null | undefined, placement: Placement | string): string {
+  const rule = platform ? getClientValidationRule(platform, placement, 'Image') : null
+  if (rule) return `up to ${formatSizeLimit(rule.maxBytes)}`
+  return 'Facebook up to 10MB, Instagram up to 8MB'
+}
+
 /**
  * The "what's allowed here" line shown before upload. Placement-driven and identical
- * wording for every platform, so Facebook Story and Instagram Story read the same.
+ * wording style for every platform, so Facebook Story and Instagram Story read the same.
+ * Explicitly names the supported formats, the image size limit, the video duration
+ * range, and the HEIC limitation (no auto-conversion/resizing in the MVP).
  */
 export function getMediaRequirementHint(
-  _platform: PlatformId | string | null | undefined,
+  platform: PlatformId | string | null | undefined,
   placement: Placement | string = 'Feed',
 ): string {
-  if (isStory(placement)) return '1 photo or 1 video — vertical 9:16 recommended'
-  return 'Photo or video supported'
+  if (isStory(placement)) {
+    return `1 photo or 1 video — vertical 9:16 recommended. Photos: JPG or PNG, ${imageSizePhrase(platform, placement)}. Videos: MP4 or MOV, 3–60 seconds. HEIC is not supported yet.`
+  }
+  return `Photos: JPG or PNG, ${imageSizePhrase(platform, placement)}. Videos: MP4 or MOV, 3–180 seconds. HEIC is not supported yet — very large phone photos may need to be resized before upload.`
 }
 
 const MIME_LABELS: Record<string, string> = {
@@ -68,16 +94,31 @@ function getMediaTypeFromMime(type: string): MediaType | null {
   return null
 }
 
+/** HEIC/HEIF (iPhone default capture) — detected by MIME or extension since browsers
+ * sometimes report an empty MIME type for HEIC files. */
+function isHeicFile(file: { type: string; name?: string }): boolean {
+  const type = file.type.toLowerCase()
+  if (type.includes('heic') || type.includes('heif')) return true
+  const name = (file.name ?? '').toLowerCase()
+  return name.endsWith('.heic') || name.endsWith('.heif')
+}
+
+export const HEIC_NOT_SUPPORTED_MESSAGE = 'HEIC is not supported yet. Please upload a JPG or PNG image.'
+
 /**
  * Friendly client-side type/size pre-validation message for a file, or null when it
  * passes (or no client rule exists for the combination — backend then decides).
  * Mirrors the order of checks in `preValidateFile`: type, then size.
  */
 export function resolveClientMediaError(
-  file: { type: string; size: number },
+  file: { type: string; size: number; name?: string },
   platform: PlatformId | string,
   placement: Placement | string = 'Feed',
 ): string | null {
+  // HEIC first: it is the most common "why won't my phone photo upload" case and
+  // deserves its own copy (product limitation — no auto-conversion in the MVP).
+  if (isHeicFile(file)) return HEIC_NOT_SUPPORTED_MESSAGE
+
   const mediaType = getMediaTypeFromMime(file.type)
   if (!mediaType) return 'Unsupported file type. Upload a photo or video.'
 
@@ -91,12 +132,23 @@ export function resolveClientMediaError(
   }
 
   if (file.size > rule.maxBytes) {
+    const label = platformLabel(platform)
     return mediaType === 'Image'
-      ? `Image is larger than ${formatSizeLimit(rule.maxBytes)}.`
-      : `Video is larger than ${formatSizeLimit(rule.maxBytes)}.`
+      ? `This image is too large. ${label ?? 'Supported'} images can be up to ${formatSizeLimit(rule.maxBytes)}. Large phone photos may need to be resized before upload.`
+      : `This video is too large. ${label ?? 'Supported'} videos can be up to ${formatSizeLimit(rule.maxBytes)}.`
   }
 
   return null
+}
+
+/** 0.8 → "4:5", 0.5625 → "9:16" — familiar social labels for ratio bounds (mirrors
+ * the backend's FormatRatio so client and server copy read identically). */
+function formatRatio(ratio: number): string {
+  if (ratio === 0.5625) return '9:16'
+  if (ratio === 0.75) return '3:4'
+  if (ratio === 0.8) return '4:5'
+  if (ratio === 1) return '1:1'
+  return `${ratio.toFixed(2)}:1`
 }
 
 /**
@@ -126,7 +178,8 @@ export function resolveClientDimensionError(
     if (isStory(placement)) {
       return 'Story media should be vertical 9:16.'
     }
-    return `Image aspect ratio is not supported (use between ${rule.aspectRatioMin.toFixed(2)} and ${rule.aspectRatioMax.toFixed(2)}).`
+    const label = platformLabel(platform)
+    return `${label ? `${label} Feed` : 'Feed'} images must use an aspect ratio between ${formatRatio(rule.aspectRatioMin)} and ${formatRatio(rule.aspectRatioMax)}.`
   }
 
   return null

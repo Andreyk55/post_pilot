@@ -283,7 +283,7 @@ public class PostUpdateMediaGateTests : IDisposable
         var startMedia = SeedMedia("u-ig-vstart", "image/jpeg", "jpeg", 1080, 1080);
         var videoMedia = SeedVideoMedia("u-ig-vbad", "video/mp4", 10L * 1024 * 1024);
         var post = SeedScheduledPost(Platform.Instagram, startMedia.StorageKey, targetPageId: null, targetIgId: igId);
-        UseVideoMetadata(1080, 1080, durationSeconds: 75); // > 60s for IG feed
+        UseVideoMetadata(1080, 1080, durationSeconds: 181); // > 180s MVP cap for IG feed
 
         var req = new UpdatePostRequest(
             Content: "edited", MediaUrl: null, MediaType: MediaType.Video, Platform: Platform.Instagram,
