@@ -34,6 +34,32 @@ public class MediaUploadQuotaServiceTests
         maxVideoFileSizeBytes: 200 * 1024 * 1024,
         defaultPublishingUrlExpiration: TimeSpan.FromHours(1));
 
+    // UserMediaUploadUsages.UserId now carries an FK to AppUsers (enforced by SQLite),
+    // so any user whose quota is consumed must exist as an AppUser row.
+    private static async Task<Guid> SeedUserAsync(AppDbContext db)
+    {
+        var now = DateTime.UtcNow;
+        var userId = Guid.NewGuid();
+        db.AppUsers.Add(new Entities.AppUser
+        {
+            Id = userId,
+            Email = $"{userId:N}@test.local",
+            DisplayName = "Quota Test User",
+            AuthProvider = "test",
+            ExternalAuthUserId = userId.ToString("N"),
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+        return userId;
+    }
+
+    private static async Task<Guid> SeedUserAsync(SqliteDbScope scope)
+    {
+        await using var db = scope.CreateDbContext();
+        return await SeedUserAsync(db);
+    }
+
     private static async Task<Guid> SeedWorkspaceAsync(AppDbContext db)
     {
         var now = DateTime.UtcNow;
@@ -88,7 +114,7 @@ public class MediaUploadQuotaServiceTests
     {
         await using var scope = await SqliteDbScope.CreateAsync();
         await using var db = scope.CreateDbContext();
-        var userId = Guid.NewGuid();
+        var userId = await SeedUserAsync(db);
         var quota = new MediaUploadQuotaService(db, new MediaUploadQuotaOptions
         {
             Enabled = true,
@@ -111,7 +137,7 @@ public class MediaUploadQuotaServiceTests
     public async Task ExactLimitReachedByThisUpload_IsAllowed_AndRemainingBecomesZero()
     {
         await using var scope = await SqliteDbScope.CreateAsync();
-        var userId = Guid.NewGuid();
+        var userId = await SeedUserAsync(scope);
         var options = new MediaUploadQuotaOptions
         {
             Enabled = true,
@@ -139,7 +165,7 @@ public class MediaUploadQuotaServiceTests
     public async Task OverLimit_IsRejected()
     {
         await using var scope = await SqliteDbScope.CreateAsync();
-        var userId = Guid.NewGuid();
+        var userId = await SeedUserAsync(scope);
         var options = new MediaUploadQuotaOptions
         {
             Enabled = true,
@@ -171,7 +197,7 @@ public class MediaUploadQuotaServiceTests
     public async Task SameUserAcrossWorkspacesAndPlatforms_SharesOneBucket()
     {
         await using var scope = await SqliteDbScope.CreateAsync();
-        var userId = Guid.NewGuid();
+        var userId = await SeedUserAsync(scope);
         var storage = new RecordingStorage();
         var options = new MediaUploadQuotaOptions
         {
@@ -225,8 +251,8 @@ public class MediaUploadQuotaServiceTests
         await using var db = scope.CreateDbContext();
         var quota = new MediaUploadQuotaService(db, options);
 
-        var userA = await quota.TryConsumeUploadAsync(Guid.NewGuid());
-        var userB = await quota.TryConsumeUploadAsync(Guid.NewGuid());
+        var userA = await quota.TryConsumeUploadAsync(await SeedUserAsync(db));
+        var userB = await quota.TryConsumeUploadAsync(await SeedUserAsync(db));
 
         Assert.True(userA.Allowed);
         Assert.True(userB.Allowed);
@@ -237,7 +263,7 @@ public class MediaUploadQuotaServiceTests
     public async Task ImagesAndVideosBothConsumeOne()
     {
         await using var scope = await SqliteDbScope.CreateAsync();
-        var userId = Guid.NewGuid();
+        var userId = await SeedUserAsync(scope);
         var storage = new RecordingStorage();
         var options = new MediaUploadQuotaOptions
         {
@@ -281,7 +307,7 @@ public class MediaUploadQuotaServiceTests
     public async Task SameUserSameWindow_UsesSingleRow()
     {
         await using var scope = await SqliteDbScope.CreateAsync();
-        var userId = Guid.NewGuid();
+        var userId = await SeedUserAsync(scope);
         var options = new MediaUploadQuotaOptions
         {
             Enabled = true,
@@ -310,7 +336,7 @@ public class MediaUploadQuotaServiceTests
     public async Task RejectedInit_DoesNotCreateMediaRow()
     {
         await using var scope = await SqliteDbScope.CreateAsync();
-        var userId = Guid.NewGuid();
+        var userId = await SeedUserAsync(scope);
         var storage = new RecordingStorage();
         var options = new MediaUploadQuotaOptions
         {
@@ -354,7 +380,7 @@ public class MediaUploadQuotaServiceTests
     public async Task ConcurrentRequests_DoNotExceedLimit_WhenProviderSupportsTransactions()
     {
         await using var scope = await SqliteDbScope.CreateAsync();
-        var userId = Guid.NewGuid();
+        var userId = await SeedUserAsync(scope);
         var options = new MediaUploadQuotaOptions
         {
             Enabled = true,

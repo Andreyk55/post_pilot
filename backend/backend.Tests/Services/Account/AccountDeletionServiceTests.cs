@@ -120,6 +120,19 @@ public class AccountDeletionServiceTests : IDisposable
         return r;
     }
 
+    private UserMediaUploadUsage SeedUploadUsage(Guid userId, DateTime periodStartUtc)
+    {
+        var now = DateTime.UtcNow;
+        var u = new UserMediaUploadUsage
+        {
+            Id = Guid.NewGuid(), UserId = userId, PeriodStartUtc = periodStartUtc,
+            PeriodEndUtc = periodStartUtc.AddMonths(1), UploadCount = 3, CreatedAtUtc = now, UpdatedAtUtc = now,
+        };
+        _db.UserMediaUploadUsages.Add(u);
+        _db.SaveChanges();
+        return u;
+    }
+
     // ── Tests ────────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -203,6 +216,32 @@ public class AccountDeletionServiceTests : IDisposable
 
         Assert.False(await _db.SupportContactRequests.AnyAsync(r => r.Id == mine.Id));
         Assert.True(await _db.SupportContactRequests.AnyAsync(r => r.Id == theirs.Id));
+    }
+
+    [Fact]
+    public async Task Deletes_authenticated_users_media_upload_usage_rows()
+    {
+        var start = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        SeedUploadUsage(UserAId, start);
+        SeedUploadUsage(UserAId, start.AddMonths(1));
+
+        await _service.DeleteCurrentAccountAsync(UserAId, CancellationToken.None);
+
+        Assert.False(await _db.AppUsers.AnyAsync(u => u.Id == UserAId));
+        Assert.False(await _db.UserMediaUploadUsages.AnyAsync(u => u.UserId == UserAId));
+    }
+
+    [Fact]
+    public async Task Does_not_delete_other_users_media_upload_usage_rows()
+    {
+        var start = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        SeedUploadUsage(UserAId, start);
+        var theirs = SeedUploadUsage(UserBId, start);
+
+        await _service.DeleteCurrentAccountAsync(UserAId, CancellationToken.None);
+
+        Assert.False(await _db.UserMediaUploadUsages.AnyAsync(u => u.UserId == UserAId));
+        Assert.True(await _db.UserMediaUploadUsages.AnyAsync(u => u.Id == theirs.Id));
     }
 
     [Fact]

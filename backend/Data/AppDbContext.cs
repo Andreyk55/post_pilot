@@ -267,6 +267,15 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.UserId);
             entity.HasIndex(e => new { e.UserId, e.PeriodStartUtc }).IsUnique();
             entity.Property(e => e.UploadCount).IsRequired();
+
+            // UserId FK → AppUser, CASCADE. Quota usage is per-user bookkeeping with no
+            // reason to survive the user (same rationale as SupportContactRequest).
+            // AccountDeletionService ALSO removes these explicitly so the same behavior
+            // holds on the in-memory test provider, which does not enforce cascades.
+            entity.HasOne<AppUser>()
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<AppUser>(entity =>

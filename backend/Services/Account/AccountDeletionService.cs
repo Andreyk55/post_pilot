@@ -102,6 +102,13 @@ public sealed class AccountDeletionService : IAccountDeletionService
             .Where(s => s.UserId == authenticatedUserId)
             .ToListAsync(ct);
 
+        // Media upload quota usage rows for THIS user. Scoped strictly by UserId; not
+        // workspace-scoped because quota is tracked per user. Removed explicitly (in
+        // addition to the cascade FK) for the same in-memory-provider reason as above.
+        var uploadUsages = await _context.UserMediaUploadUsages
+            .Where(u => u.UserId == authenticatedUserId)
+            .ToListAsync(ct);
+
         // All bucket files for this user live under this single prefix. The guard makes
         // it impossible to touch another user's objects even if a stray key slipped in.
         var allowedPrefixes = new[] { $"users/{authenticatedUserId:D}/" };
@@ -125,6 +132,7 @@ public sealed class AccountDeletionService : IAccountDeletionService
             _context.Media.RemoveRange(media);
             _context.AiVoiceProfiles.RemoveRange(voiceProfiles);
             _context.SupportContactRequests.RemoveRange(supportRequests);
+            _context.UserMediaUploadUsages.RemoveRange(uploadUsages);
             _context.WorkspaceMembers.RemoveRange(memberships);
             _context.Workspaces.RemoveRange(workspaces);
             _context.AppUsers.Remove(user);
