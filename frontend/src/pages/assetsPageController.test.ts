@@ -43,6 +43,29 @@ const emptyEligibility: InstagramDiscoveryResponse = {
   linkedCount: 0,
 }
 
+/**
+ * Eligibility with a real Page row so an in-place refresh has visible relationship data
+ * to keep. `NotLinked` (not `Connected`) keeps this off the auto-repair path, which only
+ * fires for an unpromoted *linked* IG — so these tests isolate the stale-while-refresh
+ * behaviour of the "Facebook Pages and linked Instagram accounts" section.
+ */
+const eligibilityWithRows: InstagramDiscoveryResponse = {
+  pages: [
+    {
+      pageId: 'PAGE_1',
+      pageName: 'Existing Page',
+      igUserId: null,
+      igUsername: null,
+      igDisplayName: null,
+      igProfilePictureUrl: null,
+      eligibilityStatus: 'NotLinked',
+      reason: '',
+    },
+  ],
+  totalPages: 1,
+  linkedCount: 0,
+}
+
 /** A controllable promise so tests can assert in-flight state before resolution. */
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -301,6 +324,89 @@ describe('createAssetsPageController — setInitialLoading is exclusive to loadI
     const disconnectCtl = makeController(makeApi())
     await disconnectCtl.controller.disconnectPage(connectedPage, baseConnection)
     expect(disconnectCtl.deps.setInitialLoading).not.toHaveBeenCalled()
+  })
+})
+
+describe('createAssetsPageController — stale-while-refresh keeps the lower section data', () => {
+  it('applies refreshed relationship rows without clearing them first (in-place refresh)', async () => {
+    const api = makeApi({
+      getInstagramEligibility: vi.fn().mockResolvedValue(eligibilityWithRows),
+    })
+    const { controller, deps } = makeController(api)
+
+    await controller.refresh()
+
+    // The lower "Facebook Pages and linked Instagram accounts" rows are applied…
+    expect(deps.setIgEligibility).toHaveBeenCalledWith(eligibilityWithRows.pages)
+    // …and never blanked to [] first, so the section can't flash empty / unmount.
+    expect(deps.setIgEligibility).not.toHaveBeenCalledWith([])
+    // The connection is kept (never nulled), and the full-page loader stays untouched.
+    expect(deps.setMetaConnection).toHaveBeenCalledWith(baseConnection)
+    expect(deps.setMetaConnection).not.toHaveBeenCalledWith(null)
+    expect(deps.setInitialLoading).not.toHaveBeenCalled()
+    // Refresh is signalled only via the in-place "Refreshing..." badge, which clears after.
+    expect(deps.setRefreshing).toHaveBeenCalledWith(true)
+    expect(deps.setRefreshing).toHaveBeenLastCalledWith(false)
+  })
+
+  it('does not clear the connection or relationship rows while a connect is in flight', async () => {
+    const update = deferred<unknown>()
+    const api = makeApi({
+      updateConnection: vi.fn().mockReturnValue(update.promise),
+      getInstagramEligibility: vi.fn().mockResolvedValue(eligibilityWithRows),
+    })
+    const { controller, deps } = makeController(api)
+
+    const pending = controller.connectPage(newPage, baseConnection)
+
+    // In flight: only the clicked row spins. The last known connection + relationship
+    // rows are left untouched, so the lower section stays rendered with existing data.
+    expect(deps.addConnectingPage).toHaveBeenCalledWith('PAGE_2')
+    expect(deps.setMetaConnection).not.toHaveBeenCalled()
+    expect(deps.setIgEligibility).not.toHaveBeenCalled()
+    expect(deps.setInitialLoading).not.toHaveBeenCalled()
+
+    update.resolve({})
+    await pending
+  })
+
+  it('does not clear the connection or relationship rows while a disconnect is in flight', async () => {
+    const update = deferred<unknown>()
+    const api = makeApi({
+      updateConnection: vi.fn().mockReturnValue(update.promise),
+      getInstagramEligibility: vi.fn().mockResolvedValue(eligibilityWithRows),
+    })
+    const { controller, deps } = makeController(api)
+
+    const pending = controller.disconnectPage(connectedPage, baseConnection)
+
+    // Same guarantee for disconnect: nothing is blanked while the request is in flight.
+    expect(deps.addDisconnectingPage).toHaveBeenCalledWith('PAGE_1')
+    expect(deps.setMetaConnection).not.toHaveBeenCalled()
+    expect(deps.setIgEligibility).not.toHaveBeenCalled()
+    expect(deps.setInitialLoading).not.toHaveBeenCalled()
+
+    update.resolve({})
+    await pending
+  })
+
+  it('preserves the last known connection + rows when the refresh fails after connect succeeds', async () => {
+    // updateConnection succeeds; the follow-up in-place refresh (getConnection) throws.
+    const api = makeApi({
+      getConnection: vi.fn().mockRejectedValue(new Error('refresh failed')),
+    })
+    const { controller, deps } = makeController(api)
+
+    await controller.connectPage(newPage, baseConnection)
+
+    // Nothing is cleared, so the previous lower relationship section stays visible…
+    expect(deps.setMetaConnection).not.toHaveBeenCalledWith(null)
+    expect(deps.setIgEligibility).not.toHaveBeenCalled()
+    // …the clicked row's loading state is cleared…
+    expect(deps.removeConnectingPage).toHaveBeenCalledWith('PAGE_2')
+    // …and the user gets an error toast, never the full-page loader.
+    expect(deps.onError).toHaveBeenCalledWith(CONNECT_PAGE_ERROR)
+    expect(deps.setInitialLoading).not.toHaveBeenCalled()
   })
 })
 

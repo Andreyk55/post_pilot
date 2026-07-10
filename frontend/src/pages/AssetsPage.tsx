@@ -263,6 +263,7 @@ export function AssetsPage({ onNavigate }: AssetsPageProps) {
             </div>
             <h2>Linked Instagram professional accounts</h2>
           </div>
+          {loadingPages && <span className="loading-badge">Refreshing...</span>}
         </div>
 
         {/* Section A: Connected accounts — IG accounts enabled in PostPilot (DB state) */}
@@ -302,52 +303,54 @@ export function AssetsPage({ onNavigate }: AssetsPageProps) {
           )}
         </div>
 
-        {/* Section B: Instagram linked Pages — link status in Meta (per Page), discovery info only */}
-        {!loadingPages && (
-          <div className="assets-list">
-            <h3 className="list-subtitle">Facebook Pages and linked Instagram accounts</h3>
-            {igEligibility.length > 0 ? (
-              igEligibility.map(page => (
-                <div key={page.pageId} className={`asset-item ${page.eligibilityStatus === 'Connected' ? 'connected' : ''}`}>
-                  <div className="asset-avatar">
-                    {page.pageName.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="asset-details">
-                    <span className="asset-name">
-                      {page.pageName}
-                      {page.eligibilityStatus === 'Connected' && (
-                        <span className="ig-linked-label">
-                          {page.igUsername ? ` → @${page.igUsername}` : ' → Instagram linked'}
-                        </span>
-                      )}
-                    </span>
-                    {page.eligibilityStatus !== 'Connected' && (
-                      <span className="asset-meta">
-                        No Instagram account is linked to this Facebook Page. Link an Instagram professional account in Meta Business Suite.
+        {/* Section B: Instagram linked Pages — link status in Meta (per Page), discovery info only.
+            Intentionally NOT gated on `loadingPages`: during an in-place connect/disconnect refresh
+            this section must stay mounted, showing the last known Page ↔ Instagram rows
+            (stale-while-refresh). The header "Refreshing..." badge is the only refresh signal; the
+            rows are replaced only after the new connection data returns. */}
+        <div className="assets-list">
+          <h3 className="list-subtitle">Facebook Pages and linked Instagram accounts</h3>
+          {igEligibility.length > 0 ? (
+            igEligibility.map(page => (
+              <div key={page.pageId} className={`asset-item ${page.eligibilityStatus === 'Connected' ? 'connected' : ''}`}>
+                <div className="asset-avatar">
+                  {page.pageName.charAt(0).toUpperCase()}
+                </div>
+                <div className="asset-details">
+                  <span className="asset-name">
+                    {page.pageName}
+                    {page.eligibilityStatus === 'Connected' && (
+                      <span className="ig-linked-label">
+                        {page.igUsername ? ` → @${page.igUsername}` : ' → Instagram linked'}
                       </span>
                     )}
-                  </div>
-                  <div className={`asset-status ${page.eligibilityStatus === 'Connected' ? 'connected' : 'not-linked'}`}>
-                    {page.eligibilityStatus === 'Connected' ? (
-                      <>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                        Linked
-                      </>
-                    ) : (
-                      'Not linked'
-                    )}
-                  </div>
+                  </span>
+                  {page.eligibilityStatus !== 'Connected' && (
+                    <span className="asset-meta">
+                      No Instagram account is linked to this Facebook Page. Link an Instagram professional account in Meta Business Suite.
+                    </span>
+                  )}
                 </div>
-              ))
-            ) : (
-              <div className="section-empty">
-                <p>No Facebook Pages found. Connect Meta and select at least one Page.</p>
+                <div className={`asset-status ${page.eligibilityStatus === 'Connected' ? 'connected' : 'not-linked'}`}>
+                  {page.eligibilityStatus === 'Connected' ? (
+                    <>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                      Linked
+                    </>
+                  ) : (
+                    'Not linked'
+                  )}
+                </div>
               </div>
-            )}
-          </div>
-        )}
+            ))
+          ) : (
+            <div className="section-empty">
+              <p>No Facebook Pages found. Connect Meta and select at least one Page.</p>
+            </div>
+          )}
+        </div>
       </section>
 
       <Toast

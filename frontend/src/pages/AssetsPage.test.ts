@@ -56,3 +56,29 @@ describe('AssetsPage — connect does not blank the page', () => {
     expect(assetsPageSource).not.toMatch(/\balert\(/)
   })
 })
+
+describe('AssetsPage — connect/disconnect keeps the lower relationship section mounted', () => {
+  it('renders the "Facebook Pages and linked Instagram accounts" section unconditionally', () => {
+    // During an in-place connect/disconnect refresh the lower relationship section must
+    // stay mounted so the last known rows remain visible (stale-while-refresh). It was
+    // previously wrapped in `{!loadingPages && (...)}`, which unmounted it while refreshing.
+    expect(assetsPageSource).toMatch(/Facebook Pages and linked Instagram accounts/)
+    expect(assetsPageSource).not.toMatch(
+      /\{!loadingPages && \([\s\S]*?Facebook Pages and linked Instagram accounts/,
+    )
+  })
+
+  it('signals the in-place refresh with a "Refreshing..." badge, never by hiding a section', () => {
+    // Refresh feedback is the small badge; the section itself never unmounts on `loadingPages`.
+    expect(assetsPageSource).toMatch(
+      /loadingPages && <span className="loading-badge">Refreshing\.\.\.<\/span>/,
+    )
+  })
+
+  it('keeps the full-page "Loading assets..." state exclusive to the initial-load flag', () => {
+    // Only `if (loading)` — the GLOBAL initial-load flag — may show the full-page loader;
+    // the in-place refresh flag (loadingPages) must never blank the page.
+    expect(assetsPageSource).toMatch(/if \(loading\) \{[\s\S]*Loading assets\.\.\./)
+    expect(assetsPageSource).not.toMatch(/if \(loadingPages\)/)
+  })
+})
