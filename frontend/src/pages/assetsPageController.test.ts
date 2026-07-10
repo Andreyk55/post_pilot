@@ -2,10 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
   createAssetsPageController,
   CONNECT_PAGE_ERROR,
+  DISCONNECT_PAGE_ERROR,
   type AssetsPageApi,
 } from './assetsPageController'
 import type {
   MetaConnection,
+  ConnectedPage,
   FacebookPage,
   MetaConnectionResponse,
   InstagramDiscoveryResponse,
@@ -26,6 +28,9 @@ const baseConnection: MetaConnection = {
 
 /** The page the user clicks "Connect" on (available, not yet connected). */
 const newPage: FacebookPage = { id: 'PAGE_2', name: 'Second Page' }
+
+/** The already-connected page the user clicks "Disconnect" on. */
+const connectedPage: ConnectedPage = baseConnection.pages[0]
 
 const connectionResponse = (connection: MetaConnection): MetaConnectionResponse => ({
   isConnected: true,
@@ -193,6 +198,109 @@ describe('createAssetsPageController — connectPage keeps the page visible', ()
     expect(deps.onSuccess).not.toHaveBeenCalled()
     // Still never blanks the existing UI.
     expect(deps.setInitialLoading).not.toHaveBeenCalled()
+  })
+})
+
+describe('createAssetsPageController — disconnectPage keeps the page visible', () => {
+  it('never renders the full-page "Loading assets..." state during disconnect', async () => {
+    const { controller, deps } = makeController(makeApi())
+
+    await controller.disconnectPage(connectedPage, baseConnection)
+
+    // The full-page loader is driven solely by setInitialLoading; disconnect must
+    // never touch it, so the Publishing Assets layout stays mounted throughout.
+    expect(deps.setInitialLoading).not.toHaveBeenCalled()
+    // And the connection is never cleared to null on success (sections remain).
+    expect(deps.setMetaConnection).not.toHaveBeenCalledWith(null)
+  })
+
+  it('enters a per-row disconnecting state only for the clicked page while in flight', async () => {
+    const update = deferred<unknown>()
+    const api = makeApi({ updateConnection: vi.fn().mockReturnValue(update.promise) })
+    const { controller, deps } = makeController(api)
+
+    const pending = controller.disconnectPage(connectedPage, baseConnection)
+
+    // Only the clicked row shows a spinner immediately (before the request resolves)…
+    expect(deps.addDisconnectingPage).toHaveBeenCalledWith('PAGE_1')
+    expect(deps.removeDisconnectingPage).not.toHaveBeenCalled()
+    // …and the global loader is never involved.
+    expect(deps.setInitialLoading).not.toHaveBeenCalled()
+
+    // …and the row clears once the whole flow settles.
+    update.resolve({})
+    await pending
+    expect(deps.removeDisconnectingPage).toHaveBeenCalledWith('PAGE_1')
+  })
+
+  it('refreshes assets in place and shows a success toast after disconnecting', async () => {
+    const api = makeApi()
+    const { controller, deps } = makeController(api)
+
+    await controller.disconnectPage(connectedPage, baseConnection)
+
+    // Sends the remaining pages (the disconnected one removed).
+    expect(api.updateConnection).toHaveBeenCalledWith({
+      selectedPageIds: [],
+      selectedInstagramIds: [],
+    })
+    // Refreshes in place (re-reads the connection) rather than blanking the page.
+    expect(api.getConnection).toHaveBeenCalledTimes(1)
+    expect(deps.onSuccess).toHaveBeenCalledWith('Existing Page disconnected.')
+    expect(deps.onError).not.toHaveBeenCalled()
+  })
+
+  it('clears the per-row state and shows an error when the disconnect call fails', async () => {
+    const api = makeApi({
+      updateConnection: vi.fn().mockRejectedValue(new Error('network')),
+    })
+    const { controller, deps } = makeController(api)
+
+    await controller.disconnectPage(connectedPage, baseConnection)
+
+    expect(deps.onError).toHaveBeenCalledWith(DISCONNECT_PAGE_ERROR)
+    expect(deps.onSuccess).not.toHaveBeenCalled()
+    expect(deps.removeDisconnectingPage).toHaveBeenCalledWith('PAGE_1')
+    expect(deps.setInitialLoading).not.toHaveBeenCalled()
+    expect(api.getConnection).not.toHaveBeenCalled()
+  })
+
+  it('clears the per-row state even when the refresh fails AFTER disconnect succeeds', async () => {
+    const api = makeApi({
+      getConnection: vi.fn().mockRejectedValue(new Error('refresh failed')),
+    })
+    const { controller, deps } = makeController(api)
+
+    await controller.disconnectPage(connectedPage, baseConnection)
+
+    // The finally block still runs — the row doesn't get stuck spinning.
+    expect(deps.removeDisconnectingPage).toHaveBeenCalledWith('PAGE_1')
+    expect(deps.onError).toHaveBeenCalledWith(DISCONNECT_PAGE_ERROR)
+    expect(deps.onSuccess).not.toHaveBeenCalled()
+    expect(deps.setInitialLoading).not.toHaveBeenCalled()
+  })
+})
+
+describe('createAssetsPageController — setInitialLoading is exclusive to loadInitial', () => {
+  it('only loadInitial toggles the global loading flag', async () => {
+    // loadInitial DOES drive the global loader…
+    const first = makeController(makeApi())
+    await first.controller.loadInitial()
+    expect(first.deps.setInitialLoading).toHaveBeenCalledWith(true)
+
+    // …but no other entry point does. Run every non-initial path on a fresh
+    // controller and assert the global loader was never touched.
+    const refreshCtl = makeController(makeApi())
+    await refreshCtl.controller.refresh()
+    expect(refreshCtl.deps.setInitialLoading).not.toHaveBeenCalled()
+
+    const connectCtl = makeController(makeApi())
+    await connectCtl.controller.connectPage(newPage, baseConnection)
+    expect(connectCtl.deps.setInitialLoading).not.toHaveBeenCalled()
+
+    const disconnectCtl = makeController(makeApi())
+    await disconnectCtl.controller.disconnectPage(connectedPage, baseConnection)
+    expect(disconnectCtl.deps.setInitialLoading).not.toHaveBeenCalled()
   })
 })
 
