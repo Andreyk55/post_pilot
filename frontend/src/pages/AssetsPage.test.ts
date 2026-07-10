@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 // Source-level checks (Vite `?raw`) — no DOM harness is configured for this project,
-// matching SchedulePost.workspace.test.ts.
+// matching SchedulePost.workspace.test.ts. Behavioural coverage of the connect flow
+// lives in assetsPageController.test.ts (the load/connect wiring is extracted there).
 import assetsPageSource from './AssetsPage.tsx?raw'
+import assetsControllerSource from './assetsPageController.ts?raw'
 
 describe('AssetsPage — Publishing Assets rename', () => {
   it('titles the page "Publishing Assets"', () => {
@@ -23,9 +25,34 @@ describe('AssetsPage — Publishing Assets rename', () => {
   })
 
   it('does not rename backend/provider asset concepts (route id, API terms)', () => {
-    // Only visible copy changes; the 'accounts' navigation target and metaApi asset
-    // calls are untouched.
+    // Only visible copy changes; the 'accounts' navigation target stays on the page,
+    // and the metaApi asset calls are untouched (now wired through the controller).
     expect(assetsPageSource).toMatch(/onNavigate\('accounts'\)/)
-    expect(assetsPageSource).toMatch(/metaApi\.getAvailablePages\(\)/)
+    expect(assetsControllerSource).toMatch(/getAvailablePages: metaApi\.getAvailablePages/)
+  })
+})
+
+describe('AssetsPage — connect does not blank the page', () => {
+  it('shows the full-page "Loading assets..." branch only behind the global loading flag', () => {
+    // The only full-page loader is guarded by `if (loading)`, and `loading` is the
+    // GLOBAL initial-load flag — nothing else in the page toggles it.
+    expect(assetsPageSource).toMatch(/if \(loading\) \{[\s\S]*Loading assets\.\.\./)
+  })
+
+  it('drives connect/disconnect through the controller, not the global loader', () => {
+    // Clicking Connect must go through the controller (in-place refresh), never a
+    // handler that flips the global loading state.
+    expect(assetsPageSource).toMatch(/controller\.connectPage\(page, metaConnection\)/)
+    expect(assetsPageSource).toMatch(/controller\.disconnectPage\(page, metaConnection\)/)
+    // Only the initial mount may show the full-page loader.
+    expect(assetsPageSource).toMatch(/controller\.loadInitial\(\)/)
+  })
+
+  it('keeps the per-row "Connecting..." state and renders a Toast for feedback', () => {
+    expect(assetsPageSource).toMatch(/connectingPageIds\.has\(page\.id\)/)
+    expect(assetsPageSource).toMatch(/Connecting\.\.\./)
+    // Feedback is a non-blocking Toast, not a blocking alert().
+    expect(assetsPageSource).toMatch(/<Toast\b/)
+    expect(assetsPageSource).not.toMatch(/\balert\(/)
   })
 })

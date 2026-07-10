@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import './AssetsPage.css'
-import { metaApi } from '../api/meta'
 import type { MetaConnection, FacebookPage, ConnectedPage, InstagramEligibilityDto } from '../types/meta'
-import { hasUnpromotedLinkedInstagram } from '../utils/instagramPromotion'
 import { instagramAssetRowView } from '../utils/instagramAssetRow'
 import { AvatarImage } from '../components/AvatarImage'
+import { Toast } from '../components/Toast'
+import { createAssetsPageController } from './assetsPageController'
 
 interface AssetsPageProps {
   onNavigate: (page: string) => void
@@ -13,147 +13,74 @@ interface AssetsPageProps {
 export function AssetsPage({ onNavigate }: AssetsPageProps) {
   // Meta connection state
   const [metaConnection, setMetaConnection] = useState<MetaConnection | null>(null)
+  // GLOBAL full-page "Loading assets..." — only the first mount toggles this.
   const [loading, setLoading] = useState(true)
 
   // Available pages from Meta (not yet connected)
   const [availablePages, setAvailablePages] = useState<FacebookPage[]>([])
   const [igEligibility, setIgEligibility] = useState<InstagramEligibilityDto[]>([])
+  // In-place "Refreshing..." indicator; never blanks the page.
   const [loadingPages, setLoadingPages] = useState(false)
 
-  // Connection states
+  // Per-row connection states — only the clicked row shows a spinner / "Connecting...".
   const [connectingPageIds, setConnectingPageIds] = useState<Set<string>>(new Set())
   const [disconnectingPageIds, setDisconnectingPageIds] = useState<Set<string>>(new Set())
 
-  // Guards a single auto-repair attempt per page load so we never loop if the
-  // backend repair can't promote an IG (e.g. transient discovery failure).
-  const [repairAttempted, setRepairAttempted] = useState(false)
+  // Toast for connect/disconnect success and errors (replaces blocking dialogs).
+  const [showToast, setShowToast] = useState(false)
+  const [toastMessage, setToastMessage] = useState('')
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success')
 
-  // Load Meta connection on mount
-  useEffect(() => {
-    loadMetaConnection()
+  const notify = useCallback((message: string, type: 'success' | 'error') => {
+    setToastMessage(message)
+    setToastType(type)
+    setShowToast(true)
   }, [])
 
-  const loadMetaConnection = async () => {
-    try {
-      setLoading(true)
-      const response = await metaApi.getConnection()
-      if (response.isConnected && response.connection) {
-        setMetaConnection(response.connection)
-        // Load available pages to see what else can be connected
-        await loadAvailablePages(response.connection)
-      } else {
-        setMetaConnection(null)
-      }
-    } catch (err) {
-      console.error('Failed to load Meta connection:', err)
-      setMetaConnection(null)
-    } finally {
-      setLoading(false)
-    }
-  }
+  // All load/connect/disconnect wiring lives in the controller so the "connect a
+  // page" flow is unit-testable and can't regress the global-loading bug. Deps are
+  // stable (state setters + a memoized notify), so the controller is created once.
+  const controller = useMemo(
+    () =>
+      createAssetsPageController({
+        setMetaConnection,
+        setAvailablePages,
+        setIgEligibility,
+        setInitialLoading: setLoading,
+        setRefreshing: setLoadingPages,
+        addConnectingPage: id => setConnectingPageIds(prev => new Set(prev).add(id)),
+        removeConnectingPage: id =>
+          setConnectingPageIds(prev => {
+            const next = new Set(prev)
+            next.delete(id)
+            return next
+          }),
+        addDisconnectingPage: id => setDisconnectingPageIds(prev => new Set(prev).add(id)),
+        removeDisconnectingPage: id =>
+          setDisconnectingPageIds(prev => {
+            const next = new Set(prev)
+            next.delete(id)
+            return next
+          }),
+        onSuccess: message => notify(message, 'success'),
+        onError: message => notify(message, 'error'),
+      }),
+    [notify],
+  )
 
-  const loadAvailablePages = async (connection: MetaConnection) => {
-    try {
-      setLoadingPages(true)
-      const { pages } = await metaApi.getAvailablePages()
-      setAvailablePages(pages)
+  // Load Meta connection on mount — the only path that shows the full-page loader.
+  useEffect(() => {
+    controller.loadInitial()
+  }, [controller])
 
-      // Load Instagram eligibility (per-page breakdown)
-      try {
-        const eligibility = await metaApi.getInstagramEligibility()
-        setIgEligibility(eligibility.pages)
-
-        // Self-heal: a connected Page whose Meta-linked IG (eligibility "Connected")
-        // is missing from the connected IG asset list is the production bug — IG was
-        // discovered but never promoted to a connected publishable asset, which blocks
-        // the composer. Trigger the idempotent backend repair ONCE, then reload so the
-        // promoted IG shows up everywhere (Assets, SchedulePost, validation).
-        if (!repairAttempted) {
-          const needsRepair = hasUnpromotedLinkedInstagram(
-            connection.pages,
-            connection.instagramAccounts,
-            eligibility.pages,
-          )
-          if (needsRepair) {
-            setRepairAttempted(true)
-            try {
-              await metaApi.refreshAssets()
-            } catch (repairErr) {
-              console.error('Failed to auto-repair linked Instagram accounts:', repairErr)
-            }
-            // Reload connection state regardless; on success the IG is now connected.
-            await loadMetaConnection()
-            return
-          }
-        }
-      } catch {
-        // Non-critical: eligibility info is supplementary
-      }
-    } catch (err) {
-      console.error('Failed to load available pages:', err)
-    } finally {
-      setLoadingPages(false)
-    }
-  }
-
-  const handleConnectPage = async (page: FacebookPage) => {
+  const handleConnectPage = (page: FacebookPage) => {
     if (!metaConnection) return
-
-    setConnectingPageIds(prev => new Set(prev).add(page.id))
-    try {
-      // Get current connected page IDs and add this one
-      const currentPageIds = metaConnection.pages.map(p => p.pageId)
-      const currentIgIds = metaConnection.instagramAccounts.map(ig => ig.igBusinessId)
-
-      await metaApi.updateConnection({
-        selectedPageIds: [...currentPageIds, page.id],
-        selectedInstagramIds: currentIgIds
-      })
-
-      await loadMetaConnection()
-    } catch (err) {
-      console.error('Failed to connect page:', err)
-      alert('Failed to connect page. Please try again.')
-    } finally {
-      setConnectingPageIds(prev => {
-        const next = new Set(prev)
-        next.delete(page.id)
-        return next
-      })
-    }
+    controller.connectPage(page, metaConnection)
   }
 
-  const handleDisconnectPage = async (page: ConnectedPage) => {
+  const handleDisconnectPage = (page: ConnectedPage) => {
     if (!metaConnection) return
-
-    setDisconnectingPageIds(prev => new Set(prev).add(page.pageId))
-    try {
-      // Get current connected page IDs and remove this one
-      const currentPageIds = metaConnection.pages
-        .filter(p => p.pageId !== page.pageId)
-        .map(p => p.pageId)
-
-      // Also remove Instagram accounts linked to this page
-      const currentIgIds = metaConnection.instagramAccounts
-        .filter(ig => ig.pageId !== page.pageId)
-        .map(ig => ig.igBusinessId)
-
-      await metaApi.updateConnection({
-        selectedPageIds: currentPageIds,
-        selectedInstagramIds: currentIgIds
-      })
-
-      await loadMetaConnection()
-    } catch (err) {
-      console.error('Failed to disconnect page:', err)
-      alert('Failed to disconnect page. Please try again.')
-    } finally {
-      setDisconnectingPageIds(prev => {
-        const next = new Set(prev)
-        next.delete(page.pageId)
-        return next
-      })
-    }
+    controller.disconnectPage(page, metaConnection)
   }
 
   // Instagram connected accounts are DERIVED assets: a linked IG is publishable iff its
@@ -422,6 +349,13 @@ export function AssetsPage({ onNavigate }: AssetsPageProps) {
           </div>
         )}
       </section>
+
+      <Toast
+        message={toastMessage}
+        type={toastType}
+        isVisible={showToast}
+        onClose={() => setShowToast(false)}
+      />
     </div>
   )
 }
