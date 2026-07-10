@@ -13,7 +13,15 @@ interface AuthContextValue {
   hasWorkspace: boolean
   /** Re-fetches /api/auth/me; call after the OAuth round-trip lands on /auth/callback. */
   refreshUser: () => Promise<AuthUser | null>
-  /** Clears the session cookie and resets local auth state. */
+  /**
+   * Clears the session cookie and resets local auth state. Resetting the user
+   * to null makes RequireAuth swap in the login screen, so calling this
+   * effectively navigates there. Flows that perform their own full-page
+   * redirect (account deletion → /account-deleted) must NOT call this first:
+   * the login screen would flash while the browser is still loading the
+   * target page. Those flows rely on the backend having ended the session and
+   * on the full-page navigation discarding local state.
+   */
   logout: () => Promise<void>
 }
 

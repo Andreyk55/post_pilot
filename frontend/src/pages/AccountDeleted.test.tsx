@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { renderToStaticMarkup } from 'react-dom/server'
 import appSource from '../App.tsx?raw'
 import settingsPageSource from './SettingsPage.tsx?raw'
+import accountDeletedSource from './AccountDeleted.tsx?raw'
 import { AccountDeleted } from './AccountDeleted'
 
 function renderPage() {
@@ -43,6 +44,12 @@ describe('/account-deleted routing', () => {
     // Public routes must precede the catch-all gated app or they get swallowed by it.
     expect(routeIdx).toBeLessThan(gatedIdx)
   })
+
+  it('never touches auth state, so it cannot trigger the login/redirect flow', () => {
+    // The page also renders without <AuthProvider> in these tests — useAuth
+    // would throw. This assertion makes the constraint explicit in the source.
+    expect(accountDeletedSource).not.toContain('useAuth')
+  })
 })
 
 describe('delete-account success redirect', () => {
@@ -58,5 +65,23 @@ describe('delete-account success redirect', () => {
     // push, leaving the Settings/Danger Zone page reachable via the Back button.
     expect(settingsPageSource).toContain("window.location.replace('/account-deleted')")
     expect(settingsPageSource).not.toMatch(/window\.location\.href\s*=\s*'\/account-deleted'/)
+  })
+
+  it('never calls the auth logout, whose state reset flashes the login screen', () => {
+    // useAuth's logout resets the user to null, which makes RequireAuth render
+    // the login screen while the browser is still fetching /account-deleted —
+    // the login-page flash this flow must avoid. DELETE /account already signs
+    // out the session cookie server-side, so the success handler only redirects.
+    // SettingsPage therefore must not reference the auth logout at all.
+    expect(settingsPageSource).not.toMatch(/logout/i)
+  })
+
+  it('redirects synchronously with no awaited work before the navigation', () => {
+    // The success handler body must be exactly the replace() call. Any awaited
+    // call (network sign-out, state updates) before the redirect reopens the
+    // window in which the authenticated shell re-renders before navigation.
+    expect(settingsPageSource).toMatch(
+      /const handleDeleted = useCallback\(\(\) => \{\s*window\.location\.replace\('\/account-deleted'\)\s*\}, \[\]\)/,
+    )
   })
 })

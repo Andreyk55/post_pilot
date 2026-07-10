@@ -15,7 +15,7 @@ import './SettingsPage.css'
  * full-account action, not a provider action.
  */
 export function SettingsPage() {
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
 
   const [confirmText, setConfirmText] = useState('')
   const [phase, setPhase] = useState<DeleteAccountPhase>('idle')
@@ -25,15 +25,21 @@ export function SettingsPage() {
   // First button opens the modal; it stays available only while idle and confirmed.
   const canRequestDelete = isDeleteAccountConfirmed(confirmText) && phase === 'idle'
 
-  // Clear local auth state, then send the user to the public post-deletion
-  // confirmation page. We use replace() (not href =) so the now-defunct
-  // authenticated Settings/Danger Zone entry is REMOVED from history — pressing
-  // Back must not return to (or restore from bfcache) a deleted account's screen.
-  // A full-page navigation also guarantees a fresh load with no stale auth state.
-  const handleDeleted = useCallback(async () => {
-    await logout().catch(() => undefined)
+  // Send the user straight to the public post-deletion confirmation page.
+  //
+  // Deliberately does NOT clear client auth state first: DELETE /account has
+  // already signed out the session cookie server-side, and dropping the local
+  // user would make RequireAuth render the login screen while the browser is
+  // still fetching /account-deleted — a visible login flash. The full-page
+  // navigation discards all in-memory auth state anyway.
+  //
+  // We use replace() (not href =) so the now-defunct authenticated
+  // Settings/Danger Zone entry is REMOVED from history — pressing Back must not
+  // return to (or restore from bfcache) a deleted account's screen. A full-page
+  // navigation also guarantees a fresh load with no stale auth state.
+  const handleDeleted = useCallback(() => {
     window.location.replace('/account-deleted')
-  }, [logout])
+  }, [])
 
   const deleteController = useMemo(
     () => createDeleteAccountController({ setPhase, setError, onDeleted: handleDeleted }),
