@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { isDeleteAccountConfirmed, DELETE_ACCOUNT_CONFIRMATION } from '../api/account'
 import {
-  accountApi,
-  isDeleteAccountConfirmed,
-  DELETE_ACCOUNT_CONFIRMATION,
-} from '../api/account'
+  createDeleteAccountController,
+  type DeleteAccountPhase,
+} from './deleteAccountController'
+import { DeleteAccountConfirmModal } from '../components/DeleteAccountConfirmModal'
 import './SettingsPage.css'
 
 /**
@@ -17,25 +18,23 @@ export function SettingsPage() {
   const { user, logout } = useAuth()
 
   const [confirmText, setConfirmText] = useState('')
-  const [deleting, setDeleting] = useState(false)
+  const [phase, setPhase] = useState<DeleteAccountPhase>('idle')
   const [error, setError] = useState<string | null>(null)
 
-  const canDelete = isDeleteAccountConfirmed(confirmText) && !deleting
+  const deleting = phase === 'deleting'
+  // First button opens the modal; it stays available only while idle and confirmed.
+  const canRequestDelete = isDeleteAccountConfirmed(confirmText) && phase === 'idle'
 
-  async function handleDelete() {
-    if (!canDelete) return
-    setDeleting(true)
-    setError(null)
-    try {
-      await accountApi.deleteAccount(confirmText)
-      // Clear local auth state, then send the user to the landing/login page.
-      await logout().catch(() => undefined)
-      window.location.href = '/'
-    } catch {
-      setError('We could not delete your account. Please try again or contact support.')
-      setDeleting(false)
-    }
-  }
+  // Clear local auth state, then send the user to the landing/login page.
+  const handleDeleted = useCallback(async () => {
+    await logout().catch(() => undefined)
+    window.location.href = '/'
+  }, [logout])
+
+  const deleteController = useMemo(
+    () => createDeleteAccountController({ setPhase, setError, onDeleted: handleDeleted }),
+    [handleDeleted],
+  )
 
   return (
     <div className="settings-page">
@@ -97,7 +96,7 @@ export function SettingsPage() {
             onChange={(e) => setConfirmText(e.target.value)}
             placeholder={DELETE_ACCOUNT_CONFIRMATION}
             autoComplete="off"
-            disabled={deleting}
+            disabled={phase !== 'idle'}
           />
 
           {error && <div className="settings-danger-error">{error}</div>}
@@ -105,13 +104,21 @@ export function SettingsPage() {
           <button
             type="button"
             className="settings-danger-button"
-            onClick={handleDelete}
-            disabled={!canDelete}
+            onClick={() => deleteController.requestDelete()}
+            disabled={!canRequestDelete}
           >
-            {deleting ? 'Deleting…' : 'Delete account permanently'}
+            Delete account permanently
           </button>
         </div>
       </section>
+
+      <DeleteAccountConfirmModal
+        isOpen={phase !== 'idle'}
+        deleting={deleting}
+        error={error}
+        onCancel={() => deleteController.cancel()}
+        onConfirm={() => deleteController.confirmDelete(confirmText)}
+      />
     </div>
   )
 }
