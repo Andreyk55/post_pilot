@@ -25,10 +25,14 @@ export function SettingsPage() {
   // First button opens the modal; it stays available only while idle and confirmed.
   const canRequestDelete = isDeleteAccountConfirmed(confirmText) && phase === 'idle'
 
-  // Clear local auth state, then send the user to the landing/login page.
+  // Clear local auth state, then send the user to the public post-deletion
+  // confirmation page. We use replace() (not href =) so the now-defunct
+  // authenticated Settings/Danger Zone entry is REMOVED from history — pressing
+  // Back must not return to (or restore from bfcache) a deleted account's screen.
+  // A full-page navigation also guarantees a fresh load with no stale auth state.
   const handleDeleted = useCallback(async () => {
     await logout().catch(() => undefined)
-    window.location.href = '/'
+    window.location.replace('/account-deleted')
   }, [logout])
 
   const deleteController = useMemo(

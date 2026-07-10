@@ -14,6 +14,7 @@ import { DataDeletionPage } from './pages/DataDeletionPage'
 import { DataDeletionStatusPage } from './pages/DataDeletionStatusPage'
 import { PrivacyPage } from './pages/PrivacyPage'
 import { TermsPage } from './pages/TermsPage'
+import { AccountDeleted } from './pages/AccountDeleted'
 import { PasswordGate } from './components/PasswordGate'
 import { LoginScreen } from './components/LoginScreen'
 import { AuthProvider, useAuth } from './hooks/useAuth'
@@ -118,6 +119,7 @@ function App() {
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/data-deletion" element={<DataDeletionPage />} />
         <Route path="/data-deletion/status/:confirmationCode" element={<DataDeletionStatusPage />} />
+        <Route path="/account-deleted" element={<AccountDeleted />} />
         {/* Everything else is the gated app. */}
         <Route path="/*" element={<GatedApp />} />
       </Routes>
