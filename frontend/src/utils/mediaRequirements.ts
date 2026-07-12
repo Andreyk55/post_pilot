@@ -32,31 +32,30 @@ function platformLabel(platform: PlatformId | string | null | undefined): string
   }
 }
 
-/**
- * The image size limit phrase for the hint line: platform-specific when a platform is
- * selected ("up to 10MB"), both platforms when not ("Facebook up to 10MB, Instagram up
- * to 8MB"). Values mirror the backend rule table.
- */
-function imageSizePhrase(platform: PlatformId | string | null | undefined, placement: Placement | string): string {
-  const rule = platform ? getClientValidationRule(platform, placement, 'Image') : null
-  if (rule) return `up to ${formatSizeLimit(rule.maxBytes)}`
-  return 'Facebook up to 10MB, Instagram up to 8MB'
-}
+// Generic fallbacks for when no platform-specific rule exists (e.g. no platform yet
+// selected). Mirror the backend Feed defaults so the concise hint still reads sensibly.
+const DEFAULT_IMAGE_MAX_BYTES = 10 * 1024 * 1024
+const DEFAULT_VIDEO_MIN_SECONDS = 3
+const DEFAULT_VIDEO_MAX_SECONDS = 180
 
 /**
- * The "what's allowed here" line shown before upload. Placement-driven and identical
- * wording style for every platform, so Facebook Story and Instagram Story read the same.
- * Explicitly names the supported formats, the image size limit, the video duration
- * range, and the HEIC limitation (no auto-conversion/resizing in the MVP).
+ * The concise "what's supported here" line shown once above the upload area. Same
+ * component/styling for every platform + placement; the image size limit and video
+ * duration range are still derived from the mirrored rule table so Facebook (10 MB),
+ * Instagram (8 MB), Feed (3–180 s) and Story (3–60 s) each read accurately.
  */
 export function getMediaRequirementHint(
   platform: PlatformId | string | null | undefined,
   placement: Placement | string = 'Feed',
 ): string {
-  if (isStory(placement)) {
-    return `1 photo or 1 video — vertical 9:16 recommended. Photos: JPG or PNG, ${imageSizePhrase(platform, placement)}. Videos: MP4 or MOV, 3–60 seconds. HEIC is not supported yet.`
-  }
-  return `Photos: JPG or PNG, ${imageSizePhrase(platform, placement)}. Videos: MP4 or MOV, 3–180 seconds. HEIC is not supported yet — very large phone photos may need to be resized before upload.`
+  const imageRule = platform ? getClientValidationRule(platform, placement, 'Image') : null
+  const videoRule = platform ? getClientValidationRule(platform, placement, 'Video') : null
+
+  const imageMaxMB = Math.round((imageRule?.maxBytes ?? DEFAULT_IMAGE_MAX_BYTES) / (1024 * 1024))
+  const videoMinSeconds = videoRule?.durationMinSeconds ?? DEFAULT_VIDEO_MIN_SECONDS
+  const videoMaxSeconds = videoRule?.durationMaxSeconds ?? DEFAULT_VIDEO_MAX_SECONDS
+
+  return `Supported: JPG/PNG images (≤${imageMaxMB} MB) • MP4/MOV videos (${videoMinSeconds}–${videoMaxSeconds} s)`
 }
 
 const MIME_LABELS: Record<string, string> = {

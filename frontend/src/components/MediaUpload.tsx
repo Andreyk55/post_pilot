@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { mediaApi, type MediaType, type ValidationStatus, type MediaValidationError, type MediaValidationWarning, type Platform, type Placement } from '../api/media'
-import { getImageDimensions, getClientValidationRule } from '../constants/mediaValidationRules'
+import { getImageDimensions } from '../constants/mediaValidationRules'
 import type { PlatformId } from '../constants/validationLimits'
 import { MediaValidationBadge, MediaValidationCard, MediaValidationOverlay } from './MediaValidationStatus'
 import { resolveClientMediaError, resolveClientDimensionError } from '../utils/mediaRequirements'
@@ -326,38 +326,6 @@ export function MediaUpload({
     }
   }
 
-  // Get dynamic hints based on selected platform. Always names the supported formats
-  // and the HEIC limitation; with a platform selected the size/duration limits come
-  // from the mirrored rule table.
-  const getUploadHints = () => {
-    if (selectedPlatform) {
-      const imageRule = getClientValidationRule(selectedPlatform, placement, 'Image')
-      const videoRule = getClientValidationRule(selectedPlatform, placement, 'Video')
-
-      const imageMaxMB = imageRule ? Math.round(imageRule.maxBytes / (1024 * 1024)) : DEFAULT_MAX_IMAGE_SIZE_MB
-      const videoMaxMB = videoRule ? Math.round(videoRule.maxBytes / (1024 * 1024)) : DEFAULT_MAX_VIDEO_SIZE_MB
-      const durationHint = videoRule?.durationMinSeconds != null && videoRule?.durationMaxSeconds != null
-        ? `, ${videoRule.durationMinSeconds}–${videoRule.durationMaxSeconds}s`
-        : ''
-
-      return (
-        <>
-          <span className="upload-hint">Images: JPG/PNG, max {imageMaxMB}MB</span>
-          <span className="upload-hint">Videos: MP4/MOV, max {videoMaxMB}MB{durationHint}</span>
-          <span className="upload-hint">HEIC is not supported yet</span>
-        </>
-      )
-    }
-
-    return (
-      <>
-        <span className="upload-hint">Images: JPG, PNG (max {DEFAULT_MAX_IMAGE_SIZE_MB}MB)</span>
-        <span className="upload-hint">Videos: MP4, MOV (max {DEFAULT_MAX_VIDEO_SIZE_MB}MB)</span>
-        <span className="upload-hint">HEIC is not supported yet</span>
-      </>
-    )
-  }
-
   const showValidationOverlay = !!selectedPlatform && (uploading || validating)
 
   return (
@@ -426,10 +394,15 @@ export function MediaUpload({
         >
           <div className="upload-placeholder">
             <span className="upload-icon">+</span>
-            <span className="upload-text">
-              {uploading ? 'Uploading...' : 'Add Media'}
-            </span>
-            {getUploadHints()}
+            {uploading ? (
+              <span className="upload-text">Uploading...</span>
+            ) : (
+              <>
+                <span className="upload-text">Drag &amp; drop files here</span>
+                <span className="upload-separator">or</span>
+                <span className="upload-browse">Browse files</span>
+              </>
+            )}
           </div>
         </div>
       )}

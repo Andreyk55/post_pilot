@@ -1,18 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { mediaApi, type MediaType, type ValidationStatus, type MediaValidationError, type MediaValidationWarning, type Platform } from '../api/media'
 import { getImageDimensions } from '../constants/mediaValidationRules'
-import {
-  validateInstagramSelection,
-  getInstagramMediaMode,
-  getInstagramUploaderLabel,
-  getInstagramFormatHint,
-} from '../utils/instagramMediaValidation'
-import {
-  validateFacebookSelection,
-  getFacebookMediaMode,
-  getFacebookUploaderLabel,
-  getFacebookFormatHint,
-} from '../utils/facebookMediaValidation'
+import { validateInstagramSelection } from '../utils/instagramMediaValidation'
+import { validateFacebookSelection } from '../utils/facebookMediaValidation'
 import type { PlatformId } from '../constants/validationLimits'
 import { MediaValidationBadge, MediaValidationCard, MediaValidationOverlay } from './MediaValidationStatus'
 import { resolveClientMediaError, resolveClientDimensionError } from '../utils/mediaRequirements'
@@ -124,16 +114,6 @@ export function MultiMediaUpload({
 
   const isInstagram = selectedPlatform === 'instagram'
   const isFacebook = selectedPlatform === 'facebook'
-
-  // Instagram media mode for dynamic labels
-  const igMediaMode = isInstagram
-    ? getInstagramMediaMode(items.map(i => ({ name: i.fileName, type: i.mediaType === 'Video' ? 'video/mp4' : 'image/jpeg' })))
-    : null
-
-  // Facebook media mode for dynamic labels
-  const fbMediaMode = isFacebook
-    ? getFacebookMediaMode(items.map(i => ({ name: i.fileName, type: i.mediaType === 'Video' ? 'video/mp4' : 'image/jpeg' })))
-    : null
 
   // For Facebook with a video selected, don't allow adding more (FB = 1 video max)
   // For Instagram with videos, allow adding more videos (IG video carousel)
@@ -415,28 +395,6 @@ export function MultiMediaUpload({
     return 'image/jpeg,image/png'
   }
 
-  // Instagram: dynamic upload text and hint
-  const getUploadText = (): string => {
-    if (uploading) return 'Uploading...'
-    if (isInstagram && igMediaMode) {
-      return getInstagramUploaderLabel(igMediaMode, itemCount)
-    }
-    if (isFacebook && fbMediaMode) {
-      return getFacebookUploaderLabel(fbMediaMode, itemCount)
-    }
-    return `Add Images (2-10 for carousel)`
-  }
-
-  const getUploadHint = (): string => {
-    if (isInstagram && igMediaMode) {
-      return getInstagramFormatHint(igMediaMode)
-    }
-    if (isFacebook && fbMediaMode) {
-      return getFacebookFormatHint(fbMediaMode)
-    }
-    return 'JPEG, PNG only. Select multiple files.'
-  }
-
   // Dynamic status bar text
   const getStatusText = (): string => {
     if (isInstagram) {
@@ -604,8 +562,15 @@ export function MultiMediaUpload({
         >
           <div className="upload-placeholder">
             <span className="upload-icon">+</span>
-            <span className="upload-text">{getUploadText()}</span>
-            <span className="upload-hint">{getUploadHint()}</span>
+            {uploading ? (
+              <span className="upload-text">Uploading...</span>
+            ) : (
+              <>
+                <span className="upload-text">Drag &amp; drop files here</span>
+                <span className="upload-separator">or</span>
+                <span className="upload-browse">Browse files</span>
+              </>
+            )}
           </div>
         </div>
       )}

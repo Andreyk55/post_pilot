@@ -66,6 +66,17 @@
   color: rgba(255, 255, 255, 0.4);
 }
 
+.upload-separator {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.upload-browse {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #667eea;
+}
+
 /* Preview styles */
 .media-preview {
   position: relative;

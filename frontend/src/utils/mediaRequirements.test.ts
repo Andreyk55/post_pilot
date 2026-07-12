@@ -9,27 +9,28 @@ import {
 const f = (type: string, size = 1000, name?: string) => ({ type, size, name })
 
 describe('getMediaRequirementHint', () => {
-  it('names formats, image max size, video duration, and the HEIC limitation for Feed', () => {
+  it('shows the concise supported-formats line with the Feed image size and video duration', () => {
     expect(getMediaRequirementHint('facebook', 'Feed')).toBe(
-      'Photos: JPG or PNG, up to 10MB. Videos: MP4 or MOV, 3–180 seconds. HEIC is not supported yet — very large phone photos may need to be resized before upload.',
+      'Supported: JPG/PNG images (≤10 MB) • MP4/MOV videos (3–180 s)',
     )
     expect(getMediaRequirementHint('instagram', 'Feed')).toBe(
-      'Photos: JPG or PNG, up to 8MB. Videos: MP4 or MOV, 3–180 seconds. HEIC is not supported yet — very large phone photos may need to be resized before upload.',
+      'Supported: JPG/PNG images (≤8 MB) • MP4/MOV videos (3–180 s)',
     )
   })
 
-  it('uses the Story duration limit (3–60s) and keeps the 9:16 recommendation', () => {
+  it('uses the Story video duration limit (3–60 s) and the per-platform image size', () => {
     expect(getMediaRequirementHint('facebook', 'Story')).toBe(
-      '1 photo or 1 video — vertical 9:16 recommended. Photos: JPG or PNG, up to 10MB. Videos: MP4 or MOV, 3–60 seconds. HEIC is not supported yet.',
+      'Supported: JPG/PNG images (≤10 MB) • MP4/MOV videos (3–60 s)',
     )
     expect(getMediaRequirementHint('instagram', 'Story')).toBe(
-      '1 photo or 1 video — vertical 9:16 recommended. Photos: JPG or PNG, up to 8MB. Videos: MP4 or MOV, 3–60 seconds. HEIC is not supported yet.',
+      'Supported: JPG/PNG images (≤8 MB) • MP4/MOV videos (3–60 s)',
     )
   })
 
-  it('shows both platform image limits when no platform is selected', () => {
-    expect(getMediaRequirementHint(null, 'Feed')).toContain('Facebook up to 10MB, Instagram up to 8MB')
-    expect(getMediaRequirementHint(null, 'Feed')).toContain('HEIC is not supported yet')
+  it('falls back to generic Feed limits when no platform is selected', () => {
+    expect(getMediaRequirementHint(null, 'Feed')).toBe(
+      'Supported: JPG/PNG images (≤10 MB) • MP4/MOV videos (3–180 s)',
+    )
   })
 })
 
