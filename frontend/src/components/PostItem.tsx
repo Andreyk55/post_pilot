@@ -22,6 +22,66 @@ interface PostItemProps {
   onDetailsFetched: (id: string, details: PostDetails) => void
 }
 
+interface ExpandedMediaTile {
+  key: string
+  mediaUrl: string | null
+  mediaType: 'Image' | 'Video'
+  thumbnailUrl: string | null
+  /** Visible caption under the tile, e.g. "Photo 2" / "Video". */
+  label: string
+  /** Screen-reader text, e.g. "Post media 1" / "Video media 1". */
+  accessibleText: string
+}
+
+/**
+ * Every attached media item for the expanded MEDIA section, in upload order.
+ * Falls back to the single mediaUrl/mediaType fields when there is no
+ * mediaItems array. Returns [] for text-only posts.
+ */
+function getExpandedMedia(post: Post): ExpandedMediaTile[] {
+  let entries: Array<{ key: string; mediaUrl: string | null; mediaType: 'Image' | 'Video'; thumbnailUrl: string | null }>
+
+  const items = post.mediaItems ?? []
+  if (items.length > 0) {
+    entries = [...items]
+      .sort((a, b) => a.order - b.order)
+      .filter(item => item.mediaType !== 'None')
+      .map(item => ({
+        key: item.id,
+        mediaUrl: item.mediaUrl,
+        mediaType: item.mediaType as 'Image' | 'Video',
+        thumbnailUrl: item.thumbnail?.url ?? null,
+      }))
+  } else if (post.mediaUrl && getEffectiveMediaType(post) !== 'None') {
+    entries = [{
+      key: 'main',
+      mediaUrl: post.mediaUrl,
+      mediaType: getEffectiveMediaType(post) as 'Image' | 'Video',
+      thumbnailUrl: post.selectedThumbnailUrl ?? post.thumbnail?.url ?? null,
+    }]
+  } else {
+    entries = []
+  }
+
+  const photoCount = entries.filter(e => e.mediaType === 'Image').length
+  let photoNumber = 0
+  return entries.map((entry, index) => {
+    if (entry.mediaType === 'Image') {
+      photoNumber += 1
+      return {
+        ...entry,
+        label: photoCount > 1 ? `Photo ${photoNumber}` : 'Photo',
+        accessibleText: `Post media ${index + 1}`,
+      }
+    }
+    return {
+      ...entry,
+      label: 'Video',
+      accessibleText: `Video media ${index + 1}`,
+    }
+  })
+}
+
 const platformConfig: Record<string, { icon: string; name: string; color: string }> = {
   Twitter: { icon: '𝕏', name: 'X', color: '#000000' },
   Instagram: { icon: '', name: 'Instagram', color: '#E4405F' },
@@ -150,6 +210,8 @@ export function PostItem({ post, cachedDetails, onDetailsFetched }: PostItemProp
     details.engagement.commentsCount !== null ||
     details.engagement.sharesCount !== null
   )
+
+  const expandedMedia = getExpandedMedia(post)
 
   return (
     <div className={`post-item ${isExpanded ? 'expanded' : ''}`}>
@@ -429,6 +491,31 @@ export function PostItem({ post, cachedDetails, onDetailsFetched }: PostItemProp
                 )}
               </div>
             </div>
+
+            {/* Media Section — every attached media item, in upload order */}
+            {expandedMedia.length > 0 && (
+              <div className="media-section">
+                <h4 className="section-title">Media</h4>
+                <div className="media-section-grid">
+                  {expandedMedia.map(media => (
+                    <div className="media-section-tile" key={media.key}>
+                      <div className="media-section-thumb">
+                        <MediaThumbnail
+                          src={media.mediaUrl}
+                          mediaType={media.mediaType}
+                          alt={media.mediaType === 'Image' ? media.accessibleText : ''}
+                          thumbnailUrl={media.mediaType === 'Video' ? media.thumbnailUrl : undefined}
+                        />
+                        {media.mediaType === 'Video' && (
+                          <span className="media-sr-only">{media.accessibleText}</span>
+                        )}
+                      </div>
+                      <span className="media-section-label">{media.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         ) : null}
       </div>
