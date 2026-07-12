@@ -9,6 +9,7 @@ import { resolveClientMediaError, resolveClientDimensionError } from '../utils/m
 import { aggregateMediaValidationViews } from '../utils/mediaValidationView'
 import { getUploadErrorMessage } from '../utils/uploadError'
 import { createUploadClientId } from '../utils/uploadClientId'
+import { useMediaDropzone } from '../hooks/useMediaDropzone'
 import './MultiMediaUpload.css'
 
 export interface UploadedMediaItem {
@@ -122,10 +123,16 @@ export function MultiMediaUpload({
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
-    if (files.length === 0) return
-
-    // Reset file input
+    // Reset file input so re-selecting the same file(s) re-triggers change.
     if (fileInputRef.current) fileInputRef.current.value = ''
+    await handleFiles(files)
+  }
+
+  // Single shared entry point for the file picker and drag-and-drop. The dropzone hook
+  // only extracts files; every count/format/mixed-media rule below is unchanged and
+  // applies identically to both paths.
+  const handleFiles = async (files: File[]) => {
+    if (files.length === 0) return
 
     if (!isFacebook && !isInstagram) {
       setUploadError('Select Facebook or Instagram before uploading media.')
@@ -359,6 +366,22 @@ export function MultiMediaUpload({
     }
   }
 
+  const handleKeyActivate = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      handleClick()
+    }
+  }
+
+  // Drag-and-drop routes dropped files through the same handleFiles entry point as the
+  // file picker (so mixed-media/max-count/format rules all still apply). Disabled while
+  // uploading, when the control is disabled, or when already at capacity — matching the
+  // hidden file input's disabled condition — so those drops are ignored.
+  const { isDragActive, dropzoneHandlers } = useMediaDropzone({
+    disabled: disabled || uploading || !canAddMore,
+    onFiles: handleFiles,
+  })
+
   const itemCount = items.length
 
   // One normalized view for every item — the same shared card the single-media
@@ -535,17 +558,19 @@ export function MultiMediaUpload({
             </div>
           ))}
 
-          {/* Add more button */}
+          {/* Add more button — also a drop target so files can be dragged straight into
+              an existing carousel (same handleFiles pipeline, same limits). */}
           {canAddMore && !disabled && !isUploadingMedia && (
             <div
-              className={`carousel-add-btn ${uploading ? 'uploading' : ''}`}
+              className={`carousel-add-btn ${uploading ? 'uploading' : ''} ${isDragActive ? 'drag-active' : ''}`}
               onClick={handleClick}
               role="button"
               tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && handleClick()}
+              onKeyDown={handleKeyActivate}
+              {...dropzoneHandlers}
             >
               <span className="carousel-add-icon">+</span>
-              <span className="carousel-add-text">Add</span>
+              <span className="carousel-add-text">{isDragActive ? 'Drop' : 'Add'}</span>
             </div>
           )}
         </div>
@@ -554,16 +579,19 @@ export function MultiMediaUpload({
       {/* Empty state / initial upload */}
       {items.length === 0 && pendingUploads.length === 0 && (
         <div
-          className={`upload-area ${uploading ? 'uploading' : ''} ${disabled ? 'disabled' : ''}`}
+          className={`upload-area ${uploading ? 'uploading' : ''} ${disabled ? 'disabled' : ''} ${isDragActive ? 'drag-active' : ''}`}
           onClick={handleClick}
           role="button"
           tabIndex={disabled ? -1 : 0}
-          onKeyDown={(e) => e.key === 'Enter' && handleClick()}
+          onKeyDown={handleKeyActivate}
+          {...dropzoneHandlers}
         >
           <div className="upload-placeholder">
             <span className="upload-icon">+</span>
             {uploading ? (
               <span className="upload-text">Uploading...</span>
+            ) : isDragActive ? (
+              <span className="upload-text">Drop files here</span>
             ) : (
               <>
                 <span className="upload-text">Drag &amp; drop files here</span>

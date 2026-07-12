@@ -7,6 +7,7 @@ import { resolveClientMediaError, resolveClientDimensionError } from '../utils/m
 import { resolveMediaValidationView } from '../utils/mediaValidationView'
 import { getUploadErrorMessage } from '../utils/uploadError'
 import { createUploadClientId } from '../utils/uploadClientId'
+import { useMediaDropzone } from '../hooks/useMediaDropzone'
 import './MediaUpload.css'
 
 interface MediaUploadProps {
@@ -172,15 +173,36 @@ export function MediaUpload({
   }
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const files = Array.from(e.target.files ?? [])
+    // Preserve the original behaviour: after a platform-gate rejection, clear the picker
+    // so the same file can be re-selected once a platform is chosen.
+    const invalidPlatform = selectedPlatform !== 'facebook' && selectedPlatform !== 'instagram'
+    await handleFiles(files)
+    if (files.length > 0 && invalidPlatform) e.target.value = ''
+  }
+
+  // Single shared entry point for the file picker and drag-and-drop. The dropzone hook
+  // only extracts files; all validation/upload rules live below so both paths behave
+  // identically.
+  const handleFiles = async (files: File[]) => {
+    if (files.length === 0) return
 
     if (selectedPlatform !== 'facebook' && selectedPlatform !== 'instagram') {
       onUploadError('Select Facebook or Instagram before uploading media.')
-      e.target.value = ''
       return
     }
 
+    // Single-media surface: exactly one file is supported. If several are dropped,
+    // surface an error through the existing channel instead of silently uploading one.
+    if (files.length > 1) {
+      onUploadError('You can add one photo or video here. Please drop a single file.')
+      return
+    }
+
+    await uploadSingleFile(files[0])
+  }
+
+  const uploadSingleFile = async (file: File) => {
     // Start a fresh validation session and clear any result from the previously
     // selected media *before* the new file validates. This drops the old error
     // panel synchronously, the instant a new upload starts — not after it finishes.
@@ -326,6 +348,21 @@ export function MediaUpload({
     }
   }
 
+  const handleKeyActivate = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      handleClick()
+    }
+  }
+
+  // Drag-and-drop shares the exact same handleFiles entry point as the file picker. It
+  // is disabled while an upload is in flight (and when the control itself is disabled),
+  // so drops during those states are ignored and the active visual never appears.
+  const { isDragActive, dropzoneHandlers } = useMediaDropzone({
+    disabled: disabled || uploading,
+    onFiles: handleFiles,
+  })
+
   const showValidationOverlay = !!selectedPlatform && (uploading || validating)
 
   return (
@@ -386,16 +423,19 @@ export function MediaUpload({
         </>
       ) : (
         <div
-          className={`upload-area ${uploading ? 'uploading' : ''} ${disabled ? 'disabled' : ''}`}
+          className={`upload-area ${uploading ? 'uploading' : ''} ${disabled ? 'disabled' : ''} ${isDragActive ? 'drag-active' : ''}`}
           onClick={handleClick}
           role="button"
           tabIndex={disabled ? -1 : 0}
-          onKeyDown={(e) => e.key === 'Enter' && handleClick()}
+          onKeyDown={handleKeyActivate}
+          {...dropzoneHandlers}
         >
           <div className="upload-placeholder">
             <span className="upload-icon">+</span>
             {uploading ? (
               <span className="upload-text">Uploading...</span>
+            ) : isDragActive ? (
+              <span className="upload-text">Drop files here</span>
             ) : (
               <>
                 <span className="upload-text">Drag &amp; drop files here</span>

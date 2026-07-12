@@ -20,6 +20,14 @@
   background: rgba(102, 126, 234, 0.05);
 }
 
+/* Active drag-over state: same accent as hover, a touch stronger, so it reads clearly
+   without redesigning the zone. Height is held steady by .upload-placeholder's
+   min-height, so switching to the shorter "Drop files here" copy causes no layout shift. */
+.upload-area.drag-active {
+  border-color: #667eea;
+  background: rgba(102, 126, 234, 0.12);
+}
+
 .upload-area:focus {
   outline: none;
   border-color: #667eea;
@@ -46,6 +54,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
+  /* Hold the zone height constant across normal / drag-active / uploading copy so the
+     active state never shifts surrounding layout (fits the tallest, 3-line normal copy). */
+  min-height: 7.5rem;
   gap: 0.5rem;
 }
 

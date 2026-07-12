@@ -155,6 +155,11 @@
   background: rgba(102, 126, 234, 0.05);
 }
 
+.carousel-add-btn.drag-active {
+  border-color: #667eea;
+  background: rgba(102, 126, 234, 0.12);
+}
+
 .carousel-add-btn.uploading {
   pointer-events: none;
   opacity: 0.5;
@@ -224,6 +229,13 @@
   background: rgba(102, 126, 234, 0.05);
 }
 
+/* Active drag-over state — matches the single-media uploader. Height stays constant via
+   the placeholder min-height, so the shorter "Drop files here" copy causes no shift. */
+.multi-media-upload .upload-area.drag-active {
+  border-color: #667eea;
+  background: rgba(102, 126, 234, 0.12);
+}
+
 .multi-media-upload .upload-area.uploading {
   pointer-events: none;
   opacity: 0.7;
@@ -239,6 +251,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
+  /* Hold the zone height constant across normal / drag-active / uploading copy so the
+     active state never shifts surrounding layout (fits the tallest, 3-line normal copy). */
+  min-height: 7.5rem;
   gap: 0.5rem;
 }
 
