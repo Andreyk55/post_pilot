@@ -24,7 +24,9 @@ namespace PostPilot.Api.Tests.Providers;
 ///   B. Workspaces are isolated — same Meta account in two workspaces is fine.
 ///   C. Disconnect cancels non-executed posts; executed history untouched.
 ///   D. While disconnected, normal post list hides every Meta-tied post.
-///   E. Reconnect SAME ProviderAccountId resurfaces history (Published + Canceled).
+///   E. Reconnect SAME ProviderAccountId alone does NOT resurface history —
+///      a Page/IG asset's posts (Published + Canceled) come back only once
+///      that asset is re-selected (asset row flips back to IsConnected).
 ///   F. Connect DIFFERENT ProviderAccountId leaves old history hidden.
 ///   G. Cross-workspace operations cannot reach another workspace's connection.
 ///
@@ -196,6 +198,26 @@ public class ProviderConnectionLifecycleTests : IDisposable
         return p;
     }
 
+    private Post SeedIgPost(Guid workspaceId, Guid targetIgId, PostStatus status)
+    {
+        var p = new Post
+        {
+            Id = Guid.NewGuid(),
+            WorkspaceId = workspaceId,
+            Content = "hello ig",
+            Platform = Platform.Instagram,
+            TargetInstagramAccountId = targetIgId,
+            ScheduledAt = DateTime.UtcNow.AddHours(1),
+            Status = status,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            PublishedAt = status == PostStatus.Published ? DateTime.UtcNow : null,
+        };
+        _db.Posts.Add(p);
+        _db.SaveChanges();
+        return p;
+    }
+
     /// <summary>
     /// Simulates "reconnect the same provider account": find the disconnected
     /// MetaConnection row matching (workspaceId, Provider, ProviderAccountId)
@@ -220,12 +242,36 @@ public class ProviderConnectionLifecycleTests : IDisposable
         existing.UpdatedAt = now;
         existing.ConnectedAt = now;
         // Spec: reactivating must NOT restore individual asset rows automatically.
-        // Pages/IGs that were disconnected stay disconnected — but historical posts
-        // pointing at them become visible again because the parent connection is
-        // back. (In a real reconnect, OAuth's ReconcileSelectedAssetsAsync would
-        // re-attach selected pages by external PageId.)
+        // Pages/IGs that were disconnected stay disconnected, and their posts stay
+        // HIDDEN until the user re-selects each asset (in a real reconnect, OAuth's
+        // ReconcileSelectedAssetsAsync re-attaches selected pages by external PageId
+        // — modeled here by ReselectPage/ReselectIg).
         await _db.SaveChangesAsync();
         return existing;
+    }
+
+    /// <summary>
+    /// Simulates the user re-selecting a Page during connect/update — the reattach
+    /// branch of ReconcileSelectedAssetsAsync: the SAME asset row flips back to
+    /// connected, so posts pointing at it (by FK) become visible again.
+    /// </summary>
+    private async Task ReselectPageAsync(Guid pageId)
+    {
+        var page = await _db.ConnectedPages.FirstAsync(p => p.Id == pageId);
+        page.IsConnected = true;
+        page.DisconnectedAt = null;
+        page.Status = ConnectionStatus.Active;
+        await _db.SaveChangesAsync();
+    }
+
+    /// <summary>Same as <see cref="ReselectPageAsync"/> for an Instagram asset.</summary>
+    private async Task ReselectIgAsync(Guid igId)
+    {
+        var ig = await _db.ConnectedInstagramAccounts.FirstAsync(i => i.Id == igId);
+        ig.IsConnected = true;
+        ig.DisconnectedAt = null;
+        ig.Status = ConnectionStatus.Active;
+        await _db.SaveChangesAsync();
     }
 
     // ── A. Uniqueness ────────────────────────────────────────────────────────
@@ -507,10 +553,11 @@ public class ProviderConnectionLifecycleTests : IDisposable
         Assert.Equal(2, await _db.Posts.CountAsync(p => p.WorkspaceId == WorkspaceAId));
     }
 
-    // ── E. Reconnect SAME account resurfaces history ────────────────────────
+    // ── E. Reconnect SAME account: history stays hidden until the asset is
+    //       re-selected; re-selecting the asset resurfaces it ─────────────────
 
     [Fact]
-    public async Task Reconnect_same_account_resurfaces_published_and_canceled_history()
+    public async Task Reconnect_same_account_keeps_history_hidden_until_page_is_reselected()
     {
         var (_, page, _) = SeedMeta(WorkspaceAId, UserAId, MetaAccountAlpha);
         var scheduled = SeedPost(WorkspaceAId, page.Id, PostStatus.Scheduled);
@@ -519,17 +566,49 @@ public class ProviderConnectionLifecycleTests : IDisposable
         await _providerService.DisconnectAsync(WorkspaceAId, ProviderType.Meta);
         await ReconnectSameAccountAsync(WorkspaceAId, MetaAccountAlpha);
 
-        var result = await NewPostsController().GetPosts();
-        var paged = Assert.IsType<PaginatedResponse<PostDto>>(result.Value);
-        var ids = paged.Items.Select(i => i.Id).ToHashSet();
+        // Provider identity is back, but the Page asset is still disconnected —
+        // strict rule: its posts stay hidden.
+        var whileHidden = Assert.IsType<PaginatedResponse<PostDto>>(
+            (await NewPostsController().GetPosts()).Value);
+        Assert.Empty(whileHidden.Items);
 
-        Assert.Contains(scheduled.Id, ids);  // canceled history, now visible
-        Assert.Contains(published.Id, ids);  // published history, now visible
+        // Rows are preserved in the DB, just not listed.
+        Assert.Equal(2, await _db.Posts.CountAsync(p => p.WorkspaceId == WorkspaceAId));
+
+        // Re-select the Page → its history (Published + Canceled) resurfaces.
+        await ReselectPageAsync(page.Id);
+
+        var afterReselect = Assert.IsType<PaginatedResponse<PostDto>>(
+            (await NewPostsController().GetPosts()).Value);
+        var ids = afterReselect.Items.Select(i => i.Id).ToHashSet();
+        Assert.Contains(scheduled.Id, ids);  // canceled history, visible again
+        Assert.Contains(published.Id, ids);  // published history, visible again
 
         // Canceled status NOT restored to Scheduled — that would defeat the
         // "canceled posts are permanent history" rule.
         await _db.Entry(scheduled).ReloadAsync();
         Assert.Equal(PostStatus.Canceled, scheduled.Status);
+    }
+
+    [Fact]
+    public async Task Reconnect_same_account_keeps_ig_history_hidden_until_ig_is_reselected()
+    {
+        var (_, _, ig) = SeedMeta(WorkspaceAId, UserAId, MetaAccountAlpha);
+        var published = SeedIgPost(WorkspaceAId, ig.Id, PostStatus.Published);
+
+        await _providerService.DisconnectAsync(WorkspaceAId, ProviderType.Meta);
+        await ReconnectSameAccountAsync(WorkspaceAId, MetaAccountAlpha);
+
+        var whileHidden = Assert.IsType<PaginatedResponse<PostDto>>(
+            (await NewPostsController().GetPosts()).Value);
+        Assert.Empty(whileHidden.Items);
+
+        await ReselectIgAsync(ig.Id);
+
+        var afterReselect = Assert.IsType<PaginatedResponse<PostDto>>(
+            (await NewPostsController().GetPosts()).Value);
+        var item = Assert.Single(afterReselect.Items);
+        Assert.Equal(published.Id, item.Id);
     }
 
     // ── F. Connect DIFFERENT account keeps old history hidden ───────────────

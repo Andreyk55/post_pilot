@@ -99,29 +99,19 @@ public class PostsController : ControllerBase
             query = query.Where(p => p.PostType == postType.Value);
         }
 
-        // Provider- and asset-aware visibility filter.
+        // Provider- and asset-aware visibility filter (strict product rule).
         //
         // A post is visible iff BOTH hold:
         //   1. Its target's MetaConnection is the workspace's currently active
-        //      Meta connection, identified by stable (Provider + ProviderAccountId).
-        //      The ProviderAccountId match is what lets historical posts resurface
-        //      when the SAME Meta account is reconnected later (the spec requires
-        //      Published/Canceled history to come back).
-        //   2. The target asset itself (Page / IG account) is currently connected,
-        //      OR its disconnect predates the current connection session
-        //      (DisconnectedAt < MetaConnection.ConnectedAt). That distinguishes:
-        //        - a Page deselected WHILE the Meta identity stayed connected
-        //          (DisconnectedAt after ConnectedAt) → its posts are hidden until
-        //          the SAME asset row is re-selected and flips back to connected;
-        //        - a Page stamped disconnected as part of a provider-level
-        //          disconnect, later followed by a same-account reconnect (which
-        //          re-stamps ConnectedAt) → identity-level history resurfaces even
-        //          before the user re-selects pages, per the provider lifecycle
-        //          spec (see ProviderConnectionLifecycleTests).
-        //
-        // We fall back to a connection-id match for legacy/transitional rows
-        // whose ProviderAccountId hasn't been backfilled yet — those rows are
-        // equivalent to the active row by definition (they ARE the active row).
+        //      Meta connection, identified by stable (Provider + ProviderAccountId),
+        //      with a connection-id fallback for legacy/transitional rows whose
+        //      ProviderAccountId hasn't been backfilled yet — those rows are
+        //      equivalent to the active row by definition (they ARE the active row).
+        //   2. The target asset itself (Page / IG account) is currently connected.
+        //      A provider-level reconnect alone does NOT resurface an asset's post
+        //      history: the Page/IG must be re-selected, which flips the SAME asset
+        //      row back to IsConnected (ReconcileSelectedAssetsAsync), keeping post
+        //      FKs intact so history reappears only for re-connected assets.
         var activeMeta = await _context.MetaConnections
             .Where(c => c.WorkspaceId == workspaceId
                      && c.Provider == ProviderType.Meta
@@ -145,8 +135,7 @@ public class PostsController : ControllerBase
                     && p.TargetPage.MetaConnection != null
                     && p.TargetPage.MetaConnection.Provider == ProviderType.Meta
                     && p.TargetPage.MetaConnection.IsConnected
-                    && (p.TargetPage.IsConnected
-                        || p.TargetPage.DisconnectedAt < p.TargetPage.MetaConnection.ConnectedAt)
+                    && p.TargetPage.IsConnected
                     && (
                         // Stable identity match (new rows post-migration).
                         (activeMetaProviderAccountId != null
@@ -159,8 +148,7 @@ public class PostsController : ControllerBase
                     && p.TargetInstagramAccount.MetaConnection != null
                     && p.TargetInstagramAccount.MetaConnection.Provider == ProviderType.Meta
                     && p.TargetInstagramAccount.MetaConnection.IsConnected
-                    && (p.TargetInstagramAccount.IsConnected
-                        || p.TargetInstagramAccount.DisconnectedAt < p.TargetInstagramAccount.MetaConnection.ConnectedAt)
+                    && p.TargetInstagramAccount.IsConnected
                     && (
                         (activeMetaProviderAccountId != null
                             && p.TargetInstagramAccount.MetaConnection.ProviderAccountId == activeMetaProviderAccountId)

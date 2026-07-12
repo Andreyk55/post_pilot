@@ -258,12 +258,10 @@ public class AssetDisconnectVisibilityTests : IDisposable
     {
         // The bug: the visibility filter only checked MetaConnection.IsConnected, so a
         // page-level disconnect (parent connection still active) leaked the page's posts.
-        // DisconnectedAt AFTER the connection's ConnectedAt marks a per-asset deselect
-        // (as opposed to a provider-level disconnect stamp, which a later same-account
-        // reconnect would supersede by re-stamping ConnectedAt).
+        // Strict rule: the target asset row itself must be IsConnected to be listed.
         SeedTwoConnectedPages(out var pageA, out var pageB);
         pageA.IsConnected = false;
-        pageA.DisconnectedAt = DateTime.UtcNow.AddMinutes(1);
+        pageA.DisconnectedAt = DateTime.UtcNow;
         _db.SaveChanges();
 
         var hidden = AddPost(PostStatus.Published, pageA.Id);
@@ -294,7 +292,7 @@ public class AssetDisconnectVisibilityTests : IDisposable
             PageName = PageAName,
             CreatedAt = DateTime.UtcNow,
             IsConnected = false,
-            DisconnectedAt = DateTime.UtcNow.AddMinutes(1), // deselected AFTER the connection session started
+            DisconnectedAt = DateTime.UtcNow,
         };
         _db.ConnectedInstagramAccounts.Add(ig);
         _db.SaveChanges();
