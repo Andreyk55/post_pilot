@@ -36,6 +36,18 @@ function getEffectiveMediaType(post: Post): 'None' | 'Image' | 'Video' {
   return 'None'
 }
 
+/**
+ * Count of extra images behind the cover thumbnail, for the "+N more" overlay.
+ * Only image-only collections qualify; mixed/video posts return 0 (the media
+ * badge already describes those).
+ */
+function getMoreImagesCount(post: Post): number {
+  const items = post.mediaItems ?? []
+  if (items.length < 2) return 0
+  if (!items.every(item => item.mediaType === 'Image')) return 0
+  return items.length - 1
+}
+
 interface ScheduledPostsProps {
   posts: Post[]
   onCancel: (id: string) => Promise<void>
@@ -252,6 +264,7 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
           {posts.map(post => {
             const { date, time } = formatDateTime(post.scheduledAt)
             const mediaType = getEffectiveMediaType(post)
+            const moreImages = getMoreImagesCount(post)
             return (
               <div key={post.id} className="post-card">
                 {/* Caption — hidden for Story posts */}
@@ -282,6 +295,12 @@ export function ScheduledPosts({ posts, onCancel, onDelete, onLoadMore, hasMore,
                       className="media-thumbnail"
                       variant="scheduledCard"
                     />
+                    {/* Visual-only hint; the Photos (n) badge carries the accessible count. */}
+                    {moreImages > 0 && (
+                      <span className="more-media-overlay" aria-hidden="true">
+                        {`+${moreImages} more`}
+                      </span>
+                    )}
                   </div>
                 )}
 
