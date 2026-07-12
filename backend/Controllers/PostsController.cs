@@ -99,21 +99,29 @@ public class PostsController : ControllerBase
             query = query.Where(p => p.PostType == postType.Value);
         }
 
-        // Provider-aware visibility filter.
+        // Provider- and asset-aware visibility filter.
         //
-        // A post is visible iff its target's MetaConnection is the workspace's
-        // currently active Meta connection, identified by stable
-        // (Provider + ProviderAccountId). The ProviderAccountId match is what
-        // lets historical posts resurface when the SAME Meta account is
-        // reconnected later (the spec requires Published/Canceled history to
-        // come back).
+        // A post is visible iff BOTH hold:
+        //   1. Its target's MetaConnection is the workspace's currently active
+        //      Meta connection, identified by stable (Provider + ProviderAccountId).
+        //      The ProviderAccountId match is what lets historical posts resurface
+        //      when the SAME Meta account is reconnected later (the spec requires
+        //      Published/Canceled history to come back).
+        //   2. The target asset itself (Page / IG account) is currently connected,
+        //      OR its disconnect predates the current connection session
+        //      (DisconnectedAt < MetaConnection.ConnectedAt). That distinguishes:
+        //        - a Page deselected WHILE the Meta identity stayed connected
+        //          (DisconnectedAt after ConnectedAt) → its posts are hidden until
+        //          the SAME asset row is re-selected and flips back to connected;
+        //        - a Page stamped disconnected as part of a provider-level
+        //          disconnect, later followed by a same-account reconnect (which
+        //          re-stamps ConnectedAt) → identity-level history resurfaces even
+        //          before the user re-selects pages, per the provider lifecycle
+        //          spec (see ProviderConnectionLifecycleTests).
         //
         // We fall back to a connection-id match for legacy/transitional rows
         // whose ProviderAccountId hasn't been backfilled yet — those rows are
         // equivalent to the active row by definition (they ARE the active row).
-        //
-        // The publishing worker uses a STRICTER filter (per-page IsConnected) —
-        // see PostPublishingWorker. Do NOT copy this filter there.
         var activeMeta = await _context.MetaConnections
             .Where(c => c.WorkspaceId == workspaceId
                      && c.Provider == ProviderType.Meta
@@ -137,6 +145,8 @@ public class PostsController : ControllerBase
                     && p.TargetPage.MetaConnection != null
                     && p.TargetPage.MetaConnection.Provider == ProviderType.Meta
                     && p.TargetPage.MetaConnection.IsConnected
+                    && (p.TargetPage.IsConnected
+                        || p.TargetPage.DisconnectedAt < p.TargetPage.MetaConnection.ConnectedAt)
                     && (
                         // Stable identity match (new rows post-migration).
                         (activeMetaProviderAccountId != null
@@ -149,6 +159,8 @@ public class PostsController : ControllerBase
                     && p.TargetInstagramAccount.MetaConnection != null
                     && p.TargetInstagramAccount.MetaConnection.Provider == ProviderType.Meta
                     && p.TargetInstagramAccount.MetaConnection.IsConnected
+                    && (p.TargetInstagramAccount.IsConnected
+                        || p.TargetInstagramAccount.DisconnectedAt < p.TargetInstagramAccount.MetaConnection.ConnectedAt)
                     && (
                         (activeMetaProviderAccountId != null
                             && p.TargetInstagramAccount.MetaConnection.ProviderAccountId == activeMetaProviderAccountId)
