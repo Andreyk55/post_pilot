@@ -28,7 +28,8 @@ public class MediaValidationTests
 
         Assert.NotNull(rules);
         Assert.Contains("video/mp4", rules.AllowedMimeTypes);
-        Assert.Equal(200L * 1024 * 1024, rules.MaxBytes); // 200MB — product/MVP upload cap
+        Assert.Equal(50L * 1024 * 1024, rules.MaxBytes); // 50MB product cap (Supabase Free global limit) = exactly 52,428,800 bytes
+        Assert.Equal(52_428_800L, rules.MaxBytes);
         Assert.Equal(3, rules.DurationMinSeconds);
         Assert.Equal(180, rules.DurationMaxSeconds); // product/MVP cap: small social videos only
     }
@@ -99,6 +100,16 @@ public class MediaValidationTests
     {
         Assert.Equal(10L * 1024 * 1024, MediaValidationRules.GetRules(Platform.Facebook, Placement.Story, MediaType.Image)!.MaxBytes);
         Assert.Equal(8L * 1024 * 1024, MediaValidationRules.GetRules(Platform.Instagram, Placement.Story, MediaType.Image)!.MaxBytes);
+    }
+
+    // The Facebook Feed 50MB video cap must NOT leak into any other video rule:
+    // FB Story stays 200MB, Instagram Feed (published as Reel) and Story stay 100MB.
+    [Fact]
+    public void VideoSizeCaps_OtherPlacementsUnchanged_ByFacebookFeedCap()
+    {
+        Assert.Equal(200L * 1024 * 1024, MediaValidationRules.GetRules(Platform.Facebook, Placement.Story, MediaType.Video)!.MaxBytes);
+        Assert.Equal(100L * 1024 * 1024, MediaValidationRules.GetRules(Platform.Instagram, Placement.Feed, MediaType.Video)!.MaxBytes);
+        Assert.Equal(100L * 1024 * 1024, MediaValidationRules.GetRules(Platform.Instagram, Placement.Story, MediaType.Video)!.MaxBytes);
     }
 
     [Fact]

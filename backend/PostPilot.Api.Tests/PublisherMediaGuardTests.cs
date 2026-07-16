@@ -320,7 +320,10 @@ public class PublisherMediaGuardTests : IDisposable
         };
         _db.Add(conn); _db.Add(page); _db.SaveChanges();
 
-        var key = SeedVideoMedia("fb-vid-big", "video/mp4", 201L * 1024 * 1024); // > 200MB cap
+        // One byte over the FB Feed 50MB (52,428,800 bytes) cap. The stored row size is
+        // what the gate validates, so this also covers media uploaded before the rule
+        // existed or written via direct DB/API manipulation.
+        var key = SeedVideoMedia("fb-vid-big", "video/mp4", 52_428_801L);
         var post = new Post
         {
             Id = Guid.NewGuid(), WorkspaceId = Ws, Content = "msg", Platform = Platform.Facebook,
@@ -335,7 +338,37 @@ public class PublisherMediaGuardTests : IDisposable
 
         var guardError = await publisher.GuardMediaAsync(post, Placement.Feed, CancellationToken.None);
 
-        Assert.NotNull(guardError); // 201MB > 200MB → blocked before Meta
+        Assert.NotNull(guardError); // over 50MB → blocked before Meta
+        Assert.Contains("50MB", guardError!);
+    }
+
+    [Fact]
+    public async Task FacebookPublisher_AllowsVideoAtExactly50MB_PastGuard()
+    {
+        var conn = new MetaConnection { Id = Guid.NewGuid(), WorkspaceId = Ws, Provider = ProviderType.Meta, IsConnected = true };
+        var page = new ConnectedPage
+        {
+            Id = Guid.NewGuid(), WorkspaceId = Ws, MetaConnectionId = conn.Id,
+            PageId = "PAGE_FB", Name = "FB Page", AccessToken = "PAGE_TOKEN", IsConnected = true,
+        };
+        _db.Add(conn); _db.Add(page); _db.SaveChanges();
+
+        var key = SeedVideoMedia("fb-vid-at-cap", "video/mp4", 52_428_800L); // inclusive boundary
+        var post = new Post
+        {
+            Id = Guid.NewGuid(), WorkspaceId = Ws, Content = "msg", Platform = Platform.Facebook,
+            MediaType = MediaType.Video, MediaUrl = key, TargetPageId = page.Id,
+            Status = PostStatus.Scheduled, ScheduledAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+        };
+        _db.Posts.Add(post); _db.SaveChanges();
+
+        var mediaService = BuildMediaService();
+        var publisher = BuildFbPublisher(mediaService, BuildGate(mediaService, FakeVideo(1280, 720, 30)));
+
+        var guardError = await publisher.GuardMediaAsync(post, Placement.Feed, CancellationToken.None);
+
+        Assert.Null(guardError); // exactly 50MB is publishable
     }
 
     // ── Facebook: PNG allowed by FB rules ───────────────────────────────────────

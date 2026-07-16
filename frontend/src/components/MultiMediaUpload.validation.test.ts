@@ -93,6 +93,15 @@ describe('MultiMediaUpload — shared validation UI', () => {
     expect(multiMediaUploadSource).not.toMatch(/onItemsChange\(\[\.\.\.items, \.\.\.newItems\]\)/)
   })
 
+  it('never starts the upload for a file rejected by the client type/size pre-check', () => {
+    // The size check (e.g. FB Feed video over 50MB via resolveClientMediaError) must
+    // `continue` past the file BEFORE mediaApi.initUpload is reached, so no upload
+    // request is issued for a rejected selection.
+    expect(multiMediaUploadSource).toMatch(
+      /if \(typeOrSizeError\) \{\s*setUploadError\(`\$\{file\.name\}: \$\{typeOrSizeError\}`\)\s*setProgress\(0\)\s*continue\s*\}[\s\S]*mediaApi\.initUpload\(/,
+    )
+  })
+
   it('surfaces Facebook selection rejections (11th image, 2nd video, mixed media) through the existing error UI', () => {
     // Rejections from validateFacebookSelection (count/video/mix rules, covered in
     // facebookMediaValidation.test.ts) must feed the same uploadError banner every

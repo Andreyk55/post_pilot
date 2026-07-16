@@ -58,6 +58,22 @@ describe('resolveMediaValidationView', () => {
     expect(resolveMediaValidationView('Invalid', [], [])?.messages).toEqual(['Validation failed'])
   })
 
+  it('renders a server-side FILE_TOO_LARGE error (e.g. FB Feed video over 50MB) as blocking', () => {
+    const view = resolveMediaValidationView(
+      'Invalid',
+      [{
+        code: 'FILE_TOO_LARGE',
+        field: 'sizeBytes',
+        message: 'This video is too large. Facebook videos can be up to 50MB.',
+        expected: null,
+        actual: null,
+      }],
+      [],
+    )
+    expect(view?.blocking).toBe(true)
+    expect(view?.messages).toEqual(['This video is too large. Facebook videos can be up to 50MB.'])
+  })
+
   // Video duration cannot be probed client-side at selection time; the backend measures
   // it (ffprobe) and its DURATION_* errors must surface as blocking through this view.
   it('renders server-side duration errors (too short / too long) as blocking', () => {

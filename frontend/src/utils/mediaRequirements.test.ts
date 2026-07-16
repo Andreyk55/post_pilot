@@ -9,9 +9,9 @@ import {
 const f = (type: string, size = 1000, name?: string) => ({ type, size, name })
 
 describe('getMediaRequirementHint', () => {
-  it('shows the concise supported-formats line with the Feed image size and video duration', () => {
+  it('names the 50MB video cap for Facebook Feed only; Instagram Feed keeps duration-only wording', () => {
     expect(getMediaRequirementHint('facebook', 'Feed')).toBe(
-      'Supported: JPG/PNG images (≤10 MB) • MP4/MOV videos (3–180 s)',
+      'Supported: JPG/PNG images (≤10 MB) • MP4/MOV videos (≤50 MB, 3–180 s)',
     )
     expect(getMediaRequirementHint('instagram', 'Feed')).toBe(
       'Supported: JPG/PNG images (≤8 MB) • MP4/MOV videos (3–180 s)',
@@ -67,6 +67,15 @@ describe('resolveClientMediaError — friendly, specific copy', () => {
     expect(resolveClientMediaError(f('video/mp4', 101 * 1024 * 1024), 'instagram', 'Story')).toBe(
       'This video is too large. Instagram videos can be up to 100MB.',
     )
+  })
+
+  it('reports the Facebook Feed 50MB video limit with an inclusive boundary', () => {
+    expect(resolveClientMediaError(f('video/mp4', 52_428_801), 'facebook', 'Feed')).toBe(
+      'This video is too large. Facebook videos can be up to 50MB.',
+    )
+    // Exactly 50 * 1024 * 1024 bytes passes; one byte over is rejected above.
+    expect(resolveClientMediaError(f('video/mp4', 52_428_800), 'facebook', 'Feed')).toBeNull()
+    expect(resolveClientMediaError(f('video/mp4', 20 * 1024 * 1024), 'facebook', 'Feed')).toBeNull()
   })
 
   it('names the allowed video type ("MP4") where only MP4 is allowed', () => {

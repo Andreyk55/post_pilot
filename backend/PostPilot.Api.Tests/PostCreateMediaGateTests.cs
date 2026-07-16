@@ -592,6 +592,44 @@ public class PostCreateMediaGateTests : IDisposable
         Assert.Empty(await _db.Posts.ToListAsync());
     }
 
+    // ── Facebook Feed video size: 50MB product cap (Supabase Free global limit),
+    //    inclusive boundary. The Media row's SizeBytes is authoritative (stamped from
+    //    storage at upload-complete, never from the client), so seeding the row is
+    //    equivalent to a real 50MB object.
+
+    [Theory]
+    [InlineData(20L * 1024 * 1024)]  // comfortably below the cap
+    [InlineData(52_428_800L)]        // exactly 50 * 1024 * 1024 — inclusive boundary
+    public async Task CreatePost_FacebookVideoWithinSizeCap_IsAccepted(long sizeBytes)
+    {
+        var pageId = SeedFacebookPage();
+        var media = SeedVideoMedia("fb-vid-size-ok", "video/mp4", sizeBytes);
+        UseVideoMetadata(1280, 720, durationSeconds: 30);
+
+        var result = await _controller.CreatePost(FacebookFeedRequest(pageId, media.Id, MediaType.Video));
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task CreatePost_FacebookVideoOneByteOver50MB_IsRejected()
+    {
+        var pageId = SeedFacebookPage();
+        var media = SeedVideoMedia("fb-vid-size-over", "video/mp4", 52_428_801L); // 50MB + 1 byte
+        UseVideoMetadata(1280, 720, durationSeconds: 30);
+
+        var result = await _controller.CreatePost(FacebookFeedRequest(pageId, media.Id, MediaType.Video));
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var pd = Assert.IsType<ProblemDetails>(bad.Value);
+        Assert.Equal("MEDIA_VALIDATION_FAILED", pd.Extensions["code"]);
+        var errors = ExtractMediaErrors(pd);
+        Assert.Contains(errors!, e => (string?)e["code"] == DTOs.MediaValidationErrorCodes.FileTooLarge);
+        // The message names the platform and the 50MB cap.
+        Assert.Contains(errors!, e => ((string?)e["message"])!.Contains("Facebook") && ((string?)e["message"])!.Contains("50MB"));
+        Assert.Empty(await _db.Posts.ToListAsync());
+    }
+
     [Theory]
     [InlineData(3)]   // inclusive minimum
     [InlineData(180)] // inclusive maximum

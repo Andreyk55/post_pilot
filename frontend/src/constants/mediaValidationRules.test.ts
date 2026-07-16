@@ -19,8 +19,9 @@ describe('client rule table mirrors the backend MVP limits', () => {
     expect(getClientValidationRule('instagram', 'Story', 'Image')?.maxBytes).toBe(8 * 1024 * 1024)
   })
 
-  it('video size caps are unchanged: Facebook 200MB, Instagram 100MB', () => {
-    expect(getClientValidationRule('facebook', 'Feed', 'Video')?.maxBytes).toBe(200 * 1024 * 1024)
+  it('video size caps: Facebook Feed 50MB (52,428,800 bytes, Supabase Free limit); Story/Instagram unchanged', () => {
+    expect(getClientValidationRule('facebook', 'Feed', 'Video')?.maxBytes).toBe(50 * 1024 * 1024)
+    expect(getClientValidationRule('facebook', 'Feed', 'Video')?.maxBytes).toBe(52_428_800)
     expect(getClientValidationRule('facebook', 'Story', 'Video')?.maxBytes).toBe(200 * 1024 * 1024)
     expect(getClientValidationRule('instagram', 'Feed', 'Video')?.maxBytes).toBe(100 * 1024 * 1024)
     expect(getClientValidationRule('instagram', 'Story', 'Video')?.maxBytes).toBe(100 * 1024 * 1024)
@@ -84,6 +85,18 @@ describe('pre-validation behavior at the new limits', () => {
     expect(
       preValidateFile(file('a.jpg', 'image/jpeg', 10 * 1024 * 1024 + 1), 'facebook', 'Feed'),
     ).toHaveLength(1)
+  })
+
+  it('treats the Facebook Feed 50MB video cap as inclusive (File.size vs 52,428,800)', () => {
+    expect(preValidateFile(file('a.mp4', 'video/mp4', 20 * 1024 * 1024), 'facebook', 'Feed')).toEqual([])
+    expect(preValidateFile(file('a.mp4', 'video/mp4', 52_428_800), 'facebook', 'Feed')).toEqual([])
+    expect(preValidateFile(file('a.mp4', 'video/mp4', 52_428_801), 'facebook', 'Feed')).toHaveLength(1)
+  })
+
+  it('keeps Story and Instagram video selection caps unchanged by the FB Feed raise', () => {
+    // FB Story still rejects above 200MB; Instagram Feed still rejects above 100MB.
+    expect(preValidateFile(file('a.mp4', 'video/mp4', 250 * 1024 * 1024), 'facebook', 'Story')).toHaveLength(1)
+    expect(preValidateFile(file('a.mp4', 'video/mp4', 101 * 1024 * 1024), 'instagram', 'Feed')).toHaveLength(1)
   })
 
   it('rejects an Instagram image over 8MB', () => {

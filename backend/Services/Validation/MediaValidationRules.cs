@@ -63,7 +63,7 @@ public static class MediaValidationRules
             AllowedContainers = ["mp4", "mov"],
             AllowedVideoCodecs = ["h264", "hevc"],
             AllowedAudioCodecs = ["aac"],
-            MaxBytes = 200L * 1024 * 1024, // 200MB — product/MVP upload cap (well below Meta's API limit)
+            MaxBytes = 50L * 1024 * 1024, // 50MB — product cap for Facebook Feed video, matching the Supabase Free global upload limit
             MinWidth = 120,
             MinHeight = 120,
             MaxWidth = 4096,

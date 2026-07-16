@@ -55,7 +55,15 @@ export function getMediaRequirementHint(
   const videoMinSeconds = videoRule?.durationMinSeconds ?? DEFAULT_VIDEO_MIN_SECONDS
   const videoMaxSeconds = videoRule?.durationMaxSeconds ?? DEFAULT_VIDEO_MAX_SECONDS
 
-  return `Supported: JPG/PNG images (≤${imageMaxMB} MB) • MP4/MOV videos (${videoMinSeconds}–${videoMaxSeconds} s)`
+  // Facebook Feed is the only placement whose hint names the video size cap (50 MB,
+  // mirrored from the rule table). Other placements — including the no-platform
+  // fallback — keep their existing duration-only video wording.
+  const isFacebookFeed = String(platform ?? '').toLowerCase() === 'facebook' && !isStory(placement)
+  const videoSizePrefix = isFacebookFeed && videoRule
+    ? `≤${Math.round(videoRule.maxBytes / (1024 * 1024))} MB, `
+    : ''
+
+  return `Supported: JPG/PNG images (≤${imageMaxMB} MB) • MP4/MOV videos (${videoSizePrefix}${videoMinSeconds}–${videoMaxSeconds} s)`
 }
 
 const MIME_LABELS: Record<string, string> = {

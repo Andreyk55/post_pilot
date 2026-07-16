@@ -74,7 +74,12 @@ public static class ValidationLimits
             : PostTextMaxLength;
     }
 
-    // Media limits (in bytes)
+    // Media limits (in bytes). These are the GENERIC upload safety caps (advertised via
+    // /validation-limits and enforced at upload init); per-platform/placement product rules
+    // live in MediaValidationRules. The video cap equals the largest per-placement video
+    // limit (Facebook Story, 200MB) so no valid product upload is blocked at the door.
+    // Provider ceilings (e.g. Supabase Free's global 50MB) are configured separately via
+    // MediaStorage:Supabase:MaxUploadBytes and may be lower than this cap.
     public const long MediaImageMaxBytes = 20L * 1024 * 1024; // 20MB
     public const long MediaVideoMaxBytes = 200L * 1024 * 1024; // 200MB
 

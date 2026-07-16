@@ -94,7 +94,7 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
   // Facebook Feed Video
   'facebook:feed:video': {
     allowedMimeTypes: ['video/mp4', 'video/quicktime'],
-    maxBytes: 200 * 1024 * 1024, // 200MB — product/MVP upload cap
+    maxBytes: 50 * 1024 * 1024, // 50MB — product cap for Facebook Feed video (Supabase Free global upload limit)
     minWidth: 120,
     minHeight: 120,
     maxWidth: 4096,

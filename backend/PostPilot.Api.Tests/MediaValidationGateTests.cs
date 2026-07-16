@@ -540,14 +540,15 @@ public class MediaValidationGateTests : IDisposable
     }
 
     [Fact]
-    public async Task Video_FacebookFeed_Over200MB_IsBlocked_NotOneGB()
+    public async Task Video_FacebookFeed_Over50MB_IsBlocked_NotOneGB()
     {
-        // FB feed video cap is the real 200MB upload ceiling, NOT Meta's 1GB API limit.
-        var path = SeedRawMedia("v-fb-201", "video/mp4", 201L * 1024 * 1024);
-        var gate = CreateGate(new() { ["v-fb-201"] = path }, FakeVideo(1280, 720, 30));
+        // FB feed video cap is the product 50MB ceiling (52,428,800 bytes, the Supabase
+        // Free global upload limit), NOT Meta's 1GB API limit. One byte over is blocked.
+        var path = SeedRawMedia("v-fb-over-cap", "video/mp4", 52_428_801L);
+        var gate = CreateGate(new() { ["v-fb-over-cap"] = path }, FakeVideo(1280, 720, 30));
 
         var result = await gate.ValidateAsync(Ws,
-            new[] { new MediaGateItem("v-fb-201", MediaType.Video, 0) }, new[] { Fb });
+            new[] { new MediaGateItem("v-fb-over-cap", MediaType.Video, 0) }, new[] { Fb });
 
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.FileTooLarge);
@@ -585,8 +586,9 @@ public class MediaValidationGateTests : IDisposable
     [Fact]
     public async Task Video_FacebookFeed_HourLong_PreviouslyAllowed_NowBlocked()
     {
-        // The old rule allowed up to 240 minutes; the MVP cap is 180 seconds.
-        var path = SeedRawMedia("v-fb-hour", "video/mp4", 100L * 1024 * 1024);
+        // The old rule allowed up to 240 minutes; the MVP cap is 180 seconds. Size stays
+        // within the 50MB cap so the only expected error is the duration.
+        var path = SeedRawMedia("v-fb-hour", "video/mp4", 20L * 1024 * 1024);
         var gate = CreateGate(new() { ["v-fb-hour"] = path }, FakeVideo(1280, 720, 60 * 60));
 
         var result = await gate.ValidateAsync(Ws,
@@ -706,6 +708,34 @@ public class MediaValidationGateTests : IDisposable
 
         Assert.Equal(ValidationStatus.Invalid, result.Status);
         Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.DurationTooLong);
+    }
+
+    [Fact]
+    public async Task ValidateForDisplay_FacebookFeedVideoOver50MB_IsInvalid_FileTooLarge()
+    {
+        // Advisory path for the composer card: a stored FB Feed video one byte over the
+        // 50MB (52,428,800 bytes) product cap must come back as blocking Invalid.
+        var path = SeedRawMedia("d-vid-over-50", "video/mp4", 52_428_801L);
+        var gate = CreateGate(new() { ["d-vid-over-50"] = path }, FakeVideo(1280, 720, 30));
+
+        var result = await gate.ValidateForDisplayAsync(Ws,
+            new MediaGateItem("d-vid-over-50", MediaType.Video, 0), Fb);
+
+        Assert.Equal(ValidationStatus.Invalid, result.Status);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.FileTooLarge
+                                          && e.Message.Contains("50MB"));
+    }
+
+    [Fact]
+    public async Task ValidateForDisplay_FacebookFeedVideoAtExactly50MB_IsNotInvalid()
+    {
+        var path = SeedRawMedia("d-vid-at-50", "video/mp4", 52_428_800L); // inclusive boundary
+        var gate = CreateGate(new() { ["d-vid-at-50"] = path }, FakeVideo(1280, 720, 30));
+
+        var result = await gate.ValidateForDisplayAsync(Ws,
+            new MediaGateItem("d-vid-at-50", MediaType.Video, 0), Fb);
+
+        Assert.NotEqual(ValidationStatus.Invalid, result.Status);
     }
 
     // ── Pass-through cases ──────────────────────────────────────────────────────
