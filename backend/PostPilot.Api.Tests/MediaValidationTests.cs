@@ -81,6 +81,26 @@ public class MediaValidationTests
         Assert.Equal(200L * 1024 * 1024, rules.MaxBytes);
     }
 
+    // Story placements keep the Meta 3-60s window and their own size caps — pinned so
+    // Feed-limit changes can never silently leak into the Story rules.
+    [Theory]
+    [InlineData(Platform.Facebook)]
+    [InlineData(Platform.Instagram)]
+    public void StoryVideo_DurationStays3To60Seconds(Platform platform)
+    {
+        var rules = MediaValidationRules.GetRules(platform, Placement.Story, MediaType.Video)!;
+
+        Assert.Equal(3, rules.DurationMinSeconds);
+        Assert.Equal(60, rules.DurationMaxSeconds);
+    }
+
+    [Fact]
+    public void StoryImage_SizeCapsUnchanged_Facebook10MB_Instagram8MB()
+    {
+        Assert.Equal(10L * 1024 * 1024, MediaValidationRules.GetRules(Platform.Facebook, Placement.Story, MediaType.Image)!.MaxBytes);
+        Assert.Equal(8L * 1024 * 1024, MediaValidationRules.GetRules(Platform.Instagram, Placement.Story, MediaType.Image)!.MaxBytes);
+    }
+
     [Fact]
     public void GetRules_UndefinedCombination_ReturnsNull()
     {

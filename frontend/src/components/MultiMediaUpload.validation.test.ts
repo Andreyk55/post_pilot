@@ -92,4 +92,13 @@ describe('MultiMediaUpload — shared validation UI', () => {
     // The completion merge must not read the stale closure snapshot.
     expect(multiMediaUploadSource).not.toMatch(/onItemsChange\(\[\.\.\.items, \.\.\.newItems\]\)/)
   })
+
+  it('surfaces Facebook selection rejections (11th image, 2nd video, mixed media) through the existing error UI', () => {
+    // Rejections from validateFacebookSelection (count/video/mix rules, covered in
+    // facebookMediaValidation.test.ts) must feed the same uploadError banner every
+    // other upload failure uses — no bespoke error surface, no silent drop.
+    expect(multiMediaUploadSource).toMatch(/const result = validateFacebookSelection\(existingAsInfo, newAsInfo\)/)
+    expect(multiMediaUploadSource).toMatch(/if \(!result\.ok\) \{\s*setUploadError\(result\.errorMessage\)\s*return\s*\}/)
+    expect(multiMediaUploadSource).toMatch(/\{uploadError && <div className="carousel-upload-error">\{uploadError\}<\/div>\}/)
+  })
 })

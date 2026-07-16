@@ -839,9 +839,10 @@ public class PostsController : ControllerBase
         // AUTHORITATIVE MEDIA VALIDATION GATE.
         // The SPA pre-validates media for UX, but that is advisory: a crafted or replayed
         // request could otherwise schedule media that Meta will reject (e.g. a PNG for
-        // Instagram, or an out-of-aspect image). We re-validate every attached image against
-        // every selected target here, server-side, and refuse to create the post on any
-        // blocking error. Warnings do not block. (Phase 2: images only; videos pass through.)
+        // Instagram, or an out-of-aspect image). We re-validate every attached media item
+        // (images AND videos — size, format, dimensions, duration via ffprobe) against every
+        // selected target here, server-side, and refuse to create the post on any blocking
+        // error. Warnings do not block.
         var mediaGateProblem = await ValidateMediaForTargetsAsync(workspaceId, request);
         if (mediaGateProblem != null)
             return BadRequest(mediaGateProblem);

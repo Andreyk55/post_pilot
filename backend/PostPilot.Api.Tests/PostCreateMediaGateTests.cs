@@ -111,7 +111,13 @@ public class PostCreateMediaGateTests : IDisposable
         _db.Dispose();
     }
 
-    private Media SeedMedia(string storageKey, string contentType, string format, int width, int height)
+    /// <summary>
+    /// Seeds an image Media row over a real generated file. <paramref name="sizeBytesOverride"/>
+    /// fakes the authoritative row size (the gate validates the row's SizeBytes, not the file
+    /// length) so byte-boundary tests don't need to write multi-megabyte files.
+    /// </summary>
+    private Media SeedMedia(string storageKey, string contentType, string format, int width, int height,
+        long? sizeBytesOverride = null)
     {
         using var image = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(width, height);
         var ext = format == "png" ? ".png" : ".jpg";
@@ -128,7 +134,7 @@ public class PostCreateMediaGateTests : IDisposable
         {
             Id = Guid.NewGuid(), WorkspaceId = Ws, StorageProvider = "local-disk", Bucket = "",
             StorageKey = storageKey, OriginalFileName = Path.GetFileName(path), ContentType = contentType,
-            SizeBytes = new FileInfo(path).Length, Status = MediaUploadStatus.Uploaded,
+            SizeBytes = sizeBytesOverride ?? new FileInfo(path).Length, Status = MediaUploadStatus.Uploaded,
             CreatedAt = DateTime.UtcNow, UploadedAt = DateTime.UtcNow,
         };
         _db.Media.Add(media);
@@ -503,5 +509,161 @@ public class PostCreateMediaGateTests : IDisposable
         var result = await _controller.CreatePost(req);
 
         Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
+    // ── Facebook Feed media limits (direct-API path — the SPA blocks these selections,
+    //    so every rejection below proves a crafted request cannot bypass the rules) ──────
+
+    /// <summary>Seeds n owned JPEG image rows and returns them as MediaItems (by MediaId).</summary>
+    private List<CreatePostMediaItem> SeedFacebookImageItems(int count)
+        => Enumerable.Range(0, count)
+            .Select(i => new CreatePostMediaItem(
+                null, MediaType.Image, i, SeedMedia($"fb-multi-{Guid.NewGuid():N}", "image/jpeg", "jpeg", 1080, 1080).Id))
+            .ToList();
+
+    private CreatePostRequest FacebookFeedRequest(Guid pageId, Guid? mediaId = null,
+        MediaType? mediaType = null, List<CreatePostMediaItem>? mediaItems = null)
+        => new(
+            Content: "hi", MediaUrl: null, MediaType: mediaType, Platform: Platform.Facebook,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetPageId: pageId,
+            MediaItems: mediaItems, MediaId: mediaId);
+
+    [Fact]
+    public async Task CreatePost_FacebookTextOnly_IsAccepted()
+    {
+        var pageId = SeedFacebookPage();
+
+        var result = await _controller.CreatePost(FacebookFeedRequest(pageId));
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task CreatePost_FacebookTenImages_IsAccepted()
+    {
+        var pageId = SeedFacebookPage();
+        var items = SeedFacebookImageItems(10);
+
+        var result = await _controller.CreatePost(FacebookFeedRequest(pageId, mediaItems: items));
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+        Assert.Equal(10, (await _db.Posts.Include(p => p.MediaItems).SingleAsync()).MediaItems.Count);
+    }
+
+    [Fact]
+    public async Task CreatePost_FacebookElevenImages_IsRejected()
+    {
+        var pageId = SeedFacebookPage();
+        var items = SeedFacebookImageItems(11);
+
+        var result = await _controller.CreatePost(FacebookFeedRequest(pageId, mediaItems: items));
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var pd = Assert.IsType<ProblemDetails>(bad.Value);
+        Assert.Equal("Facebook multi-photo posts require 2 to 10 images.", pd.Detail);
+        Assert.Empty(await _db.Posts.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CreatePost_FacebookImageExactlyTenMB_IsAccepted()
+    {
+        var pageId = SeedFacebookPage();
+        // Inclusive boundary: the gate rejects only sizeBytes > MaxBytes (10 * 1024 * 1024).
+        var media = SeedMedia("fb-10mb", "image/jpeg", "jpeg", 1200, 630, sizeBytesOverride: 10L * 1024 * 1024);
+
+        var result = await _controller.CreatePost(FacebookFeedRequest(pageId, media.Id, MediaType.Image));
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task CreatePost_FacebookImageOverTenMB_IsRejected()
+    {
+        var pageId = SeedFacebookPage();
+        var media = SeedMedia("fb-10mb-plus", "image/jpeg", "jpeg", 1200, 630, sizeBytesOverride: 10L * 1024 * 1024 + 1);
+
+        var result = await _controller.CreatePost(FacebookFeedRequest(pageId, media.Id, MediaType.Image));
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var pd = Assert.IsType<ProblemDetails>(bad.Value);
+        Assert.Equal("MEDIA_VALIDATION_FAILED", pd.Extensions["code"]);
+        var errors = ExtractMediaErrors(pd);
+        Assert.Contains(errors!, e => (string?)e["code"] == DTOs.MediaValidationErrorCodes.FileTooLarge);
+        Assert.Empty(await _db.Posts.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData(3)]   // inclusive minimum
+    [InlineData(180)] // inclusive maximum
+    public async Task CreatePost_FacebookVideoAtDurationBoundary_IsAccepted(double durationSeconds)
+    {
+        var pageId = SeedFacebookPage();
+        var media = SeedVideoMedia("fb-vid-ok", "video/mp4", 20L * 1024 * 1024);
+        UseVideoMetadata(1280, 720, durationSeconds);
+
+        var result = await _controller.CreatePost(FacebookFeedRequest(pageId, media.Id, MediaType.Video));
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
+    [Theory]
+    [InlineData(2.5, DTOs.MediaValidationErrorCodes.DurationTooShort)]
+    [InlineData(181, DTOs.MediaValidationErrorCodes.DurationTooLong)]
+    public async Task CreatePost_FacebookVideoOutsideDurationRange_IsRejected(double durationSeconds, string expectedCode)
+    {
+        var pageId = SeedFacebookPage();
+        var media = SeedVideoMedia("fb-vid-bad", "video/mp4", 20L * 1024 * 1024);
+        UseVideoMetadata(1280, 720, durationSeconds);
+
+        var result = await _controller.CreatePost(FacebookFeedRequest(pageId, media.Id, MediaType.Video));
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var pd = Assert.IsType<ProblemDetails>(bad.Value);
+        Assert.Equal("MEDIA_VALIDATION_FAILED", pd.Extensions["code"]);
+        var errors = ExtractMediaErrors(pd);
+        Assert.Contains(errors!, e => (string?)e["code"] == expectedCode);
+        Assert.Empty(await _db.Posts.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CreatePost_FacebookTwoVideos_IsRejected()
+    {
+        var pageId = SeedFacebookPage();
+        var v0 = SeedVideoMedia("fb-vid-0", "video/mp4", 20L * 1024 * 1024);
+        var v1 = SeedVideoMedia("fb-vid-1", "video/mp4", 20L * 1024 * 1024);
+        var items = new List<CreatePostMediaItem>
+        {
+            new(null, MediaType.Video, 0, v0.Id),
+            new(null, MediaType.Video, 1, v1.Id),
+        };
+
+        var result = await _controller.CreatePost(FacebookFeedRequest(pageId, mediaItems: items));
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var pd = Assert.IsType<ProblemDetails>(bad.Value);
+        Assert.Equal("UNSUPPORTED_MEDIA_COMBINATION", pd.Extensions["code"]);
+        Assert.Contains("1 video per post", pd.Detail);
+        Assert.Empty(await _db.Posts.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CreatePost_FacebookImagePlusVideo_IsRejected()
+    {
+        var pageId = SeedFacebookPage();
+        var img = SeedMedia("fb-mix-img", "image/jpeg", "jpeg", 1080, 1080);
+        var vid = SeedVideoMedia("fb-mix-vid", "video/mp4", 20L * 1024 * 1024);
+        var items = new List<CreatePostMediaItem>
+        {
+            new(null, MediaType.Image, 0, img.Id),
+            new(null, MediaType.Video, 1, vid.Id),
+        };
+
+        var result = await _controller.CreatePost(FacebookFeedRequest(pageId, mediaItems: items));
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var pd = Assert.IsType<ProblemDetails>(bad.Value);
+        Assert.Equal("UNSUPPORTED_MEDIA_COMBINATION", pd.Extensions["code"]);
+        Assert.Contains("Mixed image+video", pd.Detail);
+        Assert.Empty(await _db.Posts.ToListAsync());
     }
 }

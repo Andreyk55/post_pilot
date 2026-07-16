@@ -77,6 +77,15 @@ describe('pre-validation behavior at the new limits', () => {
     ).toHaveLength(1)
   })
 
+  it('treats the Facebook 10MB image cap as inclusive (matches backend `size > max`)', () => {
+    expect(
+      preValidateFile(file('a.jpg', 'image/jpeg', 10 * 1024 * 1024), 'facebook', 'Feed'),
+    ).toEqual([])
+    expect(
+      preValidateFile(file('a.jpg', 'image/jpeg', 10 * 1024 * 1024 + 1), 'facebook', 'Feed'),
+    ).toHaveLength(1)
+  })
+
   it('rejects an Instagram image over 8MB', () => {
     expect(
       preValidateFile(file('a.jpg', 'image/jpeg', 9 * 1024 * 1024), 'instagram', 'Feed'),

@@ -90,4 +90,43 @@ describe('facebook media format validation — final product policy', () => {
     expect(result.ok).toBe(false)
     expect(getFacebookMediaMode([info('first.mp4', 'video/mp4')])).toBe('single_video')
   })
+
+  it('blocks selecting two videos at once', () => {
+    const result = validateFacebookSelection(
+      [],
+      [info('first.mp4', 'video/mp4'), info('second.mp4', 'video/mp4')],
+    )
+    expect(result.ok).toBe(false)
+    expect(result.nextFiles).toHaveLength(0)
+  })
+
+  // ── Image count boundary: FB Feed allows at most 10 images ──
+
+  it('allows selecting exactly 10 images', () => {
+    const ten = Array.from({ length: 10 }, (_, i) => info(`img${i}.jpg`, 'image/jpeg'))
+    const result = validateFacebookSelection([], ten)
+    expect(result.ok).toBe(true)
+    expect(result.errorMessage).toBeNull()
+    expect(result.nextFiles).toHaveLength(10)
+  })
+
+  it('rejects an 11th image once 10 are selected', () => {
+    const ten = Array.from({ length: 10 }, (_, i) => info(`img${i}.jpg`, 'image/jpeg'))
+    const result = validateFacebookSelection(ten, [info('extra.jpg', 'image/jpeg')])
+    expect(result.ok).toBe(false)
+    expect(result.errorMessage).toBe('Maximum 10 photos for carousel. Remove some photos first.')
+    expect(result.nextFiles).toHaveLength(10)
+  })
+
+  it('truncates an over-limit batch to the remaining slots and says so', () => {
+    const eight = Array.from({ length: 8 }, (_, i) => info(`img${i}.jpg`, 'image/jpeg'))
+    const result = validateFacebookSelection(eight, [
+      info('a.jpg', 'image/jpeg'),
+      info('b.jpg', 'image/jpeg'),
+      info('c.jpg', 'image/jpeg'),
+    ])
+    expect(result.ok).toBe(true)
+    expect(result.errorMessage).toBe('Only 2 more photo(s) can be added. Max 10 total.')
+    expect(result.nextFiles).toHaveLength(10)
+  })
 })

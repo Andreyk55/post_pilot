@@ -58,6 +58,23 @@ describe('resolveMediaValidationView', () => {
     expect(resolveMediaValidationView('Invalid', [], [])?.messages).toEqual(['Validation failed'])
   })
 
+  // Video duration cannot be probed client-side at selection time; the backend measures
+  // it (ffprobe) and its DURATION_* errors must surface as blocking through this view.
+  it('renders server-side duration errors (too short / too long) as blocking', () => {
+    for (const [code, message] of [
+      ['DURATION_TOO_SHORT', 'Feed videos must be between 3 and 180 seconds.'],
+      ['DURATION_TOO_LONG', 'Feed videos must be between 3 and 180 seconds.'],
+    ] as const) {
+      const view = resolveMediaValidationView(
+        'Invalid',
+        [{ code, field: 'durationSeconds', message, expected: null, actual: null }],
+        [],
+      )
+      expect(view?.blocking).toBe(true)
+      expect(view?.messages).toEqual([message])
+    }
+  })
+
   it('renders nothing for idle/Pending without an in-flight check', () => {
     expect(resolveMediaValidationView('Pending', [], [])).toBeNull()
     expect(resolveMediaValidationView(null, [], [])).toBeNull()
