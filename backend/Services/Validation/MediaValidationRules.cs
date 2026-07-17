@@ -107,9 +107,9 @@ public static class MediaValidationRules
             // Final product policy: MP4 + MOV container only (MOV for iPhone compatibility).
             AllowedMimeTypes = ["video/mp4", "video/quicktime"],
             AllowedContainers = ["mp4", "mov"],
-            MaxBytes = 200L * 1024 * 1024, // 200MB — unchanged Facebook Story video cap (size alignment is a separate change)
-            DurationMinSeconds = 3, // unchanged supported duration range: story videos are 3-60 seconds
-            DurationMaxSeconds = 60,
+            MaxBytes = 50L * 1024 * 1024, // 50MB (exactly 52,428,800 bytes) — Facebook Story video product cap
+            DurationMinSeconds = 3, // supported duration range: Facebook Story videos are 3-90 seconds (inclusive)
+            DurationMaxSeconds = 90,
         },
 
         // ============================================

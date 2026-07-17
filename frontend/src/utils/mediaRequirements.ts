@@ -42,7 +42,8 @@ const DEFAULT_VIDEO_MAX_SECONDS = 180
  * The concise "what's supported here" line shown once above the upload area. Same
  * component/styling for every platform + placement; the image size limit and video
  * duration range are still derived from the mirrored rule table so Facebook (10 MB),
- * Instagram (8 MB), Feed (3–180 s) and Story (3–60 s) each read accurately.
+ * Instagram (8 MB), Feed (3–180 s), Facebook Story (3–90 s) and Instagram Story
+ * (3–60 s) each read accurately.
  */
 export function getMediaRequirementHint(
   platform: PlatformId | string | null | undefined,
@@ -55,11 +56,11 @@ export function getMediaRequirementHint(
   const videoMinSeconds = videoRule?.durationMinSeconds ?? DEFAULT_VIDEO_MIN_SECONDS
   const videoMaxSeconds = videoRule?.durationMaxSeconds ?? DEFAULT_VIDEO_MAX_SECONDS
 
-  // Facebook Feed is the only placement whose hint names the video size cap (50 MB,
-  // mirrored from the rule table). Other placements — including the no-platform
-  // fallback — keep their existing duration-only video wording.
-  const isFacebookFeed = String(platform ?? '').toLowerCase() === 'facebook' && !isStory(placement)
-  const videoSizePrefix = isFacebookFeed && videoRule
+  // Facebook (both Feed and Story) is the only platform whose hint names the video size cap
+  // (Feed 50 MB, Story 50 MB — each mirrored from the rule table). Instagram placements —
+  // and the no-platform fallback — keep their existing duration-only video wording.
+  const isFacebook = String(platform ?? '').toLowerCase() === 'facebook'
+  const videoSizePrefix = isFacebook && videoRule
     ? `≤${Math.round(videoRule.maxBytes / (1024 * 1024))} MB, `
     : ''
 

@@ -19,10 +19,11 @@ describe('client rule table mirrors the backend MVP limits', () => {
     expect(getClientValidationRule('instagram', 'Story', 'Image')?.maxBytes).toBe(8 * 1024 * 1024)
   })
 
-  it('video size caps: Facebook Feed 50MB (52,428,800 bytes, Supabase Free limit); Story/Instagram unchanged', () => {
+  it('video size caps: Facebook Feed + Story both 50MB (52,428,800 bytes); Instagram unchanged at 100MB', () => {
     expect(getClientValidationRule('facebook', 'Feed', 'Video')?.maxBytes).toBe(50 * 1024 * 1024)
     expect(getClientValidationRule('facebook', 'Feed', 'Video')?.maxBytes).toBe(52_428_800)
-    expect(getClientValidationRule('facebook', 'Story', 'Video')?.maxBytes).toBe(200 * 1024 * 1024)
+    expect(getClientValidationRule('facebook', 'Story', 'Video')?.maxBytes).toBe(50 * 1024 * 1024)
+    expect(getClientValidationRule('facebook', 'Story', 'Video')?.maxBytes).toBe(52_428_800)
     expect(getClientValidationRule('instagram', 'Feed', 'Video')?.maxBytes).toBe(100 * 1024 * 1024)
     expect(getClientValidationRule('instagram', 'Story', 'Video')?.maxBytes).toBe(100 * 1024 * 1024)
   })
@@ -35,12 +36,14 @@ describe('client rule table mirrors the backend MVP limits', () => {
     }
   })
 
-  it('story videos are 3–60 seconds (Meta limit) on both platforms', () => {
-    for (const platform of ['facebook', 'instagram']) {
-      const rule = getClientValidationRule(platform, 'Story', 'Video')
-      expect(rule?.durationMinSeconds).toBe(3)
-      expect(rule?.durationMaxSeconds).toBe(60)
-    }
+  it('Facebook Story videos are 3–90 seconds; Instagram Story videos stay 3–60 seconds', () => {
+    const fb = getClientValidationRule('facebook', 'Story', 'Video')
+    expect(fb?.durationMinSeconds).toBe(3)
+    expect(fb?.durationMaxSeconds).toBe(90)
+
+    const ig = getClientValidationRule('instagram', 'Story', 'Video')
+    expect(ig?.durationMinSeconds).toBe(3)
+    expect(ig?.durationMaxSeconds).toBe(60)
   })
 
   it('Instagram Feed images use the 4:5–1.91:1 aspect window (9:16 is video-only)', () => {
@@ -72,9 +75,9 @@ describe('client rule table mirrors the backend MVP limits', () => {
     expect(video?.maxHeight).toBeUndefined()
     expect(video?.aspectRatioMin).toBeUndefined()
     expect(video?.aspectRatioMax).toBeUndefined()
-    // Kept: supported duration range.
+    // Kept: supported duration range (Facebook Story is 3–90 s).
     expect(video?.durationMinSeconds).toBe(3)
-    expect(video?.durationMaxSeconds).toBe(60)
+    expect(video?.durationMaxSeconds).toBe(90)
   })
 })
 
@@ -109,10 +112,17 @@ describe('pre-validation behavior at the new limits', () => {
     expect(preValidateFile(file('a.mp4', 'video/mp4', 52_428_801), 'facebook', 'Feed')).toHaveLength(1)
   })
 
-  it('keeps Story and Instagram video selection caps unchanged by the FB Feed raise', () => {
-    // FB Story still rejects above 200MB; Instagram Feed still rejects above 100MB.
-    expect(preValidateFile(file('a.mp4', 'video/mp4', 250 * 1024 * 1024), 'facebook', 'Story')).toHaveLength(1)
+  it('treats the Facebook Story 50MB video cap as inclusive (File.size vs 52,428,800)', () => {
+    // Exactly 50MB passes; one byte over is rejected. A comfortably-under file passes too.
+    expect(preValidateFile(file('a.mp4', 'video/mp4', 20 * 1024 * 1024), 'facebook', 'Story')).toEqual([])
+    expect(preValidateFile(file('a.mp4', 'video/mp4', 52_428_800), 'facebook', 'Story')).toEqual([])
+    expect(preValidateFile(file('a.mp4', 'video/mp4', 52_428_801), 'facebook', 'Story')).toHaveLength(1)
+  })
+
+  it('keeps Instagram video selection caps unchanged by the Facebook Story change', () => {
+    // Instagram Feed still rejects above 100MB; Instagram Story still rejects above 100MB.
     expect(preValidateFile(file('a.mp4', 'video/mp4', 101 * 1024 * 1024), 'instagram', 'Feed')).toHaveLength(1)
+    expect(preValidateFile(file('a.mp4', 'video/mp4', 101 * 1024 * 1024), 'instagram', 'Story')).toHaveLength(1)
   })
 
   it('rejects an Instagram image over 8MB', () => {

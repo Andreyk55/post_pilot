@@ -421,7 +421,7 @@ public class MediaValidationGateTests : IDisposable
     public async Task Video_FacebookStory_TooLong_IsBlocked()
     {
         var path = SeedRawMedia("v-fb-story-long", "video/mp4", 10L * 1024 * 1024);
-        var gate = CreateGate(new() { ["v-fb-story-long"] = path }, FakeVideo(1080, 1920, 61)); // 61s > 60s Meta cap
+        var gate = CreateGate(new() { ["v-fb-story-long"] = path }, FakeVideo(1080, 1920, 91)); // 91s > 90s FB Story cap
 
         var result = await gate.ValidateAsync(Ws,
             new[] { new MediaGateItem("v-fb-story-long", MediaType.Video, 0) }, new[] { FbStory });
@@ -429,16 +429,51 @@ public class MediaValidationGateTests : IDisposable
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, e =>
             e.Code == DTOs.MediaValidationErrorCodes.DurationTooLong
-            && e.Message == "Story videos must be between 3 and 60 seconds.");
+            && e.Message == "Story videos must be between 3 and 90 seconds.");
     }
 
-    // ── Story video duration boundaries: 3–60s on both platforms (Meta limit) ───
+    // ── Facebook Story video duration boundaries: 3–90s (inclusive) ─────────────
+
+    [Theory]
+    [InlineData(3)]   // inclusive lower boundary
+    [InlineData(60)]  // mid-range
+    [InlineData(90)]  // inclusive upper boundary
+    public async Task Video_FacebookStory_WithinDurationRange_Passes(double durationSeconds)
+    {
+        var key = $"v-fb-story-dur-ok-{durationSeconds}";
+        var path = SeedRawMedia(key, "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { [key] = path }, FakeVideo(1080, 1920, durationSeconds));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem(key, MediaType.Video, 0) }, new[] { FbStory });
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task Video_FacebookStory_JustBelow3Seconds_IsBlocked()
+    {
+        // 2.99s is below the 3s floor (backend compares duration < 3), so it must be rejected.
+        var path = SeedRawMedia("v-fb-story-2_99", "video/mp4", 5L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-fb-story-2_99"] = path }, FakeVideo(1080, 1920, 2.99));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-fb-story-2_99", MediaType.Video, 0) }, new[] { FbStory });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e =>
+            e.Code == DTOs.MediaValidationErrorCodes.DurationTooShort
+            && e.Message == "Story videos must be between 3 and 90 seconds.");
+    }
+
+    // ── Story video duration boundaries: Instagram Story keeps its 3–60s window ──
 
     [Theory]
     [InlineData(Platform.Facebook)]
     [InlineData(Platform.Instagram)]
     public async Task Video_Story_60Seconds_Passes(Platform platform)
     {
+        // 60s is within Instagram Story (3–60) and Facebook Story (3–90), so it passes for both.
         var key = $"v-story-60-{platform}";
         var path = SeedRawMedia(key, "video/mp4", 10L * 1024 * 1024);
         var gate = CreateGate(new() { [key] = path }, FakeVideo(1080, 1920, 60));
@@ -450,18 +485,16 @@ public class MediaValidationGateTests : IDisposable
         Assert.True(result.IsValid);
     }
 
-    [Theory]
-    [InlineData(Platform.Facebook)]
-    [InlineData(Platform.Instagram)]
-    public async Task Video_Story_61Seconds_IsBlocked(Platform platform)
+    [Fact]
+    public async Task Video_InstagramStory_61Seconds_IsBlocked()
     {
-        var key = $"v-story-61-{platform}";
-        var path = SeedRawMedia(key, "video/mp4", 10L * 1024 * 1024);
-        var gate = CreateGate(new() { [key] = path }, FakeVideo(1080, 1920, 61));
+        // Instagram Story stays capped at 60s (Meta limit) — 61s is rejected. (Facebook Story
+        // now allows up to 90s; see Video_FacebookStory_WithinDurationRange_Passes.)
+        var path = SeedRawMedia("v-ig-story-61", "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-ig-story-61"] = path }, FakeVideo(1080, 1920, 61));
 
         var result = await gate.ValidateAsync(Ws,
-            new[] { new MediaGateItem(key, MediaType.Video, 0) },
-            new[] { new MediaGateTarget(platform, Placement.Story) });
+            new[] { new MediaGateItem("v-ig-story-61", MediaType.Video, 0) }, new[] { IgStory });
 
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.DurationTooLong);
@@ -609,17 +642,34 @@ public class MediaValidationGateTests : IDisposable
     }
 
     [Fact]
-    public async Task Video_FacebookStory_Over200MB_IsStillBlocked()
+    public async Task Video_FacebookStory_Over50MB_IsBlocked_WithMbMessage()
     {
-        // Size contract remains: one byte over the 200MB Story cap is blocked.
-        var path = SeedRawMedia("v-fb-story-big", "video/mp4", 200L * 1024 * 1024 + 1);
+        // Size contract: one byte over the 50MB (52,428,800 bytes) Story cap is blocked, and the
+        // error surfaces the human "50MB" limit — never a raw byte count.
+        var path = SeedRawMedia("v-fb-story-big", "video/mp4", 52_428_801L);
         var gate = CreateGate(new() { ["v-fb-story-big"] = path }, FakeVideo(1080, 1920, 10));
 
         var result = await gate.ValidateAsync(Ws,
             new[] { new MediaGateItem("v-fb-story-big", MediaType.Video, 0) }, new[] { FbStory });
 
         Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.FileTooLarge);
+        Assert.Contains(result.Errors, e =>
+            e.Code == DTOs.MediaValidationErrorCodes.FileTooLarge
+            && e.Message == "This video is too large. Facebook videos can be up to 50MB."
+            && !e.Message.Contains("52428800") && !e.Message.Contains("52,428,800"));
+    }
+
+    [Fact]
+    public async Task Video_FacebookStory_AtExactly50MB_IsAccepted()
+    {
+        // Inclusive boundary: exactly 52,428,800 bytes passes (backend rejects only size > max).
+        var path = SeedRawMedia("v-fb-story-at-50", "video/mp4", 52_428_800L);
+        var gate = CreateGate(new() { ["v-fb-story-at-50"] = path }, FakeVideo(1080, 1920, 10));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-fb-story-at-50", MediaType.Video, 0) }, new[] { FbStory });
+
+        Assert.True(result.IsValid);
     }
 
     // ── FB Story IMAGE: any shape/size within the type + 10MB limit is accepted ──

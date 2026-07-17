@@ -77,10 +77,19 @@ public class MediaValidationTests
     }
 
     [Fact]
-    public void FacebookStoryVideo_MaxIs200MB()
+    public void FacebookStoryVideo_MaxIs50MB_Exactly52428800Bytes()
     {
         var rules = MediaValidationRules.GetRules(Platform.Facebook, Placement.Story, MediaType.Video)!;
-        Assert.Equal(200L * 1024 * 1024, rules.MaxBytes);
+        Assert.Equal(50L * 1024 * 1024, rules.MaxBytes);
+        Assert.Equal(52_428_800L, rules.MaxBytes);
+    }
+
+    [Fact]
+    public void FacebookStoryVideo_DurationIs3To90Seconds()
+    {
+        var rules = MediaValidationRules.GetRules(Platform.Facebook, Placement.Story, MediaType.Video)!;
+        Assert.Equal(3, rules.DurationMinSeconds);
+        Assert.Equal(90, rules.DurationMaxSeconds);
     }
 
     // Facebook Story has NO dimension, resolution, aspect-ratio, orientation, or frame-rate rules —
@@ -133,18 +142,16 @@ public class MediaValidationTests
         Assert.Equal(new[] { "video/mp4", "video/quicktime" }, rules.AllowedMimeTypes);
         Assert.Equal(new[] { "mp4", "mov" }, rules.AllowedContainers);
         Assert.Equal(3, rules.DurationMinSeconds);
-        Assert.Equal(60, rules.DurationMaxSeconds);
-        Assert.Equal(200L * 1024 * 1024, rules.MaxBytes);
+        Assert.Equal(90, rules.DurationMaxSeconds);
+        Assert.Equal(50L * 1024 * 1024, rules.MaxBytes);
     }
 
-    // Story placements keep the Meta 3-60s window and their own size caps — pinned so
-    // Feed-limit changes can never silently leak into the Story rules.
-    [Theory]
-    [InlineData(Platform.Facebook)]
-    [InlineData(Platform.Instagram)]
-    public void StoryVideo_DurationStays3To60Seconds(Platform platform)
+    // Instagram Story keeps the Meta 3-60s window; Facebook Story uses 3-90s. Pinned so a
+    // change to one placement's duration can never silently leak into the other's rule.
+    [Fact]
+    public void InstagramStoryVideo_DurationStays3To60Seconds()
     {
-        var rules = MediaValidationRules.GetRules(platform, Placement.Story, MediaType.Video)!;
+        var rules = MediaValidationRules.GetRules(Platform.Instagram, Placement.Story, MediaType.Video)!;
 
         Assert.Equal(3, rules.DurationMinSeconds);
         Assert.Equal(60, rules.DurationMaxSeconds);
@@ -157,12 +164,14 @@ public class MediaValidationTests
         Assert.Equal(8L * 1024 * 1024, MediaValidationRules.GetRules(Platform.Instagram, Placement.Story, MediaType.Image)!.MaxBytes);
     }
 
-    // The Facebook Feed 50MB video cap must NOT leak into any other video rule:
-    // FB Story stays 200MB, Instagram Feed (published as Reel) and Story stay 100MB.
+    // Facebook Feed and Story videos are both 50MB; Instagram Feed (published as Reel) and
+    // Story stay at their unchanged 100MB cap. Pinned so a Facebook change can never leak
+    // into the Instagram video rules (and vice-versa).
     [Fact]
-    public void VideoSizeCaps_OtherPlacementsUnchanged_ByFacebookFeedCap()
+    public void VideoSizeCaps_FacebookIs50MB_InstagramUnchangedAt100MB()
     {
-        Assert.Equal(200L * 1024 * 1024, MediaValidationRules.GetRules(Platform.Facebook, Placement.Story, MediaType.Video)!.MaxBytes);
+        Assert.Equal(50L * 1024 * 1024, MediaValidationRules.GetRules(Platform.Facebook, Placement.Feed, MediaType.Video)!.MaxBytes);
+        Assert.Equal(50L * 1024 * 1024, MediaValidationRules.GetRules(Platform.Facebook, Placement.Story, MediaType.Video)!.MaxBytes);
         Assert.Equal(100L * 1024 * 1024, MediaValidationRules.GetRules(Platform.Instagram, Placement.Feed, MediaType.Video)!.MaxBytes);
         Assert.Equal(100L * 1024 * 1024, MediaValidationRules.GetRules(Platform.Instagram, Placement.Story, MediaType.Video)!.MaxBytes);
     }

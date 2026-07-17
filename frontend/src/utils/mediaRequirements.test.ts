@@ -18,9 +18,9 @@ describe('getMediaRequirementHint', () => {
     )
   })
 
-  it('uses the Story video duration limit (3–60 s) and the per-platform image size', () => {
+  it('names the Facebook Story 50MB video cap and 3–90 s range; Instagram Story keeps duration-only 3–60 s', () => {
     expect(getMediaRequirementHint('facebook', 'Story')).toBe(
-      'Supported: JPG/PNG images (≤10 MB) • MP4/MOV videos (3–60 s)',
+      'Supported: JPG/PNG images (≤10 MB) • MP4/MOV videos (≤50 MB, 3–90 s)',
     )
     expect(getMediaRequirementHint('instagram', 'Story')).toBe(
       'Supported: JPG/PNG images (≤8 MB) • MP4/MOV videos (3–60 s)',
@@ -31,6 +31,15 @@ describe('getMediaRequirementHint', () => {
     expect(getMediaRequirementHint(null, 'Feed')).toBe(
       'Supported: JPG/PNG images (≤10 MB) • MP4/MOV videos (3–180 s)',
     )
+  })
+
+  it('Facebook Story hint is exactly the required copy and names no forbidden attributes', () => {
+    const hint = getMediaRequirementHint('facebook', 'Story')
+    expect(hint).toBe('Supported: JPG/PNG images (≤10 MB) • MP4/MOV videos (≤50 MB, 3–90 s)')
+    // Simplified policy: no dimensions, aspect ratio, FPS, or codec details in the copy.
+    for (const forbidden of ['dimension', '9:16', 'fps', 'FPS', 'H.264', 'h264', 'HEVC', 'AAC', 'aspect']) {
+      expect(hint).not.toContain(forbidden)
+    }
   })
 })
 

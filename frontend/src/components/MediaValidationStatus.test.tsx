@@ -156,7 +156,7 @@ describe('MediaRequirementHint', () => {
     const storyMarkup = renderToStaticMarkup(<MediaRequirementHint platform="facebook" placement="Story" />)
     expect(storyMarkup).toContain('class="media-requirement-hint"')
     expect(storyMarkup).toContain('Supported: JPG/PNG images (≤10 MB)')
-    expect(storyMarkup).toContain('3–60 s')
+    expect(storyMarkup).toContain('≤50 MB, 3–90 s')
 
     const feedMarkup = renderToStaticMarkup(<MediaRequirementHint platform="instagram" placement="Feed" />)
     expect(feedMarkup).toContain('JPG/PNG images')

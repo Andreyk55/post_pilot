@@ -124,9 +124,9 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
   // as long as the container is MP4/MOV, the file is within the size cap, and the duration fits.
   'facebook:story:video': {
     allowedMimeTypes: ['video/mp4', 'video/quicktime'],
-    maxBytes: 200 * 1024 * 1024, // 200MB — unchanged Facebook Story video cap
-    durationMinSeconds: 3, // unchanged supported duration range: story videos are 3-60 seconds
-    durationMaxSeconds: 60,
+    maxBytes: 50 * 1024 * 1024, // 50MB (exactly 52,428,800 bytes) — Facebook Story video product cap
+    durationMinSeconds: 3, // supported duration range: Facebook Story videos are 3-90 seconds (inclusive)
+    durationMaxSeconds: 90,
   },
 
   // Instagram Feed Image
