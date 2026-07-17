@@ -95,21 +95,19 @@ public static class MediaValidationRules
 
         // Facebook Story Video Rules
         // Facebook Story videos are validated ONLY for container/type, file size, duration, and
-        // codecs. NO dimension, resolution, orientation, aspect-ratio, or frame-rate requirements:
-        // a square, landscape, portrait, wide, or unusually sized video is accepted as long as the
-        // container, file size, duration, and codecs are supported. FPS is intentionally NOT
-        // validated — its former 23–60 bound came from the same Meta doc line as the 9:16 /
-        // 540x960 recommendations being removed, and FB Feed video enforces no minimum FPS either,
-        // so FPS is not part of the product's decode/encode contract (that contract is container +
-        // codecs). Container/codec/duration/size still fully enforced below.
+        // readability. NO dimension, resolution, orientation, aspect-ratio, frame-rate, OR CODEC
+        // requirements: a readable MP4/MOV within the size + duration limits is accepted whatever
+        // its video/audio codec (including no audio stream, and unknown/missing codec names), and
+        // Meta decides at publish time whether an uncommon codec combination is playable.
+        // Codec validation is deliberately omitted (no AllowedVideoCodecs / AllowedAudioCodecs →
+        // the engine skips both codec checks). FPS was likewise removed. Container + size +
+        // duration + metadata readability remain fully enforced below.
         [(Platform.Facebook, Placement.Story, MediaType.Video)] = new MediaValidationRule
         {
-            // Final product policy: MP4 + MOV only (MOV for iPhone compatibility).
+            // Final product policy: MP4 + MOV container only (MOV for iPhone compatibility).
             AllowedMimeTypes = ["video/mp4", "video/quicktime"],
             AllowedContainers = ["mp4", "mov"],
-            AllowedVideoCodecs = ["h264", "hevc"],
-            AllowedAudioCodecs = ["aac"],
-            MaxBytes = 200L * 1024 * 1024, // 200MB — unchanged Facebook Story video cap
+            MaxBytes = 200L * 1024 * 1024, // 200MB — unchanged Facebook Story video cap (size alignment is a separate change)
             DurationMinSeconds = 3, // unchanged supported duration range: story videos are 3-60 seconds
             DurationMaxSeconds = 60,
         },

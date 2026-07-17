@@ -117,10 +117,11 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
     maxBytes: 10 * 1024 * 1024, // 10MB — unchanged Facebook Story image cap
   },
 
-  // Facebook Story Video — only supported type/container, file size, and duration are pre-checked
-  // client-side (codecs are validated server-side). NO dimension, resolution, orientation,
-  // aspect-ratio, or frame-rate requirements: any square/landscape/portrait/unusually sized video
-  // passes as long as container, file size, duration, and codecs are supported.
+  // Facebook Story Video — only supported type/container, file size, and duration are validated.
+  // Codecs are NOT validated for Facebook Story (any video/audio codec, including none, is
+  // accepted; Meta decides at publish time). NO dimension, resolution, orientation, aspect-ratio,
+  // or frame-rate requirements either: any square/landscape/portrait/unusually sized video passes
+  // as long as the container is MP4/MOV, the file is within the size cap, and the duration fits.
   'facebook:story:video': {
     allowedMimeTypes: ['video/mp4', 'video/quicktime'],
     maxBytes: 200 * 1024 * 1024, // 200MB — unchanged Facebook Story video cap

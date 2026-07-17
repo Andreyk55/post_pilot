@@ -62,9 +62,10 @@ public class MediaValidationTests
             Assert.DoesNotContain(unsupported, rules.AllowedMimeTypes);
     }
 
+    // Codec allow-lists remain for every placement EXCEPT Facebook Story (which has no codec
+    // validation at all — see FacebookStoryVideo_HasNoCodecRules... below).
     [Theory]
     [InlineData(Platform.Facebook, Placement.Feed)]
-    [InlineData(Platform.Facebook, Placement.Story)]
     [InlineData(Platform.Instagram, Placement.Feed)]
     [InlineData(Platform.Instagram, Placement.Story)]
     public void Video_AllowsH264AndHevcWithAacOnly(Platform platform, Placement placement)
@@ -109,11 +110,11 @@ public class MediaValidationTests
     }
 
     [Fact]
-    public void FacebookStoryVideo_HasNoDimensionAspectOrFpsRules_ButKeepsDurationAndCodecs()
+    public void FacebookStoryVideo_HasNoDimensionAspectFpsOrCodecRules_ButKeepsContainerDurationAndSize()
     {
         var rules = MediaValidationRules.GetRules(Platform.Facebook, Placement.Story, MediaType.Video)!;
 
-        // Removed: dimensions, aspect ratio, preferred 9:16, and frame-rate bounds.
+        // Removed: dimensions, aspect ratio, preferred 9:16, frame-rate bounds, AND codec lists.
         Assert.Null(rules.MinWidth);
         Assert.Null(rules.MinHeight);
         Assert.Null(rules.MaxWidth);
@@ -125,12 +126,15 @@ public class MediaValidationTests
         Assert.Null(rules.MaxFps);
         Assert.Null(rules.RecommendedWidth);
         Assert.Null(rules.RecommendedHeight);
+        Assert.Null(rules.AllowedVideoCodecs); // codec validation removed for Facebook Story
+        Assert.Null(rules.AllowedAudioCodecs);
 
-        // Kept: supported duration range + codecs (the decode/encode contract).
+        // Kept: MP4/MOV container + type, supported duration range, and the size cap.
+        Assert.Equal(new[] { "video/mp4", "video/quicktime" }, rules.AllowedMimeTypes);
+        Assert.Equal(new[] { "mp4", "mov" }, rules.AllowedContainers);
         Assert.Equal(3, rules.DurationMinSeconds);
         Assert.Equal(60, rules.DurationMaxSeconds);
-        Assert.Equal(new[] { "h264", "hevc" }, rules.AllowedVideoCodecs);
-        Assert.Equal(new[] { "aac" }, rules.AllowedAudioCodecs);
+        Assert.Equal(200L * 1024 * 1024, rules.MaxBytes);
     }
 
     // Story placements keep the Meta 3-60s window and their own size caps — pinned so

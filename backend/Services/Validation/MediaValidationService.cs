@@ -446,8 +446,10 @@ public class MediaValidationService : IMediaValidationService
             }
         }
 
-        // 8. Validate video codec
-        if (!string.IsNullOrEmpty(metadata.VideoCodec) && rules.AllowedVideoCodecs != null)
+        // 8. Validate video codec — only when the rule defines a NON-EMPTY allow-list. A null/empty
+        // list means "no codec restriction" (e.g. Facebook Story, which lets Meta decide), so no
+        // UNSUPPORTED_VIDEO_CODEC is produced for it.
+        if (!string.IsNullOrEmpty(metadata.VideoCodec) && rules.AllowedVideoCodecs is { Length: > 0 })
         {
             if (!rules.AllowedVideoCodecs.Contains(metadata.VideoCodec, StringComparer.OrdinalIgnoreCase))
             {
@@ -460,8 +462,10 @@ public class MediaValidationService : IMediaValidationService
             }
         }
 
-        // 9. Validate audio codec
-        if (!string.IsNullOrEmpty(metadata.AudioCodec) && rules.AllowedAudioCodecs != null)
+        // 9. Validate audio codec — same rule as video: only when a non-empty allow-list exists.
+        // A null/empty list means "no restriction" (Facebook Story), so audio may be any codec or
+        // absent, and no UNSUPPORTED_AUDIO_CODEC is produced.
+        if (!string.IsNullOrEmpty(metadata.AudioCodec) && rules.AllowedAudioCodecs is { Length: > 0 })
         {
             if (!rules.AllowedAudioCodecs.Contains(metadata.AudioCodec, StringComparer.OrdinalIgnoreCase))
             {

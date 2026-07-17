@@ -113,7 +113,7 @@ public class MediaValidationGateTests : IDisposable
     /// </summary>
     private static IVideoMetadataExtractor FakeVideo(
         int width, int height, double durationSeconds,
-        string container = "mp4", string videoCodec = "h264", string audioCodec = "aac",
+        string container = "mp4", string? videoCodec = "h264", string? audioCodec = "aac",
         double? fps = 30)
     {
         var meta = new VideoMetadata(
@@ -522,33 +522,90 @@ public class MediaValidationGateTests : IDisposable
         Assert.True(result.IsValid);
     }
 
-    [Fact]
-    public async Task Video_FacebookStory_UnsupportedCodec_IsStillBlocked()
+    // ── FB Story: NO video/audio codec validation (Meta decides at publish) ─────
+    // A readable MP4/MOV within the size + duration limits is accepted regardless of its video or
+    // audio codec — including no audio stream and unknown/missing codec names. Codecs that were
+    // previously rejected (ProRes, VP9, AV1, PCM, MP3, Opus) now pass. Cross-placement enforcement
+    // is proved separately below.
+    [Theory]
+    [InlineData("h264", "aac")]
+    [InlineData("hevc", "aac")]
+    [InlineData("prores", "aac")]     // previously UNSUPPORTED_VIDEO_CODEC
+    [InlineData("vp9", "aac")]        // previously UNSUPPORTED_VIDEO_CODEC
+    [InlineData("av1", "aac")]        // previously UNSUPPORTED_VIDEO_CODEC
+    [InlineData("h264", "pcm_s16le")] // previously UNSUPPORTED_AUDIO_CODEC
+    [InlineData("h264", "mp3")]       // previously UNSUPPORTED_AUDIO_CODEC
+    [InlineData("h264", "opus")]      // previously UNSUPPORTED_AUDIO_CODEC
+    [InlineData("h264", null)]        // no audio stream
+    [InlineData(null, null)]          // unknown/missing codec names (extraction otherwise succeeded)
+    public async Task Video_FacebookStory_AnyVideoOrAudioCodec_IsAccepted(string? videoCodec, string? audioCodec)
     {
-        // Codec contract remains: ProRes is not h264/hevc → blocked even though dims are unchecked.
-        var path = SeedRawMedia("v-fb-story-prores", "video/quicktime", 10L * 1024 * 1024);
-        var gate = CreateGate(new() { ["v-fb-story-prores"] = path },
-            FakeVideo(1080, 1920, 10, container: "mov", videoCodec: "prores", audioCodec: "aac"));
+        var key = $"v-fb-story-codec-{videoCodec ?? "none"}-{audioCodec ?? "none"}";
+        var path = SeedRawMedia(key, "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { [key] = path },
+            FakeVideo(1080, 1920, 10, videoCodec: videoCodec, audioCodec: audioCodec));
 
         var result = await gate.ValidateAsync(Ws,
-            new[] { new MediaGateItem("v-fb-story-prores", MediaType.Video, 0) }, new[] { FbStory });
+            new[] { new MediaGateItem(key, MediaType.Video, 0) }, new[] { FbStory });
 
-        Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.UnsupportedVideoCodec);
+        Assert.True(result.IsValid);
     }
 
     [Fact]
-    public async Task Video_FacebookStory_UnsupportedAudio_IsStillBlocked()
+    public async Task Video_FacebookStory_UnsupportedContainer_IsStillBlocked()
     {
-        var path = SeedRawMedia("v-fb-story-pcm", "video/mp4", 10L * 1024 * 1024);
-        var gate = CreateGate(new() { ["v-fb-story-pcm"] = path },
-            FakeVideo(1080, 1920, 10, videoCodec: "h264", audioCodec: "pcm_s16le"));
+        // Container contract remains: only MP4/MOV. A WebM container is still rejected even though
+        // its codecs (vp9/opus) are no longer inspected for Facebook Story.
+        var path = SeedRawMedia("v-fb-story-webm", "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-fb-story-webm"] = path },
+            FakeVideo(1080, 1920, 10, container: "webm", videoCodec: "vp9", audioCodec: "opus"));
 
         var result = await gate.ValidateAsync(Ws,
-            new[] { new MediaGateItem("v-fb-story-pcm", MediaType.Video, 0) }, new[] { FbStory });
+            new[] { new MediaGateItem("v-fb-story-webm", MediaType.Video, 0) }, new[] { FbStory });
 
         Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.UnsupportedAudioCodec);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.UnsupportedContainer);
+    }
+
+    [Fact]
+    public async Task Video_FacebookStory_UnreadableMetadata_IsStillBlocked()
+    {
+        // Readability contract remains: if metadata cannot be extracted, the video is rejected.
+        var path = SeedRawMedia("v-fb-story-corrupt", "video/mp4", 10L * 1024 * 1024);
+        var nullExtractor = new Mock<IVideoMetadataExtractor>();
+        nullExtractor.Setup(e => e.ExtractAsync(It.IsAny<string>())).ReturnsAsync((VideoMetadata?)null);
+        var gate = CreateGate(new() { ["v-fb-story-corrupt"] = path }, nullExtractor.Object);
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-fb-story-corrupt", MediaType.Video, 0) }, new[] { FbStory });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.MetadataExtractionFailed);
+    }
+
+    [Theory]
+    [InlineData("prores", "aac")]
+    [InlineData("vp9", "opus")]
+    public async Task Video_Codec_RejectedForFeedAndInstagram_ButAcceptedForFacebookStory(string videoCodec, string audioCodec)
+    {
+        // Scope check: the SAME uncommon codec that Facebook Story now accepts must still be
+        // rejected where codec rules remain (Facebook Feed and Instagram Feed). 1080x1920 @ 10s
+        // is within every other rule for these targets, so the ONLY failure is the codec.
+        var key = $"v-xplace-{videoCodec}-{audioCodec}";
+        var path = SeedRawMedia(key, "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { [key] = path }, FakeVideo(1080, 1920, 10, videoCodec: videoCodec, audioCodec: audioCodec));
+        var item = new[] { new MediaGateItem(key, MediaType.Video, 0) };
+
+        var fb = await gate.ValidateAsync(Ws, item, new[] { Fb });
+        Assert.False(fb.IsValid);
+        Assert.Contains(fb.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.UnsupportedVideoCodec);
+
+        var ig = await gate.ValidateAsync(Ws, item, new[] { Ig });
+        Assert.False(ig.IsValid);
+        Assert.Contains(ig.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.UnsupportedVideoCodec);
+
+        var fbStory = await gate.ValidateAsync(Ws, item, new[] { FbStory });
+        Assert.True(fbStory.IsValid);
     }
 
     [Fact]
