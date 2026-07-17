@@ -373,31 +373,4 @@ public class MetaController : ControllerBase
         }
     }
 
-    [HttpGet("limits")]
-    [AllowAnonymous]
-    public ActionResult<ValidationLimitsResponse> GetLimits()
-    {
-        return Ok(new ValidationLimitsResponse(
-            new VoiceProfileLimits(
-                ValidationLimits.VoiceProfileNameMinLength,
-                ValidationLimits.VoiceProfileNameMaxLength,
-                ValidationLimits.VoiceProfileDescriptionMaxLength,
-                ValidationLimits.VoiceProfileDoRulesMaxLength,
-                ValidationLimits.VoiceProfileDontRulesMaxLength,
-                ValidationLimits.VoiceProfileBannedWordsMaxLength,
-                ValidationLimits.VoiceProfileExamplePostsMaxLength,
-                ValidationLimits.VoiceProfileTotalMaxLength
-            ),
-            new PostLimits(
-                ValidationLimits.PostTextMaxLength,
-                ValidationLimits.PostTitleMaxLength,
-                ValidationLimits.PostMaxHashtags,
-                ValidationLimits.PostMaxMediaFiles
-            ),
-            new MediaLimits(
-                ValidationLimits.MediaImageMaxBytes,
-                ValidationLimits.MediaVideoMaxBytes
-            )
-        ));
-    }
 }

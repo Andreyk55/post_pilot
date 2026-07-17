@@ -1,5 +1,12 @@
 # Maximum Size Restrictions - Implementation Summary
 
+> **Historical note (July 2026):** this is a point-in-time record from January 2026. Since
+> then, post text limits became placement-specific (Facebook Feed 5000, Instagram Feed/Reels
+> 2200; Stories have no text) — see `ValidationLimits.cs` + `PostContentRules.cs` (backend)
+> and `frontend/src/constants/validationLimits.ts` (frontend mirror). The advisory
+> `GET /api/meta/limits` endpoint described below was removed as unused; the limits are
+> compiled into both layers and are not served over HTTP.
+
 ## ✅ Implementation Status: COMPLETE
 
 All maximum size restrictions have been successfully implemented for PostPilot application.
@@ -60,7 +67,6 @@ All maximum size restrictions have been successfully implemented for PostPilot a
 ✅ **Dual Validation**: Individual field + total combined checks  
 ✅ **Clear Errors**: Field-specific error messages with limits  
 ✅ **Privacy**: No user content logged in error messages  
-✅ **New Endpoint**: `GET /api/meta/limits` for frontend consumption  
 
 ### Frontend
 ✅ **Browser Enforcement**: `maxLength` attributes on all text fields  
@@ -148,34 +154,11 @@ Toast: "Image too large. Maximum size is 20MB."
 
 ## API Endpoints
 
-### GET /api/meta/limits
-Returns all validation limits in JSON format
-
-**Response (200 OK)**:
-```json
-{
-  "voiceProfile": {
-    "nameMinLength": 1,
-    "nameMaxLength": 60,
-    "descriptionMaxLength": 300,
-    "doRulesMaxLength": 1500,
-    "dontRulesMaxLength": 1500,
-    "bannedWordsMaxLength": 800,
-    "examplePostsMaxLength": 4000,
-    "totalMaxLength": 8000
-  },
-  "post": {
-    "textMaxLength": 5000,
-    "titleMaxLength": 120,
-    "maxHashtags": 50,
-    "maxMediaFiles": 10
-  },
-  "media": {
-    "imageMaxBytes": 20971520,
-    "videoMaxBytes": 209715200
-  }
-}
-```
+The `GET /api/meta/limits` endpoint originally added here was **removed in July 2026**: no
+frontend, backend, script, or test ever consumed its response, and its generic
+`post.textMaxLength = 5000` had become misleading once limits turned placement-specific
+(Instagram Feed/Reels is 2200). Limits are mirrored as version-controlled constants on both
+layers instead.
 
 ---
 
@@ -294,7 +277,7 @@ Returns all validation limits in JSON format
 | Total counter | ✅ | Frontend | VoiceProfileModal.tsx |
 | Submit disabled | ✅ | Frontend | VoiceProfileModal.tsx |
 | File validation | ✅ | Frontend | MediaUpload.tsx |
-| Limits endpoint | ✅ | Backend | MetaController.cs |
+| Limits endpoint | ❌ removed 2026-07 (unused) | Backend | MetaController.cs |
 | Error handling | ✅ | Both | Multiple |
 | Documentation | ✅ | Docs | 4 files |
 

@@ -9,7 +9,6 @@ import type {
   MetaConnectionResponse,
   MetaUpdatePagesRequest,
   FacebookPage,
-  ValidationLimitsResponse,
   InstagramDiscoveryResponse,
 } from '../types/meta'
 import { config } from '../config/appConfig'
@@ -196,14 +195,5 @@ export const metaApi = {
       method: 'DELETE',
     })
     if (!response.ok) throw new Error('Failed to disconnect Meta')
-  },
-
-  /**
-   * Get validation limits for the application
-   */
-  async getLimits(): Promise<ValidationLimitsResponse> {
-    const response = await fetch(`${API_URL}/meta/limits`)
-    if (!response.ok) throw new Error('Failed to get validation limits')
-    return response.json()
   },
 }

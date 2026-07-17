@@ -79,9 +79,17 @@ public class FallbackAuthorizationPolicyTests
     }
 
     [Fact]
-    public void Meta_limits_is_anonymous()
+    public void Meta_controller_has_no_anonymous_actions()
     {
-        AssertMethodAnonymous(typeof(MetaController), nameof(MetaController.GetLimits));
+        // /api/meta/limits (the only [AllowAnonymous] action this controller ever had) was
+        // removed as unused — every remaining Meta endpoint must require authentication.
+        var anonymousActions = typeof(MetaController)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Where(m => m.GetCustomAttribute<AllowAnonymousAttribute>() != null)
+            .Select(m => m.Name)
+            .ToList();
+
+        Assert.Empty(anonymousActions);
     }
 
     [Fact]

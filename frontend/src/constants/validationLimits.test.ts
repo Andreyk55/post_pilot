@@ -5,6 +5,8 @@ import {
   PostTextMaxLengthInstagram,
   getPostTextMaxChars,
 } from './validationLimits'
+// Source pin (no DOM harness in this project — same pattern as SchedulePost.textLimit.test.ts).
+import metaApiSource from '../api/meta.ts?raw'
 
 /**
  * The composer's validity rule (SchedulePost): text is blocking when
@@ -82,5 +84,15 @@ describe('counting convention (UTF-16 code units, aligned with the backend)', ()
   it('counts non-ASCII BMP characters as one code unit each', () => {
     expect(isTextTooLong('é'.repeat(2200), 'instagram')).toBe(false)
     expect(isTextTooLong('é'.repeat(2200) + 'й', 'instagram')).toBe(true)
+  })
+})
+
+describe('limits are compile-time constants, never fetched over HTTP', () => {
+  it('has no wrapper for the removed GET /api/meta/limits endpoint', () => {
+    // The advisory endpoint was removed as unused (July 2026); the Meta API module must not
+    // grow a limits call back — this rule table is the frontend's only source of limits.
+    expect(metaApiSource).not.toContain('meta/limits')
+    expect(metaApiSource).not.toContain('getLimits')
+    expect(metaApiSource).not.toContain('ValidationLimitsResponse')
   })
 })

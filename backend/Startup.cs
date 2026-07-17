@@ -223,8 +223,8 @@ public class Startup
         // endpoints). This turns a forgotten [Authorize] on a future controller/action from a
         // silent public exposure into a safe 401. The intentionally public endpoints
         // (health probes, the Google login start/callback, the private-access gate, Meta's
-        // data-deletion callback + status page, /api/meta/limits, and the local-mode media
-        // frame route) carry [AllowAnonymous] and are unaffected.
+        // data-deletion callback + status page, and the local-mode media frame route)
+        // carry [AllowAnonymous] and are unaffected.
         services.AddAuthorization(options =>
         {
             options.FallbackPolicy = new AuthorizationPolicyBuilder()
