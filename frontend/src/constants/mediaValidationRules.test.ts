@@ -55,10 +55,26 @@ describe('client rule table mirrors the backend MVP limits', () => {
     expect(rule?.aspectRatioMax).toBe(1.91)
   })
 
-  it('Facebook Story videos mirror the Meta minimum resolution (540x960)', () => {
-    const rule = getClientValidationRule('facebook', 'Story', 'Video')
-    expect(rule?.minWidth).toBe(540)
-    expect(rule?.minHeight).toBe(960)
+  it('Facebook Story media has NO dimension or aspect-ratio rules (type + size + duration only)', () => {
+    const image = getClientValidationRule('facebook', 'Story', 'Image')
+    expect(image?.minWidth).toBeUndefined()
+    expect(image?.minHeight).toBeUndefined()
+    expect(image?.maxWidth).toBeUndefined()
+    expect(image?.maxHeight).toBeUndefined()
+    expect(image?.aspectRatioMin).toBeUndefined()
+    expect(image?.aspectRatioMax).toBeUndefined()
+    expect(image?.preferredAspectRatio).toBeUndefined()
+
+    const video = getClientValidationRule('facebook', 'Story', 'Video')
+    expect(video?.minWidth).toBeUndefined()
+    expect(video?.minHeight).toBeUndefined()
+    expect(video?.maxWidth).toBeUndefined()
+    expect(video?.maxHeight).toBeUndefined()
+    expect(video?.aspectRatioMin).toBeUndefined()
+    expect(video?.aspectRatioMax).toBeUndefined()
+    // Kept: supported duration range.
+    expect(video?.durationMinSeconds).toBe(3)
+    expect(video?.durationMaxSeconds).toBe(60)
   })
 })
 
@@ -113,5 +129,19 @@ describe('pre-validation behavior at the new limits', () => {
 
   it('keeps 9:16 valid for Facebook Feed images', () => {
     expect(preValidateImageDimensions(1080, 1920, 'facebook', 'Feed')).toEqual([])
+  })
+
+  it('accepts any Facebook Story image shape (no dimension or aspect pre-check)', () => {
+    const shapes: [number, number][] = [
+      [1080, 1080], // square
+      [1920, 1080], // landscape
+      [3000, 300], // extremely wide
+      [300, 3000], // extremely tall
+      [100, 100], // below the old 320x320 minimum
+      [4000, 6000], // above the old 1080x1920 maximum
+    ]
+    for (const [w, h] of shapes) {
+      expect(preValidateImageDimensions(w, h, 'facebook', 'Story')).toEqual([])
+    }
   })
 })

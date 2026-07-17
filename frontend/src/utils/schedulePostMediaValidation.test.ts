@@ -111,8 +111,10 @@ describe('schedulePostMediaValidation', () => {
   describe('a new upload start clears the previous media error on every surface', () => {
     const surfaces: { label: string; error: MediaValidationError; oldKey: string; newKey: string }[] = [
       {
-        label: 'Facebook Story (image, aspect ratio)',
-        error: { code: 'aspect_ratio_invalid', field: 'aspectRatio', message: 'Story must be 9:16.', expected: '9:16', actual: '4:3' },
+        // Facebook Story has no dimension/aspect validation, so its realistic blocking error is
+        // a supported-type or file-size failure — not a 9:16 aspect error.
+        label: 'Facebook Story (image, file size)',
+        error: { code: 'file_too_large', field: 'sizeBytes', message: 'This image is too large. Facebook images can be up to 10MB.', expected: '10MB', actual: '12.0MB' },
         oldKey: 'fb-story:1',
         newKey: 'fb-story:2',
       },

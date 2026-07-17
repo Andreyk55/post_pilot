@@ -172,21 +172,26 @@ export function resolveClientDimensionError(
   const rule = getClientValidationRule(platform, placement, 'Image')
   if (!rule) return null
 
-  if (width < rule.minWidth || height < rule.minHeight) {
+  // Each check is skipped when the rule omits that bound, so a placement with no dimension/aspect
+  // requirement (e.g. Facebook Story) returns null for any size or shape.
+
+  if (rule.minWidth != null && rule.minHeight != null && (width < rule.minWidth || height < rule.minHeight)) {
     return `Image is too small. Use at least ${rule.minWidth}×${rule.minHeight}px.`
   }
 
-  if (!rule.maxWidthIsAdvisory && (width > rule.maxWidth || height > rule.maxHeight)) {
+  if (!rule.maxWidthIsAdvisory && rule.maxWidth != null && rule.maxHeight != null && (width > rule.maxWidth || height > rule.maxHeight)) {
     return `Image is too large. Maximum ${rule.maxWidth}×${rule.maxHeight}px.`
   }
 
-  const aspectRatio = width / height
-  if (aspectRatio < rule.aspectRatioMin || aspectRatio > rule.aspectRatioMax) {
-    if (isStory(placement)) {
-      return 'Story media should be vertical 9:16.'
+  if (rule.aspectRatioMin != null && rule.aspectRatioMax != null) {
+    const aspectRatio = width / height
+    if (aspectRatio < rule.aspectRatioMin || aspectRatio > rule.aspectRatioMax) {
+      if (isStory(placement)) {
+        return 'Story media should be vertical 9:16.'
+      }
+      const label = platformLabel(platform)
+      return `${label ? `${label} Feed` : 'Feed'} images must use an aspect ratio between ${formatRatio(rule.aspectRatioMin)} and ${formatRatio(rule.aspectRatioMax)}.`
     }
-    const label = platformLabel(platform)
-    return `${label ? `${label} Feed` : 'Feed'} images must use an aspect ratio between ${formatRatio(rule.aspectRatioMin)} and ${formatRatio(rule.aspectRatioMax)}.`
   }
 
   return null

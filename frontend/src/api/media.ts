@@ -136,12 +136,14 @@ export interface ExtractMetadataRequest {
 export interface MediaValidationRuleDto {
   allowedMimeTypes: string[]
   maxBytes: number
-  minWidth: number
-  minHeight: number
-  maxWidth: number
-  maxHeight: number
-  aspectRatioMin: number
-  aspectRatioMax: number
+  // Dimension/aspect fields are null when the rule has no such constraint (e.g. Facebook Story
+  // has no dimension or aspect-ratio validation at all).
+  minWidth: number | null
+  minHeight: number | null
+  maxWidth: number | null
+  maxHeight: number | null
+  aspectRatioMin: number | null
+  aspectRatioMax: number | null
   durationMinSeconds: number | null
   durationMaxSeconds: number | null
   recommendedWidth: number | null

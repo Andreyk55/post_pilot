@@ -484,59 +484,120 @@ public class MediaValidationGateTests : IDisposable
         Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.DurationTooShort);
     }
 
-    // ── FB story video: Meta minimum resolution (540x960) and frame rate ────────
+    // ── FB Story: NO dimension / aspect-ratio / FPS validation ──────────────────
+    // Facebook Story media is validated ONLY for type, size, decodability, duration, and codecs.
+    // Any shape or resolution is accepted. These pin that every former dimension / aspect / fps
+    // REJECTION now passes, while type/size/duration/codec rejections remain enforced.
 
-    [Fact]
-    public async Task Video_FacebookStory_BelowMinResolution_IsBlocked()
+    [Theory]
+    [InlineData(1920, 1080)] // landscape (was blocked: aspect 1.78 outside 0.50–0.75)
+    [InlineData(1080, 1080)] // square (was blocked: aspect 1.0)
+    [InlineData(480, 854)]   // below the old 540x960 minimum (was DimensionsTooSmall)
+    [InlineData(2160, 3840)] // above the old 1080x1920 maximum (was DimensionsTooLarge)
+    [InlineData(3000, 300)]  // extremely wide
+    public async Task Video_FacebookStory_AnyDimensionsOrAspect_IsAccepted(int width, int height)
     {
-        var path = SeedRawMedia("v-fb-story-small", "video/mp4", 5L * 1024 * 1024);
-        var gate = CreateGate(new() { ["v-fb-story-small"] = path }, FakeVideo(480, 854, 30)); // < 540x960
+        var key = $"v-fb-story-dims-{width}x{height}";
+        var path = SeedRawMedia(key, "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { [key] = path }, FakeVideo(width, height, 10));
 
         var result = await gate.ValidateAsync(Ws,
-            new[] { new MediaGateItem("v-fb-story-small", MediaType.Video, 0) }, new[] { FbStory });
+            new[] { new MediaGateItem(key, MediaType.Video, 0) }, new[] { FbStory });
 
-        Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.DimensionsTooSmall);
+        Assert.True(result.IsValid);
     }
 
-    [Fact]
-    public async Task Video_FacebookStory_LowFps_IsBlocked()
+    [Theory]
+    [InlineData(15)] // below the old 23 fps floor (was FpsTooLow)
+    [InlineData(90)] // above the old 60 fps ceiling (was FpsTooHigh)
+    public async Task Video_FacebookStory_AnyFrameRate_IsAccepted(double fps)
     {
-        var path = SeedRawMedia("v-fb-story-lowfps", "video/mp4", 5L * 1024 * 1024);
-        var gate = CreateGate(new() { ["v-fb-story-lowfps"] = path }, FakeVideo(1080, 1920, 30, fps: 15));
+        var key = $"v-fb-story-fps-{fps}";
+        var path = SeedRawMedia(key, "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { [key] = path }, FakeVideo(1080, 1920, 10, fps: fps));
 
         var result = await gate.ValidateAsync(Ws,
-            new[] { new MediaGateItem("v-fb-story-lowfps", MediaType.Video, 0) }, new[] { FbStory });
-
-        Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.FpsTooLow);
-    }
-
-    [Fact]
-    public async Task Video_FacebookStory_NtscFilmRate_Passes()
-    {
-        // Meta documents 24-60 fps; the rule floor is 23 so NTSC 23.976 footage (ffprobe
-        // reports 23.98) is not falsely rejected.
-        var path = SeedRawMedia("v-fb-story-ntsc", "video/mp4", 5L * 1024 * 1024);
-        var gate = CreateGate(new() { ["v-fb-story-ntsc"] = path }, FakeVideo(1080, 1920, 30, fps: 23.98));
-
-        var result = await gate.ValidateAsync(Ws,
-            new[] { new MediaGateItem("v-fb-story-ntsc", MediaType.Video, 0) }, new[] { FbStory });
+            new[] { new MediaGateItem(key, MediaType.Video, 0) }, new[] { FbStory });
 
         Assert.True(result.IsValid);
     }
 
     [Fact]
-    public async Task Video_FacebookStory_BadAspect_IsBlocked()
+    public async Task Video_FacebookStory_UnsupportedCodec_IsStillBlocked()
     {
-        var path = SeedRawMedia("v-fb-story-aspect", "video/mp4", 10L * 1024 * 1024);
-        var gate = CreateGate(new() { ["v-fb-story-aspect"] = path }, FakeVideo(1080, 1080, 10)); // 1:1
+        // Codec contract remains: ProRes is not h264/hevc → blocked even though dims are unchecked.
+        var path = SeedRawMedia("v-fb-story-prores", "video/quicktime", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-fb-story-prores"] = path },
+            FakeVideo(1080, 1920, 10, container: "mov", videoCodec: "prores", audioCodec: "aac"));
 
         var result = await gate.ValidateAsync(Ws,
-            new[] { new MediaGateItem("v-fb-story-aspect", MediaType.Video, 0) }, new[] { FbStory });
+            new[] { new MediaGateItem("v-fb-story-prores", MediaType.Video, 0) }, new[] { FbStory });
 
         Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.AspectRatioInvalid);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.UnsupportedVideoCodec);
+    }
+
+    [Fact]
+    public async Task Video_FacebookStory_UnsupportedAudio_IsStillBlocked()
+    {
+        var path = SeedRawMedia("v-fb-story-pcm", "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-fb-story-pcm"] = path },
+            FakeVideo(1080, 1920, 10, videoCodec: "h264", audioCodec: "pcm_s16le"));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-fb-story-pcm", MediaType.Video, 0) }, new[] { FbStory });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.UnsupportedAudioCodec);
+    }
+
+    [Fact]
+    public async Task Video_FacebookStory_Over200MB_IsStillBlocked()
+    {
+        // Size contract remains: one byte over the 200MB Story cap is blocked.
+        var path = SeedRawMedia("v-fb-story-big", "video/mp4", 200L * 1024 * 1024 + 1);
+        var gate = CreateGate(new() { ["v-fb-story-big"] = path }, FakeVideo(1080, 1920, 10));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-fb-story-big", MediaType.Video, 0) }, new[] { FbStory });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.FileTooLarge);
+    }
+
+    // ── FB Story IMAGE: any shape/size within the type + 10MB limit is accepted ──
+
+    [Theory]
+    [InlineData(1080, 1080)] // square (was blocked: aspect 1.0)
+    [InlineData(1920, 1080)] // landscape (was blocked)
+    [InlineData(3000, 300)]  // extremely wide
+    [InlineData(300, 3000)]  // extremely tall
+    [InlineData(100, 100)]   // below the old 320x320 minimum
+    [InlineData(4000, 6000)] // above the old 1080x1920 maximum
+    public async Task Image_FacebookStory_AnyDimensionsOrAspect_IsAccepted(int width, int height)
+    {
+        var key = $"i-fb-story-{width}x{height}";
+        var path = SeedMedia(key, "image/jpeg", "jpeg", width, height);
+        var gate = CreateGate(new() { [key] = path });
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem(key, MediaType.Image, 0) }, new[] { FbStory });
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task Image_FacebookStory_UnsupportedType_IsStillBlocked()
+    {
+        // Type contract remains: WebP is decoded as image/webp and rejected (JPG/PNG only).
+        var path = SeedMedia("i-fb-story-webp", "image/webp", "webp", 1080, 1920);
+        var gate = CreateGate(new() { ["i-fb-story-webp"] = path });
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("i-fb-story-webp", MediaType.Image, 0) }, new[] { FbStory });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.UnsupportedMimeType);
     }
 
     [Fact]

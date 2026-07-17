@@ -82,6 +82,57 @@ public class MediaValidationTests
         Assert.Equal(200L * 1024 * 1024, rules.MaxBytes);
     }
 
+    // Facebook Story has NO dimension, resolution, aspect-ratio, orientation, or frame-rate rules —
+    // only supported type, file size, duration (video), and codecs (video). These pin the
+    // simplified contract so a removed dimension/aspect/fps field can never silently return.
+    [Fact]
+    public void FacebookStoryImage_HasNoDimensionOrAspectRules()
+    {
+        var rules = MediaValidationRules.GetRules(Platform.Facebook, Placement.Story, MediaType.Image)!;
+
+        Assert.Null(rules.MinWidth);
+        Assert.Null(rules.MinHeight);
+        Assert.Null(rules.MaxWidth);
+        Assert.Null(rules.MaxHeight);
+        Assert.Null(rules.AspectRatioMin);
+        Assert.Null(rules.AspectRatioMax);
+        Assert.Null(rules.PreferredAspectRatio);
+        Assert.Null(rules.AspectRatioWarningTolerance);
+        Assert.Null(rules.QualityWarningMinWidth);
+        Assert.Null(rules.QualityWarningMinHeight);
+        Assert.Null(rules.RecommendedWidth);
+        Assert.Null(rules.RecommendedHeight);
+
+        // Kept: supported type + size cap.
+        Assert.Equal(new[] { "image/jpeg", "image/png" }, rules.AllowedMimeTypes);
+        Assert.Equal(10L * 1024 * 1024, rules.MaxBytes);
+    }
+
+    [Fact]
+    public void FacebookStoryVideo_HasNoDimensionAspectOrFpsRules_ButKeepsDurationAndCodecs()
+    {
+        var rules = MediaValidationRules.GetRules(Platform.Facebook, Placement.Story, MediaType.Video)!;
+
+        // Removed: dimensions, aspect ratio, preferred 9:16, and frame-rate bounds.
+        Assert.Null(rules.MinWidth);
+        Assert.Null(rules.MinHeight);
+        Assert.Null(rules.MaxWidth);
+        Assert.Null(rules.MaxHeight);
+        Assert.Null(rules.AspectRatioMin);
+        Assert.Null(rules.AspectRatioMax);
+        Assert.Null(rules.PreferredAspectRatio);
+        Assert.Null(rules.MinFps);
+        Assert.Null(rules.MaxFps);
+        Assert.Null(rules.RecommendedWidth);
+        Assert.Null(rules.RecommendedHeight);
+
+        // Kept: supported duration range + codecs (the decode/encode contract).
+        Assert.Equal(3, rules.DurationMinSeconds);
+        Assert.Equal(60, rules.DurationMaxSeconds);
+        Assert.Equal(new[] { "h264", "hevc" }, rules.AllowedVideoCodecs);
+        Assert.Equal(new[] { "aac" }, rules.AllowedAudioCodecs);
+    }
+
     // Story placements keep the Meta 3-60s window and their own size caps — pinned so
     // Feed-limit changes can never silently leak into the Story rules.
     [Theory]
@@ -587,6 +638,51 @@ public class MediaValidationServiceImageBehaviorTests
             Assert.Contains(result.Errors, e =>
                 e.Code == MediaValidationErrorCodes.AspectRatioInvalid
                 && e.Message == "Story media should be vertical 9:16.");
+        }
+        finally { File.Delete(path); }
+    }
+
+    // ── Facebook Story: no dimension/aspect validation (contrast with IG Story above) ──
+
+    [Theory]
+    [InlineData(1080, 1080)] // square — IG Story blocks this; FB Story must accept it
+    [InlineData(1920, 1080)] // landscape
+    [InlineData(3000, 300)]  // extremely wide
+    [InlineData(100, 100)]   // below the old 320x320 minimum
+    [InlineData(4000, 6000)] // above the old 1080x1920 maximum
+    public async Task FacebookStory_ImageAnyShapeOrSize_IsValid_NoDimensionOrAspectError(int width, int height)
+    {
+        var svc = CreateService();
+        var path = WriteTempImage("jpeg", width, height);
+        try
+        {
+            var size = new FileInfo(path).Length;
+            var result = await svc.ValidateFileAsync(
+                path, "image/jpeg", size, MediaType.Image, Platform.Facebook, Placement.Story);
+
+            Assert.Equal(ValidationStatus.Valid, result.Status);
+            Assert.Empty(result.Errors);
+            // No dimension or aspect warnings either — the rule defines none for FB Story.
+            Assert.Empty(result.Warnings);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task FacebookStory_Image_Over10MB_IsRejected()
+    {
+        // FB Story keeps the 10MB image size cap even though dimensions/aspect are unvalidated.
+        var svc = CreateService();
+        var path = WriteTempImage("jpeg", 1080, 1080); // shape is irrelevant for FB Story
+        try
+        {
+            var result = await svc.ValidateFileAsync(
+                path, "image/jpeg", 10L * 1024 * 1024 + 1, MediaType.Image, Platform.Facebook, Placement.Story);
+
+            Assert.Equal(ValidationStatus.Invalid, result.Status);
+            Assert.Contains(result.Errors, e =>
+                e.Code == MediaValidationErrorCodes.FileTooLarge
+                && e.Message == "This image is too large. Facebook images can be up to 10MB. Large phone photos may need to be resized before upload.");
         }
         finally { File.Delete(path); }
     }

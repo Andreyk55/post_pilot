@@ -107,12 +107,14 @@ public static class MediaValidationWarningCodes
 public record MediaValidationRuleDto(
     string[] AllowedMimeTypes,
     long MaxBytes,
-    int MinWidth,
-    int MinHeight,
-    int MaxWidth,
-    int MaxHeight,
-    double AspectRatioMin,
-    double AspectRatioMax,
+    // Dimension/aspect fields are nullable: a null value means the rule has no such constraint
+    // (e.g. Facebook Story has no dimension or aspect-ratio validation at all).
+    int? MinWidth,
+    int? MinHeight,
+    int? MaxWidth,
+    int? MaxHeight,
+    double? AspectRatioMin,
+    double? AspectRatioMax,
     double? DurationMinSeconds,
     double? DurationMaxSeconds,
     int? RecommendedWidth,

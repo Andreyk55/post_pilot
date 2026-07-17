@@ -54,17 +54,20 @@ export interface MediaValidationResult {
   metadata: ExtractedMediaMetadata | null
 }
 
-/** Client-side validation rule (subset of backend rules) */
+/** Client-side validation rule (subset of backend rules).
+ * Dimension/aspect fields are OPTIONAL: when omitted, the rule has no such constraint and the
+ * client pre-checks skip it entirely (e.g. Facebook Story has no dimension or aspect-ratio
+ * validation at all). Mirrors the nullable fields on the backend MediaValidationRule. */
 export interface ClientMediaValidationRule {
   allowedMimeTypes: string[]
   maxBytes: number
-  minWidth: number
-  minHeight: number
-  maxWidth: number
-  maxHeight: number
+  minWidth?: number
+  minHeight?: number
+  maxWidth?: number
+  maxHeight?: number
   maxWidthIsAdvisory?: boolean
-  aspectRatioMin: number
-  aspectRatioMax: number
+  aspectRatioMin?: number
+  aspectRatioMax?: number
   preferredAspectRatio?: number
   aspectRatioWarningTolerance?: number
   durationMinSeconds?: number
@@ -105,33 +108,23 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
     durationMaxSeconds: 180, // product/MVP cap, NOT Meta's maximum
   },
 
-  // Facebook Story Image
+  // Facebook Story Image — only supported type + file-size limit are validated. Facebook
+  // Stories have NO dimension, resolution, orientation, or aspect-ratio requirements: a square,
+  // landscape, tiny, huge, wide, or tall image passes as long as it is a valid JPG/PNG within the
+  // size cap. (Deliberately no min/max width/height, no aspect range, no preferred 9:16.)
   'facebook:story:image': {
     allowedMimeTypes: ['image/jpeg', 'image/png'],
-    maxBytes: 10 * 1024 * 1024, // 10MB — MVP-supported limit
-    minWidth: 320,
-    minHeight: 320,
-    maxWidth: 1080,
-    maxHeight: 1920,
-    aspectRatioMin: 0.5,
-    aspectRatioMax: 0.75,
-    preferredAspectRatio: 0.5625,
-    aspectRatioWarningTolerance: 0.02,
+    maxBytes: 10 * 1024 * 1024, // 10MB — unchanged Facebook Story image cap
   },
 
-  // Facebook Story Video
+  // Facebook Story Video — only supported type/container, file size, and duration are pre-checked
+  // client-side (codecs are validated server-side). NO dimension, resolution, orientation,
+  // aspect-ratio, or frame-rate requirements: any square/landscape/portrait/unusually sized video
+  // passes as long as container, file size, duration, and codecs are supported.
   'facebook:story:video': {
     allowedMimeTypes: ['video/mp4', 'video/quicktime'],
-    maxBytes: 200 * 1024 * 1024, // 200MB — product/MVP upload cap
-    minWidth: 540, // Meta/platform minimum (540x960)
-    minHeight: 960,
-    maxWidth: 1080,
-    maxHeight: 1920,
-    aspectRatioMin: 0.5,
-    aspectRatioMax: 0.75,
-    preferredAspectRatio: 0.5625,
-    aspectRatioWarningTolerance: 0.02,
-    durationMinSeconds: 3, // Meta/platform limit: story videos are 3-60 seconds
+    maxBytes: 200 * 1024 * 1024, // 200MB — unchanged Facebook Story video cap
+    durationMinSeconds: 3, // unchanged supported duration range: story videos are 3-60 seconds
     durationMaxSeconds: 60,
   },
 
@@ -319,22 +312,27 @@ export function preValidateImageDimensions(
 
   if (!rule) return []
 
+  // Each check is skipped when the rule omits that bound, so a rule with no dimension/aspect
+  // constraints (e.g. Facebook Story) produces no dimension or aspect error.
+
   // Check minimum dimensions
-  if (width < rule.minWidth || height < rule.minHeight) {
+  if (rule.minWidth != null && rule.minHeight != null && (width < rule.minWidth || height < rule.minHeight)) {
     errors.push(`Image dimensions (${width}x${height}) are too small. Minimum: ${rule.minWidth}x${rule.minHeight}`)
   }
 
   // Check maximum dimensions
-  if (!rule.maxWidthIsAdvisory && (width > rule.maxWidth || height > rule.maxHeight)) {
+  if (!rule.maxWidthIsAdvisory && rule.maxWidth != null && rule.maxHeight != null && (width > rule.maxWidth || height > rule.maxHeight)) {
     errors.push(`Image dimensions (${width}x${height}) are too large. Maximum: ${rule.maxWidth}x${rule.maxHeight}`)
   }
 
   // Check aspect ratio
-  const aspectRatio = width / height
-  if (aspectRatio < rule.aspectRatioMin || aspectRatio > rule.aspectRatioMax) {
-    errors.push(
-      `Aspect ratio (${aspectRatio.toFixed(2)}) is outside allowed range (${rule.aspectRatioMin.toFixed(2)} to ${rule.aspectRatioMax.toFixed(2)})`
-    )
+  if (rule.aspectRatioMin != null && rule.aspectRatioMax != null) {
+    const aspectRatio = width / height
+    if (aspectRatio < rule.aspectRatioMin || aspectRatio > rule.aspectRatioMax) {
+      errors.push(
+        `Aspect ratio (${aspectRatio.toFixed(2)}) is outside allowed range (${rule.aspectRatioMin.toFixed(2)} to ${rule.aspectRatioMax.toFixed(2)})`
+      )
+    }
   }
 
   return errors

@@ -279,13 +279,15 @@ public class MediaValidationService : IMediaValidationService
         if (metadata == null)
             return;
 
-        // 3. Validate dimensions
+        // 3. Validate dimensions. Each bound is optional: a null Min/Max is skipped, so a rule
+        // with no dimension constraints (e.g. Facebook Story) never produces a dimensions error.
         if (metadata.Width.HasValue && metadata.Height.HasValue)
         {
             var width = metadata.Width.Value;
             var height = metadata.Height.Value;
 
-            var dimensionsTooSmall = width < rules.MinWidth || height < rules.MinHeight;
+            var dimensionsTooSmall = (rules.MinWidth.HasValue && width < rules.MinWidth.Value)
+                || (rules.MinHeight.HasValue && height < rules.MinHeight.Value);
             if (dimensionsTooSmall)
             {
                 errors.Add(new MediaValidationError(
@@ -298,7 +300,7 @@ public class MediaValidationService : IMediaValidationService
 
             if (rules.MaxWidthIsAdvisory)
             {
-                if (width > rules.MaxWidth)
+                if (rules.MaxWidth.HasValue && width > rules.MaxWidth.Value)
                 {
                     warnings.Add(new MediaValidationWarning(
                         MediaValidationWarningCodes.DimensionsAboveMaxWillDownscale,
@@ -307,7 +309,8 @@ public class MediaValidationService : IMediaValidationService
                         "Media is publishable."));
                 }
             }
-            else if (width > rules.MaxWidth || height > rules.MaxHeight)
+            else if ((rules.MaxWidth.HasValue && width > rules.MaxWidth.Value)
+                || (rules.MaxHeight.HasValue && height > rules.MaxHeight.Value))
             {
                 errors.Add(new MediaValidationError(
                     MediaValidationErrorCodes.DimensionsTooLarge,
@@ -330,15 +333,17 @@ public class MediaValidationService : IMediaValidationService
             }
         }
 
-        // 4. Validate aspect ratio
-        if (metadata.AspectRatio.HasValue)
+        // 4. Validate aspect ratio. Only when the rule defines a range: a null Min/Max skips both
+        // the hard range check AND the preferred-ratio warning, so a rule with no aspect-ratio
+        // requirement (e.g. Facebook Story) produces no aspect error or warning.
+        if (metadata.AspectRatio.HasValue && rules.AspectRatioMin.HasValue && rules.AspectRatioMax.HasValue)
         {
             var aspectRatio = metadata.AspectRatio.Value;
 
             var hasPreferredAspectRatio = rules.PreferredAspectRatio.HasValue
                 && rules.AspectRatioWarningTolerance.HasValue;
 
-            if (aspectRatio < rules.AspectRatioMin || aspectRatio > rules.AspectRatioMax)
+            if (aspectRatio < rules.AspectRatioMin.Value || aspectRatio > rules.AspectRatioMax.Value)
             {
                 // Story rules carry a preferred ratio and keep the recognizable 9:16 copy;
                 // feed rules name the platform and the friendly ratio bounds (e.g.
@@ -349,10 +354,10 @@ public class MediaValidationService : IMediaValidationService
                     "aspectRatio",
                     hasPreferredAspectRatio
                         ? "Story media should be vertical 9:16."
-                        : $"{platform} {placement} {mediaNoun} must use an aspect ratio between {FormatRatio(rules.AspectRatioMin)} and {FormatRatio(rules.AspectRatioMax)}.",
+                        : $"{platform} {placement} {mediaNoun} must use an aspect ratio between {FormatRatio(rules.AspectRatioMin.Value)} and {FormatRatio(rules.AspectRatioMax.Value)}.",
                     hasPreferredAspectRatio
                         ? "9:16"
-                        : $"{FormatRatio(rules.AspectRatioMin)} to {FormatRatio(rules.AspectRatioMax)}",
+                        : $"{FormatRatio(rules.AspectRatioMin.Value)} to {FormatRatio(rules.AspectRatioMax.Value)}",
                     $"{aspectRatio:F2}"));
             }
             else if (hasPreferredAspectRatio

@@ -114,10 +114,15 @@ describe('resolveClientDimensionError — Story 9:16 and friends', () => {
     )
   })
 
-  it('uses the same Story message for Facebook (FB and IG aligned)', () => {
-    expect(resolveClientDimensionError(1080, 1080, 'facebook', 'Story')).toBe(
-      'Story media should be vertical 9:16.',
-    )
+  it('does NOT flag any Facebook Story image shape (no dimension or aspect validation)', () => {
+    // FB Story has no dimension/aspect rules: square, landscape, wide, tall, tiny, and huge
+    // images all pass client-side (contrast with Instagram Story, which requires ~9:16 above).
+    expect(resolveClientDimensionError(1080, 1080, 'facebook', 'Story')).toBeNull() // square
+    expect(resolveClientDimensionError(1920, 1080, 'facebook', 'Story')).toBeNull() // landscape
+    expect(resolveClientDimensionError(3000, 300, 'facebook', 'Story')).toBeNull()  // extremely wide
+    expect(resolveClientDimensionError(300, 3000, 'facebook', 'Story')).toBeNull()  // extremely tall
+    expect(resolveClientDimensionError(100, 100, 'facebook', 'Story')).toBeNull()   // below old 320x320
+    expect(resolveClientDimensionError(4000, 6000, 'facebook', 'Story')).toBeNull() // above old 1080x1920
   })
 
   it('reports too-small images with the minimum size', () => {
@@ -152,12 +157,14 @@ describe('resolveClientDimensionError — Story 9:16 and friends', () => {
     expect(resolveClientDimensionError(500, 500, 'instagram', 'Feed')).toBeNull()
   })
 
-  it('lets slightly off-ratio Story images upload so the server can warn', () => {
+  it('lets slightly off-ratio Instagram Story images upload so the server can warn', () => {
+    // Instagram Story still validates aspect (server warns near-9:16); Facebook Story has no
+    // aspect check at all — its any-shape acceptance is covered by the dedicated test above.
     expect(resolveClientDimensionError(1080, 1800, 'instagram', 'Story')).toBeNull()
-    expect(resolveClientDimensionError(1080, 1800, 'facebook', 'Story')).toBeNull()
   })
 
   it('passes a correctly-sized vertical Story image (null)', () => {
     expect(resolveClientDimensionError(1080, 1920, 'instagram', 'Story')).toBeNull()
+    expect(resolveClientDimensionError(1080, 1920, 'facebook', 'Story')).toBeNull()
   })
 })

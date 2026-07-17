@@ -81,29 +81,27 @@ public static class MediaValidationRules
         // FACEBOOK PAGE - STORY
         // ============================================
         // Facebook Story Image Rules
-        // Source: https://developers.facebook.com/docs/graph-api/reference/page/photo_stories/
+        // Facebook Story images are validated ONLY for supported type + file size. Facebook
+        // Stories have NO dimension, resolution, orientation, or aspect-ratio requirements in
+        // this product: a square, landscape, tiny, huge, wide, or tall image is accepted as long
+        // as it is a valid JPG/PNG within the size cap. Deliberately NO Min/Max width/height, no
+        // aspect-ratio range, no preferred 9:16, no quality warning, no recommended dimensions.
         [(Platform.Facebook, Placement.Story, MediaType.Image)] = new MediaValidationRule
         {
             // Final product policy: JPG/JPEG + PNG only.
             AllowedMimeTypes = ["image/jpeg", "image/png"],
-            MaxBytes = 10L * 1024 * 1024, // 10MB — MVP-supported limit, aligned with the current Facebook photo cap
-            MinWidth = 320,
-            MinHeight = 320,
-            MaxWidth = 1080,
-            MaxHeight = 1920,
-            AspectRatioMin = 0.50, // block only clearly non-story-like media
-            AspectRatioMax = 0.75,
-            PreferredAspectRatio = 0.5625, // 9:16
-            AspectRatioWarningTolerance = 0.02,
-            QualityWarningMinWidth = 600,
-            QualityWarningMinHeight = 600,
-            RecommendedWidth = 1080,
-            RecommendedHeight = 1920,
+            MaxBytes = 10L * 1024 * 1024, // 10MB — unchanged Facebook Story image cap
         },
 
         // Facebook Story Video Rules
-        // Source: https://developers.facebook.com/docs/page-stories-api (Meta: 9:16, min 540x960,
-        // 24-60 fps, 3-60 seconds).
+        // Facebook Story videos are validated ONLY for container/type, file size, duration, and
+        // codecs. NO dimension, resolution, orientation, aspect-ratio, or frame-rate requirements:
+        // a square, landscape, portrait, wide, or unusually sized video is accepted as long as the
+        // container, file size, duration, and codecs are supported. FPS is intentionally NOT
+        // validated — its former 23–60 bound came from the same Meta doc line as the 9:16 /
+        // 540x960 recommendations being removed, and FB Feed video enforces no minimum FPS either,
+        // so FPS is not part of the product's decode/encode contract (that contract is container +
+        // codecs). Container/codec/duration/size still fully enforced below.
         [(Platform.Facebook, Placement.Story, MediaType.Video)] = new MediaValidationRule
         {
             // Final product policy: MP4 + MOV only (MOV for iPhone compatibility).
@@ -111,23 +109,9 @@ public static class MediaValidationRules
             AllowedContainers = ["mp4", "mov"],
             AllowedVideoCodecs = ["h264", "hevc"],
             AllowedAudioCodecs = ["aac"],
-            MaxBytes = 200L * 1024 * 1024, // 200MB — product/MVP upload cap
-            MinWidth = 540, // Meta/platform minimum (540x960)
-            MinHeight = 960,
-            MaxWidth = 1080,
-            MaxHeight = 1920,
-            AspectRatioMin = 0.50,
-            AspectRatioMax = 0.75,
-            PreferredAspectRatio = 0.5625, // 9:16
-            AspectRatioWarningTolerance = 0.02,
-            DurationMinSeconds = 3, // Meta/platform limit: story videos are 3-60 seconds
+            MaxBytes = 200L * 1024 * 1024, // 200MB — unchanged Facebook Story video cap
+            DurationMinSeconds = 3, // unchanged supported duration range: story videos are 3-60 seconds
             DurationMaxSeconds = 60,
-            // Meta documents 24-60 fps; 23 tolerates NTSC 23.976 footage (ffprobe reports 23.98),
-            // matching the Instagram video rules below.
-            MinFps = 23,
-            MaxFps = 60,
-            RecommendedWidth = 1080,
-            RecommendedHeight = 1920,
         },
 
         // ============================================
@@ -321,11 +305,14 @@ public class MediaValidationRule
     // Size constraints
     public long MaxBytes { get; init; }
 
-    // Dimension constraints
-    public int MinWidth { get; init; }
-    public int MinHeight { get; init; }
-    public int MaxWidth { get; init; }
-    public int MaxHeight { get; init; }
+    // Dimension constraints. Null means "no dimension rule for this combination": the engine
+    // skips the corresponding min/max check entirely (e.g. Facebook Story media, which has no
+    // dimension, resolution, or orientation requirements). Non-null values are enforced as hard
+    // limits (unless MaxWidthIsAdvisory downgrades the max to a warning).
+    public int? MinWidth { get; init; }
+    public int? MinHeight { get; init; }
+    public int? MaxWidth { get; init; }
+    public int? MaxHeight { get; init; }
 
     /// <summary>
     /// When true, exceeding <see cref="MaxWidth"/> produces a WARNING instead of a
@@ -335,9 +322,11 @@ public class MediaValidationRule
     /// </summary>
     public bool MaxWidthIsAdvisory { get; init; }
 
-    // Aspect ratio constraints (width / height)
-    public double AspectRatioMin { get; init; }
-    public double AspectRatioMax { get; init; }
+    // Aspect ratio constraints (width / height). Null Min/Max means "no aspect-ratio rule": the
+    // engine skips the range check AND any preferred-ratio warning (e.g. Facebook Story media,
+    // which has no aspect-ratio requirement).
+    public double? AspectRatioMin { get; init; }
+    public double? AspectRatioMax { get; init; }
     public double? PreferredAspectRatio { get; init; }
     public double? AspectRatioWarningTolerance { get; init; }
 
