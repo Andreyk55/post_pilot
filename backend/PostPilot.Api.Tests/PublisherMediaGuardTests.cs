@@ -177,6 +177,18 @@ public class PublisherMediaGuardTests : IDisposable
             BuildPublishingOptions(),
             gate);
 
+    private InstagramStoryPublisher BuildIgStoryPublisher(IMediaService mediaService, IMediaValidationGate gate, ILogger<InstagramStoryPublisher>? logger = null)
+        => new(
+            _db,
+            Mock.Of<IPostScheduler>(),
+            mediaService,
+            ThrowingHttpClient(),
+            logger ?? NullLogger<InstagramStoryPublisher>.Instance,
+            BuildProviderConnections(),
+            new MetaApiOptions(),
+            BuildPublishingOptions(),
+            gate);
+
     private FacebookPagePublisher BuildFbPublisher(
         IMediaService mediaService,
         IMediaValidationGate gate,
@@ -216,6 +228,28 @@ public class PublisherMediaGuardTests : IDisposable
             WorkspaceId = Ws,
             Content = "caption",
             Platform = Platform.Instagram,
+            MediaType = mediaType,
+            MediaUrl = storageKey,
+            TargetInstagramAccountId = ig.Id,
+            Status = PostStatus.Scheduled,
+            ScheduledAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+        _db.Posts.Add(post);
+        _db.SaveChanges();
+        return post;
+    }
+
+    private Post SeedIgStoryPost(string storageKey, ConnectedInstagramAccount ig, MediaType mediaType = MediaType.Video)
+    {
+        var post = new Post
+        {
+            Id = Guid.NewGuid(),
+            WorkspaceId = Ws,
+            Content = string.Empty,
+            Platform = Platform.Instagram,
+            PostType = PostType.Story,
             MediaType = mediaType,
             MediaUrl = storageKey,
             TargetInstagramAccountId = ig.Id,
@@ -294,6 +328,23 @@ public class PublisherMediaGuardTests : IDisposable
     }
 
     [Fact]
+    public async Task InstagramPublisher_RefusesVideoOneByteOver50MB_BeforeCallingMeta()
+    {
+        var (_, _, ig) = SeedIgTarget();
+        var key = SeedVideoMedia("ig-vid-over-50", "video/mp4", 52_428_801L);
+        var post = SeedIgImagePost(key, ig, MediaType.Video);
+
+        var mediaService = BuildMediaService();
+        var publisher = BuildIgPublisher(mediaService, BuildGate(mediaService, FakeVideo(1080, 1080, 30)));
+
+        var guardError = await publisher.GuardMediaAsync(post, Placement.Feed, CancellationToken.None);
+
+        Assert.NotNull(guardError);
+        Assert.Contains("50MB", guardError);
+        Assert.DoesNotContain("100MB", guardError);
+    }
+
+    [Fact]
     public async Task InstagramPublisher_AllowsValidVideo_PastGuard()
     {
         var (_, _, ig) = SeedIgTarget();
@@ -305,6 +356,53 @@ public class PublisherMediaGuardTests : IDisposable
             BuildGate(mediaService, FakeVideo(1080, 1080, 10, container: "mov", videoCodec: "h264", audioCodec: "aac")));
 
         var guardError = await publisher.GuardMediaAsync(post, Placement.Feed, CancellationToken.None);
+
+        Assert.Null(guardError);
+    }
+
+    [Fact]
+    public async Task InstagramPublisher_AllowsVideoExactly50MB_PastGuard()
+    {
+        var (_, _, ig) = SeedIgTarget();
+        var key = SeedVideoMedia("ig-vid-at-50", "video/mp4", 52_428_800L);
+        var post = SeedIgImagePost(key, ig, MediaType.Video);
+
+        var mediaService = BuildMediaService();
+        var publisher = BuildIgPublisher(mediaService, BuildGate(mediaService, FakeVideo(1080, 1080, 30)));
+
+        var guardError = await publisher.GuardMediaAsync(post, Placement.Feed, CancellationToken.None);
+
+        Assert.Null(guardError);
+    }
+
+    [Fact]
+    public async Task InstagramStoryPublisher_RefusesVideoOneByteOver50MB_BeforeCallingMeta()
+    {
+        var (_, _, ig) = SeedIgTarget();
+        var key = SeedVideoMedia("ig-story-over-50", "video/mp4", 52_428_801L);
+        var post = SeedIgStoryPost(key, ig);
+
+        var mediaService = BuildMediaService();
+        var publisher = BuildIgStoryPublisher(mediaService, BuildGate(mediaService, FakeVideo(720, 1280, 30)));
+
+        var guardError = await publisher.GuardStoryPreflightAsync(post, CancellationToken.None);
+
+        Assert.NotNull(guardError);
+        Assert.Contains("50MB", guardError);
+        Assert.DoesNotContain("100MB", guardError);
+    }
+
+    [Fact]
+    public async Task InstagramStoryPublisher_AllowsVideoExactly50MB_PastGuard()
+    {
+        var (_, _, ig) = SeedIgTarget();
+        var key = SeedVideoMedia("ig-story-at-50", "video/mp4", 52_428_800L);
+        var post = SeedIgStoryPost(key, ig);
+
+        var mediaService = BuildMediaService();
+        var publisher = BuildIgStoryPublisher(mediaService, BuildGate(mediaService, FakeVideo(720, 1280, 30)));
+
+        var guardError = await publisher.GuardStoryPreflightAsync(post, CancellationToken.None);
 
         Assert.Null(guardError);
     }

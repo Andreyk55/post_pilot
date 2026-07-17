@@ -145,7 +145,7 @@ public static class MediaValidationRules
             AllowedContainers = ["mp4", "mov"],
             AllowedVideoCodecs = ["h264", "hevc"],
             AllowedAudioCodecs = ["aac"],
-            MaxBytes = 100L * 1024 * 1024, // 100MB — product/MVP cap (Meta allows more for Reels)
+            MaxBytes = 50L * 1024 * 1024, // 50MB — product cap for Instagram Feed video (published by Meta as a Reel)
             MinWidth = 500,
             MinHeight = 500,
             MaxWidth = 1920,
@@ -194,7 +194,7 @@ public static class MediaValidationRules
             AllowedContainers = ["mp4", "mov"],
             AllowedVideoCodecs = ["h264", "hevc"],
             AllowedAudioCodecs = ["aac"],
-            MaxBytes = 100L * 1024 * 1024, // 100MB — Instagram platform limit for story videos
+            MaxBytes = 50L * 1024 * 1024, // 50MB — product cap for Instagram Story video
             MinWidth = 320,
             MinHeight = 320,
             MaxWidth = 1080,

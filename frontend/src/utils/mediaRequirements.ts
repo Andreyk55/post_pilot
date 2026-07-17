@@ -56,11 +56,11 @@ export function getMediaRequirementHint(
   const videoMinSeconds = videoRule?.durationMinSeconds ?? DEFAULT_VIDEO_MIN_SECONDS
   const videoMaxSeconds = videoRule?.durationMaxSeconds ?? DEFAULT_VIDEO_MAX_SECONDS
 
-  // Facebook (both Feed and Story) is the only platform whose hint names the video size cap
-  // (Feed 50 MB, Story 50 MB — each mirrored from the rule table). Instagram placements —
-  // and the no-platform fallback — keep their existing duration-only video wording.
-  const isFacebook = String(platform ?? '').toLowerCase() === 'facebook'
-  const videoSizePrefix = isFacebook && videoRule
+  // Facebook and Instagram are the user-facing upload platforms whose hints name the video
+  // size cap. The no-platform fallback keeps duration-only wording until a destination exists.
+  const platformKey = String(platform ?? '').toLowerCase()
+  const shouldShowVideoSize = platformKey === 'facebook' || platformKey === 'instagram'
+  const videoSizePrefix = shouldShowVideoSize && videoRule
     ? `≤${Math.round(videoRule.maxBytes / (1024 * 1024))} MB, `
     : ''
 
@@ -89,7 +89,7 @@ function formatTypeList(mimeTypes: string[]): string {
   return `${labels.slice(0, -1).join(', ')} or ${labels[labels.length - 1]}`
 }
 
-/** "8MB", "100MB", "1GB" — whole GB when evenly divisible, else MB. */
+/** "8MB", "50MB", "1GB" — whole GB when evenly divisible, else MB. */
 function formatSizeLimit(maxBytes: number): string {
   const mb = maxBytes / (1024 * 1024)
   if (mb >= 1024 && Number.isInteger(mb / 1024)) return `${mb / 1024}GB`

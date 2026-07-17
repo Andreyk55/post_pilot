@@ -19,13 +19,15 @@ describe('client rule table mirrors the backend MVP limits', () => {
     expect(getClientValidationRule('instagram', 'Story', 'Image')?.maxBytes).toBe(8 * 1024 * 1024)
   })
 
-  it('video size caps: Facebook Feed + Story both 50MB (52,428,800 bytes); Instagram unchanged at 100MB', () => {
+  it('video size caps: Facebook and Instagram Feed + Story are all 50MB (52,428,800 bytes)', () => {
     expect(getClientValidationRule('facebook', 'Feed', 'Video')?.maxBytes).toBe(50 * 1024 * 1024)
     expect(getClientValidationRule('facebook', 'Feed', 'Video')?.maxBytes).toBe(52_428_800)
     expect(getClientValidationRule('facebook', 'Story', 'Video')?.maxBytes).toBe(50 * 1024 * 1024)
     expect(getClientValidationRule('facebook', 'Story', 'Video')?.maxBytes).toBe(52_428_800)
-    expect(getClientValidationRule('instagram', 'Feed', 'Video')?.maxBytes).toBe(100 * 1024 * 1024)
-    expect(getClientValidationRule('instagram', 'Story', 'Video')?.maxBytes).toBe(100 * 1024 * 1024)
+    expect(getClientValidationRule('instagram', 'Feed', 'Video')?.maxBytes).toBe(50 * 1024 * 1024)
+    expect(getClientValidationRule('instagram', 'Feed', 'Video')?.maxBytes).toBe(52_428_800)
+    expect(getClientValidationRule('instagram', 'Story', 'Video')?.maxBytes).toBe(50 * 1024 * 1024)
+    expect(getClientValidationRule('instagram', 'Story', 'Video')?.maxBytes).toBe(52_428_800)
   })
 
   it('feed videos are 3–180 seconds (product/MVP cap) on both platforms', () => {
@@ -119,10 +121,16 @@ describe('pre-validation behavior at the new limits', () => {
     expect(preValidateFile(file('a.mp4', 'video/mp4', 52_428_801), 'facebook', 'Story')).toHaveLength(1)
   })
 
-  it('keeps Instagram video selection caps unchanged by the Facebook Story change', () => {
-    // Instagram Feed still rejects above 100MB; Instagram Story still rejects above 100MB.
-    expect(preValidateFile(file('a.mp4', 'video/mp4', 101 * 1024 * 1024), 'instagram', 'Feed')).toHaveLength(1)
-    expect(preValidateFile(file('a.mp4', 'video/mp4', 101 * 1024 * 1024), 'instagram', 'Story')).toHaveLength(1)
+  it('treats the Instagram Feed 50MB video cap as inclusive (File.size vs 52,428,800)', () => {
+    expect(preValidateFile(file('a.mp4', 'video/mp4', 52_428_800), 'instagram', 'Feed')).toEqual([])
+    expect(preValidateFile(file('a.mp4', 'video/mp4', 52_428_801), 'instagram', 'Feed')).toHaveLength(1)
+    expect(preValidateFile(file('a.mp4', 'video/mp4', 52_428_801), 'instagram', 'Feed')[0]).toContain('50.0MB')
+  })
+
+  it('treats the Instagram Story 50MB video cap as inclusive (File.size vs 52,428,800)', () => {
+    expect(preValidateFile(file('a.mp4', 'video/mp4', 52_428_800), 'instagram', 'Story')).toEqual([])
+    expect(preValidateFile(file('a.mp4', 'video/mp4', 52_428_801), 'instagram', 'Story')).toHaveLength(1)
+    expect(preValidateFile(file('a.mp4', 'video/mp4', 52_428_801), 'instagram', 'Story')[0]).toContain('50.0MB')
   })
 
   it('rejects an Instagram image over 8MB', () => {

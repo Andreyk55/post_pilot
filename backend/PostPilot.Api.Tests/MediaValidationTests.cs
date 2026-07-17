@@ -164,16 +164,18 @@ public class MediaValidationTests
         Assert.Equal(8L * 1024 * 1024, MediaValidationRules.GetRules(Platform.Instagram, Placement.Story, MediaType.Image)!.MaxBytes);
     }
 
-    // Facebook Feed and Story videos are both 50MB; Instagram Feed (published as Reel) and
-    // Story stay at their unchanged 100MB cap. Pinned so a Facebook change can never leak
-    // into the Instagram video rules (and vice-versa).
+    // Facebook and Instagram Feed/Story videos are all capped at the 50MB product limit.
+    // Instagram Feed is still the user-facing Feed path even though Meta publishes the
+    // single-video container as a Reel.
     [Fact]
-    public void VideoSizeCaps_FacebookIs50MB_InstagramUnchangedAt100MB()
+    public void VideoSizeCaps_FacebookAndInstagramAre50MB()
     {
         Assert.Equal(50L * 1024 * 1024, MediaValidationRules.GetRules(Platform.Facebook, Placement.Feed, MediaType.Video)!.MaxBytes);
         Assert.Equal(50L * 1024 * 1024, MediaValidationRules.GetRules(Platform.Facebook, Placement.Story, MediaType.Video)!.MaxBytes);
-        Assert.Equal(100L * 1024 * 1024, MediaValidationRules.GetRules(Platform.Instagram, Placement.Feed, MediaType.Video)!.MaxBytes);
-        Assert.Equal(100L * 1024 * 1024, MediaValidationRules.GetRules(Platform.Instagram, Placement.Story, MediaType.Video)!.MaxBytes);
+        Assert.Equal(50L * 1024 * 1024, MediaValidationRules.GetRules(Platform.Instagram, Placement.Feed, MediaType.Video)!.MaxBytes);
+        Assert.Equal(50L * 1024 * 1024, MediaValidationRules.GetRules(Platform.Instagram, Placement.Story, MediaType.Video)!.MaxBytes);
+        Assert.Equal(52_428_800L, MediaValidationRules.GetRules(Platform.Instagram, Placement.Feed, MediaType.Video)!.MaxBytes);
+        Assert.Equal(52_428_800L, MediaValidationRules.GetRules(Platform.Instagram, Placement.Story, MediaType.Video)!.MaxBytes);
     }
 
     [Fact]

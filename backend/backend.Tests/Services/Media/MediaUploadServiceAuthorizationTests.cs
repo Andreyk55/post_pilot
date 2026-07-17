@@ -46,7 +46,7 @@ public class MediaUploadServiceAuthorizationTests
         logger: NullLogger<MediaService>.Instance,
         uploadUrlExpiration: TimeSpan.FromMinutes(15),
         maxImageFileSizeBytes: 20 * 1024 * 1024,
-        maxVideoFileSizeBytes: 200 * 1024 * 1024,
+        maxVideoFileSizeBytes: 50 * 1024 * 1024,
         defaultPublishingUrlExpiration: TimeSpan.FromHours(1));
 
     [Fact]
@@ -106,6 +106,68 @@ public class MediaUploadServiceAuthorizationTests
                 contentType: "image/png",
                 sizeBytes: 2048,
                 platform: Platform.Facebook));
+    }
+
+    [Fact]
+    public async Task InitAsync_VideoExactly50MB_IsAccepted()
+    {
+        var db = NewDb();
+        var storage = new RecordingStorage();
+        var media = NewMediaService(storage);
+        var svc = new MediaUploadService(db, media, Opts(), NullLogger<MediaUploadService>.Instance);
+
+        var result = await svc.InitAsync(
+            userId: Guid.NewGuid(),
+            workspaceId: Guid.NewGuid(),
+            fileName: "clip.mp4",
+            contentType: "video/mp4",
+            sizeBytes: 52_428_800L,
+            platform: Platform.Instagram);
+
+        Assert.Equal(MediaType.Video, result.MediaType);
+    }
+
+    [Fact]
+    public async Task InitAsync_VideoOneByteOver50MB_IsRejectedBeforeStorage_WithMbMessage()
+    {
+        var db = NewDb();
+        var storage = new RecordingStorage();
+        var media = NewMediaService(storage);
+        var svc = new MediaUploadService(db, media, Opts(), NullLogger<MediaUploadService>.Instance);
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() =>
+            svc.InitAsync(
+                userId: Guid.NewGuid(),
+                workspaceId: Guid.NewGuid(),
+                fileName: "clip.mp4",
+                contentType: "video/mp4",
+                sizeBytes: 52_428_801L,
+                platform: Platform.Instagram));
+
+        Assert.Equal("File too large. Videos can be up to 50MB.", ex.Message);
+        Assert.DoesNotContain("52428800", ex.Message);
+        Assert.DoesNotContain("52,428,800", ex.Message);
+        Assert.Empty(storage.CreatedUploadKeys);
+        Assert.Empty(await db.Media.ToListAsync());
+    }
+
+    [Fact]
+    public async Task InitAsync_ImageLimitsRemainUnchanged()
+    {
+        var db = NewDb();
+        var storage = new RecordingStorage();
+        var media = NewMediaService(storage);
+        var svc = new MediaUploadService(db, media, Opts(), NullLogger<MediaUploadService>.Instance);
+
+        var result = await svc.InitAsync(
+            userId: Guid.NewGuid(),
+            workspaceId: Guid.NewGuid(),
+            fileName: "photo.png",
+            contentType: "image/png",
+            sizeBytes: 20L * 1024 * 1024,
+            platform: Platform.Facebook);
+
+        Assert.Equal(MediaType.Image, result.MediaType);
     }
 
     [Fact]
@@ -198,8 +260,12 @@ public class MediaUploadServiceAuthorizationTests
     private sealed class RecordingStorage : IMediaStorageProvider
     {
         public List<string> DeletedKeys { get; } = new();
+        public List<string> CreatedUploadKeys { get; } = new();
         public Task<string> CreateUploadUrlAsync(string storageKey, string contentType, TimeSpan expires, CancellationToken cancellationToken = default)
-            => Task.FromResult("https://example/upload/" + storageKey);
+        {
+            CreatedUploadKeys.Add(storageKey);
+            return Task.FromResult("https://example/upload/" + storageKey);
+        }
         public Task<string> CreateDownloadUrlAsync(string storageKey, TimeSpan expires, CancellationToken cancellationToken = default)
             => Task.FromResult("https://example/download/" + storageKey);
         public Task<Stream?> OpenReadAsync(string storageKey, CancellationToken cancellationToken = default) => Task.FromResult<Stream?>(null);

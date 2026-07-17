@@ -9,21 +9,21 @@ import {
 const f = (type: string, size = 1000, name?: string) => ({ type, size, name })
 
 describe('getMediaRequirementHint', () => {
-  it('names the 50MB video cap for Facebook Feed only; Instagram Feed keeps duration-only wording', () => {
+  it('names the 50MB video cap for Facebook Feed and Instagram Feed', () => {
     expect(getMediaRequirementHint('facebook', 'Feed')).toBe(
       'Supported: JPG/PNG images (≤10 MB) • MP4/MOV videos (≤50 MB, 3–180 s)',
     )
     expect(getMediaRequirementHint('instagram', 'Feed')).toBe(
-      'Supported: JPG/PNG images (≤8 MB) • MP4/MOV videos (3–180 s)',
+      'Supported: JPG/PNG images (≤8 MB) • MP4/MOV videos (≤50 MB, 3–180 s)',
     )
   })
 
-  it('names the Facebook Story 50MB video cap and 3–90 s range; Instagram Story keeps duration-only 3–60 s', () => {
+  it('names the Facebook Story 50MB cap and the Instagram Story 50MB cap with their own durations', () => {
     expect(getMediaRequirementHint('facebook', 'Story')).toBe(
       'Supported: JPG/PNG images (≤10 MB) • MP4/MOV videos (≤50 MB, 3–90 s)',
     )
     expect(getMediaRequirementHint('instagram', 'Story')).toBe(
-      'Supported: JPG/PNG images (≤8 MB) • MP4/MOV videos (3–60 s)',
+      'Supported: JPG/PNG images (≤8 MB) • MP4/MOV videos (≤50 MB, 3–60 s)',
     )
   })
 
@@ -72,10 +72,17 @@ describe('resolveClientMediaError — friendly, specific copy', () => {
     expect(resolveClientMediaError(f('image/jpeg', 10 * 1024 * 1024), 'facebook', 'Feed')).toBeNull()
   })
 
-  it('reports the exact video size limit (Instagram = 100MB)', () => {
-    expect(resolveClientMediaError(f('video/mp4', 101 * 1024 * 1024), 'instagram', 'Story')).toBe(
-      'This video is too large. Instagram videos can be up to 100MB.',
+  it('reports the exact Instagram video size limit with an inclusive boundary', () => {
+    expect(resolveClientMediaError(f('video/mp4', 52_428_801), 'instagram', 'Story')).toBe(
+      'This video is too large. Instagram videos can be up to 50MB.',
     )
+    expect(resolveClientMediaError(f('video/mp4', 52_428_800), 'instagram', 'Story')).toBeNull()
+    expect(resolveClientMediaError(f('video/mp4', 52_428_800), 'instagram', 'Feed')).toBeNull()
+  })
+
+  it('does not show stale 100MB copy for current Instagram video hints', () => {
+    expect(getMediaRequirementHint('instagram', 'Feed')).not.toContain('100')
+    expect(getMediaRequirementHint('instagram', 'Story')).not.toContain('100')
   })
 
   it('reports the Facebook Feed 50MB video limit with an inclusive boundary', () => {

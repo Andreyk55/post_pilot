@@ -298,6 +298,30 @@ public class PostUpdateMediaGateTests : IDisposable
         Assert.Contains(errors!, e => (string?)e["code"] == DTOs.MediaValidationErrorCodes.DurationTooLong);
     }
 
+    [Fact]
+    public async Task UpdatePost_InstagramFeedVideoOneByteOver50MB_IsRejected()
+    {
+        var igId = SeedInstagramAccount();
+        var startMedia = SeedMedia("u-ig-size-start", "image/jpeg", "jpeg", 1080, 1080);
+        var videoMedia = SeedVideoMedia("u-ig-size-over", "video/mp4", 52_428_801L);
+        var post = SeedScheduledPost(Platform.Instagram, startMedia.StorageKey, targetPageId: null, targetIgId: igId);
+        UseVideoMetadata(1080, 1080, durationSeconds: 30);
+
+        var req = new UpdatePostRequest(
+            Content: "edited", MediaUrl: null, MediaType: MediaType.Video, Platform: Platform.Instagram,
+            ScheduledAt: post.ScheduledAt, TargetInstagramAccountId: igId, MediaId: videoMedia.Id);
+
+        var result = await _controller.UpdatePost(post.Id, req);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        var pd = Assert.IsType<ProblemDetails>(bad.Value);
+        Assert.Equal("MEDIA_VALIDATION_FAILED", pd.Extensions["code"]);
+        var errors = ExtractMediaErrors(pd);
+        Assert.Contains(errors!, e =>
+            (string?)e["code"] == DTOs.MediaValidationErrorCodes.FileTooLarge
+            && ((string?)e["message"]) == "This video is too large. Instagram videos can be up to 50MB.");
+    }
+
     // ── Instagram accepts valid JPEG on edit ────────────────────────────────────
 
     [Fact]

@@ -53,7 +53,7 @@ public class MediaUploadService : IMediaUploadService
         if (sizeBytes <= 0)
             throw new ArgumentException("sizeBytes must be > 0.");
         if (sizeBytes > maxSize)
-            throw new ArgumentException($"File too large. Max for {contentType} is {maxSize} bytes (got {sizeBytes}).");
+            throw new ArgumentException($"File too large. {FormatMediaType(contentType)} can be up to {FormatSizeLimit(maxSize)}.");
 
         // Provider-level absolute ceiling (Supabase). 0 means "no additional cap".
         if (_storageOpts.IsSupabase && _storageOpts.Supabase.MaxUploadBytes > 0 && sizeBytes > _storageOpts.Supabase.MaxUploadBytes)
@@ -144,6 +144,15 @@ public class MediaUploadService : IMediaUploadService
             media.Id, MediaValidationGateRedaction(media.StorageKey), info.SizeBytes);
 
         return new CompleteUploadResult(media.Id, media.StorageKey, info.SizeBytes, media.ContentType, media.UploadedAt!.Value);
+    }
+
+    private static string FormatMediaType(string contentType) =>
+        contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase) ? "Videos" : "Images";
+
+    private static string FormatSizeLimit(long maxBytes)
+    {
+        var mb = maxBytes / (1024.0 * 1024.0);
+        return $"{mb:F0}MB";
     }
 
     /// <summary>

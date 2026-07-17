@@ -76,14 +76,12 @@ public static class ValidationLimits
 
     // Media limits (in bytes). These are the GENERIC upload safety caps (advertised via
     // /validation-limits and enforced at upload init); per-platform/placement product rules
-    // live in MediaValidationRules. This generic video cap is a generous ceiling that sits
-    // at or above every active per-platform/placement product video limit (the largest is
-    // Instagram Feed/Story at 100MB; Facebook Feed/Story are 50MB) so no valid product upload
-    // is blocked at the door — the tighter per-placement rule is what actually gates the post.
-    // Provider ceilings (e.g. Supabase Free's global 50MB) are configured separately via
-    // MediaStorage:Supabase:MaxUploadBytes and may be lower than this cap.
+    // live in MediaValidationRules. Facebook and Instagram are the currently supported upload
+    // platforms, and every reachable video placement is capped at 50MB, so the generic upload
+    // door matches that product ceiling. Provider ceilings (e.g. Supabase Free's global 50MB)
+    // are configured separately via MediaStorage:Supabase:MaxUploadBytes.
     public const long MediaImageMaxBytes = 20L * 1024 * 1024; // 20MB
-    public const long MediaVideoMaxBytes = 200L * 1024 * 1024; // 200MB
+    public const long MediaVideoMaxBytes = 50L * 1024 * 1024; // 50MB
 
     // Support "Contact Us" limits (authenticated in-app support messages)
     public const int SupportSubjectMaxLength = 200;

@@ -374,6 +374,52 @@ public class PostCreateMediaGateTests : IDisposable
     }
 
     [Fact]
+    public async Task CreatePost_InstagramFeedVideoOneByteOver50MB_IsRejected()
+    {
+        var igId = SeedInstagramAccount();
+        var media = SeedVideoMedia("ig-vid-size-over", "video/mp4", 52_428_801L);
+        UseVideoMetadata(1080, 1080, durationSeconds: 30);
+
+        var req = new CreatePostRequest(
+            Content: "hi", MediaUrl: null, MediaType: MediaType.Video, Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId, MediaId: media.Id);
+
+        var result = await _controller.CreatePost(req);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var pd = Assert.IsType<ProblemDetails>(bad.Value);
+        Assert.Equal("MEDIA_VALIDATION_FAILED", pd.Extensions["code"]);
+        var errors = ExtractMediaErrors(pd);
+        Assert.Contains(errors!, e =>
+            (string?)e["code"] == DTOs.MediaValidationErrorCodes.FileTooLarge
+            && ((string?)e["message"]) == "This video is too large. Instagram videos can be up to 50MB.");
+        Assert.Empty(await _db.Posts.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CreatePost_InstagramStoryVideoOneByteOver50MB_IsRejected()
+    {
+        var igId = SeedInstagramAccount();
+        var media = SeedVideoMedia("ig-story-size-over", "video/mp4", 52_428_801L);
+        UseVideoMetadata(720, 1280, durationSeconds: 30);
+
+        var req = new CreatePostRequest(
+            Content: "", MediaUrl: null, MediaType: MediaType.Video, Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Story, TargetInstagramAccountId: igId, MediaId: media.Id);
+
+        var result = await _controller.CreatePost(req);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var pd = Assert.IsType<ProblemDetails>(bad.Value);
+        Assert.Equal("MEDIA_VALIDATION_FAILED", pd.Extensions["code"]);
+        var errors = ExtractMediaErrors(pd);
+        Assert.Contains(errors!, e =>
+            (string?)e["code"] == DTOs.MediaValidationErrorCodes.FileTooLarge
+            && ((string?)e["message"]) == "This video is too large. Instagram videos can be up to 50MB.");
+        Assert.Empty(await _db.Posts.ToListAsync());
+    }
+
+    [Fact]
     public async Task CreatePost_InstagramValidMovVideo_IsAccepted()
     {
         var igId = SeedInstagramAccount();

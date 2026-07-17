@@ -148,7 +148,7 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
   // Instagram Feed Video (published by Meta as a Reel; vertical 9:16 must pass)
   'instagram:feed:video': {
     allowedMimeTypes: ['video/mp4', 'video/quicktime'],
-    maxBytes: 100 * 1024 * 1024, // 100MB — product/MVP cap
+    maxBytes: 50 * 1024 * 1024, // 50MB — product cap
     minWidth: 500,
     minHeight: 500,
     maxWidth: 1920,
@@ -178,7 +178,7 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
   // Instagram Story Video
   'instagram:story:video': {
     allowedMimeTypes: ['video/mp4', 'video/quicktime'],
-    maxBytes: 100 * 1024 * 1024, // 100MB — Instagram platform limit for story videos
+    maxBytes: 50 * 1024 * 1024, // 50MB — product cap for Instagram Story video
     minWidth: 320,
     minHeight: 320,
     maxWidth: 1080,

@@ -351,16 +351,32 @@ public class MediaValidationGateTests : IDisposable
     // ── Video validation (gate now validates videos, not just images) ───────────
 
     [Fact]
-    public async Task Video_InstagramFeed_OverMaxSize_IsBlocked()
+    public async Task Video_InstagramFeed_Over50MB_IsBlocked_WithMbMessage()
     {
-        var path = SeedRawMedia("v-ig-big", "video/mp4", 101L * 1024 * 1024); // 101MB > 100MB
+        var path = SeedRawMedia("v-ig-big", "video/mp4", 52_428_801L); // 50MB + 1 byte
         var gate = CreateGate(new() { ["v-ig-big"] = path }, FakeVideo(1080, 1080, 10));
 
         var result = await gate.ValidateAsync(Ws,
             new[] { new MediaGateItem("v-ig-big", MediaType.Video, 0) }, new[] { Ig });
 
         Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.FileTooLarge);
+        Assert.Contains(result.Errors, e =>
+            e.Code == DTOs.MediaValidationErrorCodes.FileTooLarge
+            && e.Message == "This video is too large. Instagram videos can be up to 50MB."
+            && !e.Message.Contains("52428800") && !e.Message.Contains("52,428,800")
+            && !e.Message.Contains("100MB"));
+    }
+
+    [Fact]
+    public async Task Video_InstagramFeed_AtExactly50MB_IsAccepted()
+    {
+        var path = SeedRawMedia("v-ig-at-50", "video/mp4", 52_428_800L);
+        var gate = CreateGate(new() { ["v-ig-at-50"] = path }, FakeVideo(1080, 1080, 10));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-ig-at-50", MediaType.Video, 0) }, new[] { Ig });
+
+        Assert.True(result.IsValid);
     }
 
     [Fact]
@@ -415,6 +431,35 @@ public class MediaValidationGateTests : IDisposable
 
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.AspectRatioInvalid);
+    }
+
+    [Fact]
+    public async Task Video_InstagramStory_Over50MB_IsBlocked_WithMbMessage()
+    {
+        var path = SeedRawMedia("v-ig-story-big", "video/mp4", 52_428_801L);
+        var gate = CreateGate(new() { ["v-ig-story-big"] = path }, FakeVideo(720, 1280, 10));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-ig-story-big", MediaType.Video, 0) }, new[] { IgStory });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e =>
+            e.Code == DTOs.MediaValidationErrorCodes.FileTooLarge
+            && e.Message == "This video is too large. Instagram videos can be up to 50MB."
+            && !e.Message.Contains("52428800") && !e.Message.Contains("52,428,800")
+            && !e.Message.Contains("100MB"));
+    }
+
+    [Fact]
+    public async Task Video_InstagramStory_AtExactly50MB_IsAccepted()
+    {
+        var path = SeedRawMedia("v-ig-story-at-50", "video/mp4", 52_428_800L);
+        var gate = CreateGate(new() { ["v-ig-story-at-50"] = path }, FakeVideo(720, 1280, 10));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-ig-story-at-50", MediaType.Video, 0) }, new[] { IgStory });
+
+        Assert.True(result.IsValid);
     }
 
     [Fact]
@@ -876,6 +921,21 @@ public class MediaValidationGateTests : IDisposable
 
         Assert.Equal(ValidationStatus.Invalid, result.Status);
         Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.DurationTooLong);
+    }
+
+    [Fact]
+    public async Task ValidateForDisplay_InstagramFeedVideoOver50MB_IsInvalid_FileTooLarge()
+    {
+        var path = SeedRawMedia("d-ig-vid-over-50", "video/mp4", 52_428_801L);
+        var gate = CreateGate(new() { ["d-ig-vid-over-50"] = path }, FakeVideo(1080, 1080, 30));
+
+        var result = await gate.ValidateForDisplayAsync(Ws,
+            new MediaGateItem("d-ig-vid-over-50", MediaType.Video, 0), Ig);
+
+        Assert.Equal(ValidationStatus.Invalid, result.Status);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.FileTooLarge
+                                          && e.Message.Contains("50MB")
+                                          && !e.Message.Contains("100MB"));
     }
 
     [Fact]

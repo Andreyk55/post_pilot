@@ -162,6 +162,7 @@ describe('MediaRequirementHint', () => {
     expect(feedMarkup).toContain('JPG/PNG images')
     expect(feedMarkup).toContain('≤8 MB')
     expect(feedMarkup).toContain('MP4/MOV videos')
+    expect(feedMarkup).toContain('≤50 MB')
     expect(feedMarkup).toContain('3–180 s')
   })
 })

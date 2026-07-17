@@ -18,7 +18,8 @@ public class InstagramVideoValidationTests
         Assert.NotNull(rules);
         Assert.Contains("video/mp4", rules.AllowedMimeTypes);
         Assert.Contains("video/quicktime", rules.AllowedMimeTypes);
-        Assert.Equal(100L * 1024 * 1024, rules.MaxBytes); // 100MB
+        Assert.Equal(50L * 1024 * 1024, rules.MaxBytes); // 50MB
+        Assert.Equal(52_428_800L, rules.MaxBytes);
     }
 
     [Fact]

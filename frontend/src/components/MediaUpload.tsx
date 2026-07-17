@@ -24,7 +24,7 @@ interface MediaUploadProps {
 
 // Default generic limits (used when no platform-specific rules exist)
 const DEFAULT_MAX_IMAGE_SIZE_MB = 20
-const DEFAULT_MAX_VIDEO_SIZE_MB = 200
+const DEFAULT_MAX_VIDEO_SIZE_MB = 50
 
 export function MediaUpload({
   onUploadComplete,
