@@ -851,7 +851,9 @@ public class PostsController : ControllerBase
         {
             Id = Guid.NewGuid(),
             WorkspaceId = workspaceId,
-            // Stories don't support captions — ignore any content sent by the client
+            // Stories don't support captions. Non-empty story content was REJECTED above
+            // (ValidateCreatePostRequest → PostContentRules); by here it can only be
+            // null/empty, so this branch just normalizes to the entity's string.Empty default.
             Content = request.PostType == PostType.Story ? string.Empty : (request.Content ?? string.Empty),
             MediaUrl = request.MediaUrl,
             MediaType = request.MediaType ?? MediaType.None,
@@ -938,7 +940,7 @@ public class PostsController : ControllerBase
             return StatusCode(updateMediaError.Status ?? StatusCodes.Status404NotFound, updateMediaError);
         request = resolvedUpdateRequest;
 
-        var validationErrors = ValidateUpdatePostRequest(request);
+        var validationErrors = ValidateUpdatePostRequest(request, post.PostType);
         if (validationErrors.Count > 0)
         {
             return ValidationProblem(new ValidationProblemDetails(validationErrors));
@@ -1494,27 +1496,45 @@ public class PostsController : ControllerBase
     {
         var errors = new Dictionary<string, string[]>();
 
-        // Content length validation (stories allow empty content)
-        if (!string.IsNullOrEmpty(request.Content))
+        // AUTHORITATIVE STORY TEXT RULE: Stories have no text/caption field, so any non-empty
+        // content (including whitespace-only) is rejected — never silently dropped. The UI
+        // sends no story text; only a crafted/outdated client can hit this.
+        var storyTextError = PostContentRules.GetStoryTextError(request.Platform, request.PostType, request.Content);
+        if (storyTextError != null)
         {
-            var maxChars = ValidationLimits.GetPostTextMaxChars(request.Platform);
-            if (request.Content.Length > maxChars)
-            {
-                errors["content"] = [$"Text is too long for {request.Platform}. Max {maxChars} characters."];
-            }
+            errors["content"] = [storyTextError];
+            return errors;
+        }
+
+        // Content length validation (stories allow empty content)
+        var lengthError = PostContentRules.GetTextTooLongError(request.Platform, request.Content);
+        if (lengthError != null)
+        {
+            errors["content"] = [lengthError];
         }
 
         return errors;
     }
 
-    private static Dictionary<string, string[]> ValidateUpdatePostRequest(UpdatePostRequest request)
+    /// <summary>
+    /// <paramref name="postType"/> is the STORED post's type (placement is immutable on
+    /// update), not anything client-supplied — so an update can never add text to a Story.
+    /// </summary>
+    private static Dictionary<string, string[]> ValidateUpdatePostRequest(UpdatePostRequest request, PostType postType)
     {
         var errors = new Dictionary<string, string[]>();
 
-        var maxChars = ValidationLimits.GetPostTextMaxChars(request.Platform);
-        if (request.Content?.Length > maxChars)
+        var storyTextError = PostContentRules.GetStoryTextError(request.Platform, postType, request.Content);
+        if (storyTextError != null)
         {
-            errors["content"] = [$"Text is too long for {request.Platform}. Max {maxChars} characters."];
+            errors["content"] = [storyTextError];
+            return errors;
+        }
+
+        var lengthError = PostContentRules.GetTextTooLongError(request.Platform, request.Content);
+        if (lengthError != null)
+        {
+            errors["content"] = [lengthError];
         }
 
         return errors;

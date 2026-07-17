@@ -267,6 +267,233 @@ public class PostsControllerTests : IDisposable
         Assert.Contains("Text is too long for Instagram", problemDetails.Errors["content"][0]);
     }
 
+    [Fact]
+    public async Task CreatePost_Same3000CharText_AcceptedForFacebook_RejectedForInstagram()
+    {
+        // Placement isolation: one text, two placements — the limit must come from the
+        // post's own platform (Facebook Feed 5000 vs Instagram Feed 2200), not a global cap.
+        var content = new string('x', 3000);
+
+        var page = await CreateTestFacebookPage();
+        var fbResult = await _controller.CreatePost(new CreatePostRequest(
+            Content: content,
+            MediaUrl: null,
+            MediaType: null,
+            Platform: Platform.Facebook,
+            ScheduledAt: DateTime.UtcNow.AddHours(1),
+            TargetPageId: page.Id));
+        Assert.IsType<CreatedAtActionResult>(fbResult.Result);
+
+        var igAccount = await CreateTestInstagramAccount();
+        var igMedia = await CreateUploadedMedia(MediaType.Image);
+        var igResult = await _controller.CreatePost(new CreatePostRequest(
+            Content: content,
+            MediaUrl: null,
+            MediaType: MediaType.Image,
+            Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1),
+            TargetInstagramAccountId: igAccount.Id,
+            MediaId: igMedia.Id));
+
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(igResult.Result);
+        Assert.Equal(400, objectResult.StatusCode);
+        var problemDetails = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
+        Assert.Contains("Text is too long for Instagram", problemDetails.Errors["content"][0]);
+        Assert.Contains("Max 2200 characters", problemDetails.Errors["content"][0]);
+    }
+
+    [Fact]
+    public async Task CreatePost_Facebook_ImagePostAtExactMaxLength_Succeeds()
+    {
+        // The 5000 limit applies identically to media posts — text-only is covered by
+        // CreatePost_TextAtExactMaxLength_Succeeds.
+        var page = await CreateTestFacebookPage();
+        var media = await CreateUploadedMedia(MediaType.Image);
+        var content = new string('x', 5000);
+
+        var result = await _controller.CreatePost(new CreatePostRequest(
+            Content: content,
+            MediaUrl: null,
+            MediaType: MediaType.Image,
+            Platform: Platform.Facebook,
+            ScheduledAt: DateTime.UtcNow.AddHours(1),
+            TargetPageId: page.Id,
+            MediaId: media.Id));
+
+        var createdResult = Assert.IsType<CreatedAtActionResult>(result.Result);
+        var post = Assert.IsType<PostDto>(createdResult.Value);
+        Assert.Equal(content, post.Content);
+    }
+
+    [Fact]
+    public async Task CreatePost_Facebook_CarouselAtExactMaxLength_Succeeds_OneOverIsRejected()
+    {
+        var page = await CreateTestFacebookPage();
+
+        async Task<ActionResult<PostDto>> CreateCarousel(string content)
+        {
+            var m1 = await CreateUploadedMedia(MediaType.Image);
+            var m2 = await CreateUploadedMedia(MediaType.Image);
+            return await _controller.CreatePost(new CreatePostRequest(
+                Content: content,
+                MediaUrl: null,
+                MediaType: null,
+                Platform: Platform.Facebook,
+                ScheduledAt: DateTime.UtcNow.AddHours(1),
+                TargetPageId: page.Id,
+                MediaItems: new List<CreatePostMediaItem>
+                {
+                    new(MediaUrl: null, MediaType: MediaType.Image, Order: 0, MediaId: m1.Id),
+                    new(MediaUrl: null, MediaType: MediaType.Image, Order: 1, MediaId: m2.Id),
+                }));
+        }
+
+        var atLimit = await CreateCarousel(new string('x', 5000));
+        Assert.IsType<CreatedAtActionResult>(atLimit.Result);
+
+        var overLimit = await CreateCarousel(new string('x', 5001));
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(overLimit.Result);
+        Assert.Equal(400, objectResult.StatusCode);
+        var problemDetails = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
+        Assert.Contains("Text is too long for Facebook", problemDetails.Errors["content"][0]);
+    }
+
+    [Fact]
+    public async Task CreatePost_Facebook_VideoPostAtExactMaxLength_Succeeds_OneOverIsRejected()
+    {
+        var page = await CreateTestFacebookPage();
+
+        async Task<ActionResult<PostDto>> CreateVideoPost(string content)
+        {
+            var media = await CreateUploadedMedia(MediaType.Video);
+            return await _controller.CreatePost(new CreatePostRequest(
+                Content: content,
+                MediaUrl: null,
+                MediaType: MediaType.Video,
+                Platform: Platform.Facebook,
+                ScheduledAt: DateTime.UtcNow.AddHours(1),
+                TargetPageId: page.Id,
+                MediaId: media.Id));
+        }
+
+        var atLimit = await CreateVideoPost(new string('x', 5000));
+        Assert.IsType<CreatedAtActionResult>(atLimit.Result);
+
+        var overLimit = await CreateVideoPost(new string('x', 5001));
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(overLimit.Result);
+        Assert.Equal(400, objectResult.StatusCode);
+        var problemDetails = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
+        Assert.Contains("Text is too long for Facebook", problemDetails.Errors["content"][0]);
+    }
+
+    [Fact]
+    public async Task CreatePost_Instagram_VideoPostAtExactMaxLength_Succeeds_OneOverIsRejected()
+    {
+        var igAccount = await CreateTestInstagramAccount();
+
+        async Task<ActionResult<PostDto>> CreateVideoPost(string content)
+        {
+            var media = await CreateUploadedMedia(MediaType.Video);
+            return await _controller.CreatePost(new CreatePostRequest(
+                Content: content,
+                MediaUrl: null,
+                MediaType: MediaType.Video,
+                Platform: Platform.Instagram,
+                ScheduledAt: DateTime.UtcNow.AddHours(1),
+                TargetInstagramAccountId: igAccount.Id,
+                MediaId: media.Id));
+        }
+
+        var atLimit = await CreateVideoPost(new string('x', 2200));
+        Assert.IsType<CreatedAtActionResult>(atLimit.Result);
+
+        var overLimit = await CreateVideoPost(new string('x', 2201));
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(overLimit.Result);
+        Assert.Equal(400, objectResult.StatusCode);
+        var problemDetails = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
+        Assert.Contains("Text is too long for Instagram", problemDetails.Errors["content"][0]);
+    }
+
+    [Fact]
+    public async Task CreatePost_Instagram_CarouselAtExactMaxLength_Succeeds_OneOverIsRejected()
+    {
+        var igAccount = await CreateTestInstagramAccount();
+
+        async Task<ActionResult<PostDto>> CreateCarousel(string content)
+        {
+            var m1 = await CreateUploadedMedia(MediaType.Image);
+            var m2 = await CreateUploadedMedia(MediaType.Image);
+            return await _controller.CreatePost(new CreatePostRequest(
+                Content: content,
+                MediaUrl: null,
+                MediaType: null,
+                Platform: Platform.Instagram,
+                ScheduledAt: DateTime.UtcNow.AddHours(1),
+                TargetInstagramAccountId: igAccount.Id,
+                MediaItems: new List<CreatePostMediaItem>
+                {
+                    new(MediaUrl: null, MediaType: MediaType.Image, Order: 0, MediaId: m1.Id),
+                    new(MediaUrl: null, MediaType: MediaType.Image, Order: 1, MediaId: m2.Id),
+                }));
+        }
+
+        var atLimit = await CreateCarousel(new string('x', 2200));
+        Assert.IsType<CreatedAtActionResult>(atLimit.Result);
+
+        var overLimit = await CreateCarousel(new string('x', 2201));
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(overLimit.Result);
+        Assert.Equal(400, objectResult.StatusCode);
+        var problemDetails = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
+        Assert.Contains("Text is too long for Instagram", problemDetails.Errors["content"][0]);
+    }
+
+    [Fact]
+    public async Task CreatePost_Instagram_EmptyCaptionWithMedia_Succeeds()
+    {
+        // The Instagram caption stays optional — the limit must not introduce a requirement.
+        var igAccount = await CreateTestInstagramAccount();
+        var media = await CreateUploadedMedia(MediaType.Image);
+
+        var result = await _controller.CreatePost(new CreatePostRequest(
+            Content: "",
+            MediaUrl: null,
+            MediaType: MediaType.Image,
+            Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1),
+            TargetInstagramAccountId: igAccount.Id,
+            MediaId: media.Id));
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task CreatePost_Facebook_EmojiCountsAsUtf16CodeUnits()
+    {
+        // "😀" = 2 UTF-16 code units in both .NET string.Length and JS .length: 4998 x's +
+        // emoji is exactly 5000 (accepted); 4999 x's + emoji is 5001 (rejected).
+        var page = await CreateTestFacebookPage();
+        const string emoji = "\U0001F600";
+
+        var atLimit = await _controller.CreatePost(new CreatePostRequest(
+            Content: new string('x', 4998) + emoji,
+            MediaUrl: null,
+            MediaType: null,
+            Platform: Platform.Facebook,
+            ScheduledAt: DateTime.UtcNow.AddHours(1),
+            TargetPageId: page.Id));
+        Assert.IsType<CreatedAtActionResult>(atLimit.Result);
+
+        var overLimit = await _controller.CreatePost(new CreatePostRequest(
+            Content: new string('x', 4999) + emoji,
+            MediaUrl: null,
+            MediaType: null,
+            Platform: Platform.Facebook,
+            ScheduledAt: DateTime.UtcNow.AddHours(1),
+            TargetPageId: page.Id));
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(overLimit.Result);
+        Assert.Equal(400, objectResult.StatusCode);
+    }
+
     [Theory]
     [InlineData(Platform.Facebook)]
     [InlineData(Platform.LinkedIn)]
@@ -531,6 +758,54 @@ public class PostsControllerTests : IDisposable
         var problemDetails = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
         Assert.True(problemDetails.Errors.ContainsKey("content"));
         Assert.Contains($"Text is too long for {platform}", problemDetails.Errors["content"][0]);
+    }
+
+    [Fact]
+    public async Task UpdatePost_Instagram_CaptionAtExactMaxLength_Succeeds_OneOverIsRejected()
+    {
+        var igAccount = await CreateTestInstagramAccount();
+        var post = new PostPilot.Api.Entities.Post
+        {
+            Id = Guid.NewGuid(),
+            WorkspaceId = TestWorkspaceId,
+            Content = "Original caption",
+            Platform = Platform.Instagram,
+            TargetInstagramAccountId = igAccount.Id,
+            MediaType = MediaType.Image,
+            MediaUrl = "media/original.jpg",
+            ScheduledAt = DateTime.UtcNow.AddHours(2),
+            Status = PostStatus.Scheduled,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        _context.Posts.Add(post);
+        await _context.SaveChangesAsync();
+
+        async Task<IActionResult> UpdateWithCaption(string content)
+        {
+            var media = await CreateUploadedMedia(MediaType.Image);
+            return await _controller.UpdatePost(post.Id, new UpdatePostRequest(
+                Content: content,
+                MediaUrl: null,
+                MediaType: MediaType.Image,
+                Platform: Platform.Instagram,
+                ScheduledAt: DateTime.UtcNow.AddHours(1),
+                TargetInstagramAccountId: igAccount.Id,
+                MediaId: media.Id));
+        }
+
+        Assert.IsType<NoContentResult>(await UpdateWithCaption(new string('x', 2200)));
+
+        var overLimit = await UpdateWithCaption(new string('x', 2201));
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(overLimit);
+        Assert.Equal(400, objectResult.StatusCode);
+        var problemDetails = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
+        Assert.Contains("Text is too long for Instagram", problemDetails.Errors["content"][0]);
+        Assert.Contains("Max 2200 characters", problemDetails.Errors["content"][0]);
+
+        // The stored caption keeps the last valid value.
+        var stored = await _context.Posts.FindAsync(post.Id);
+        Assert.Equal(2200, stored!.Content.Length);
     }
 
     #endregion

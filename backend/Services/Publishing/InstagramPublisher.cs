@@ -211,6 +211,17 @@ public class InstagramPublisher : IPostPublisher
                 ErrorMessage: "Post was canceled");
         }
 
+        // DEFENSE-IN-DEPTH TEXT GUARD. PostsController already enforces the Instagram caption
+        // limit on create/update, but a stored row written before the limit existed (or
+        // through any future bypass) must still be refused BEFORE any Graph call.
+        var textGuardError = GuardText(post);
+        if (textGuardError != null)
+        {
+            await MarkFailedAsync(post, $"Post text failed validation before publishing: {textGuardError}", cancellationToken);
+            return new PublishResult(false, ErrorType: PublishErrorType.Permanent,
+                ErrorMessage: $"Post text failed validation before publishing: {textGuardError}");
+        }
+
         // DEFENSE-IN-DEPTH MEDIA GUARD. PostsController gates media at create time; this
         // guards already-scheduled posts, manual publish-now, and any future bypass. Cheap
         // re-check against Instagram/Feed rules (JPEG-only, dims, aspect). Warnings ignored.
@@ -1223,6 +1234,27 @@ public class InstagramPublisher : IPostPublisher
             return await _mediaService.GetPublishingUrlAsync(keyToPublish, expiration ?? _mediaDownloadUrlExpiration, cancellationToken);
         }
         return item.MediaUrl;
+    }
+
+    /// <summary>
+    /// Final pre-publish text guard, run BEFORE any Graph call. A stored caption over the
+    /// Instagram limit (a legacy row, or one written through a bypass) is refused via the
+    /// central <see cref="Validation.PostContentRules"/> rule — the same rule the controller
+    /// enforces on create/update. Returns the blocking error message, or null when
+    /// publishable. The caption itself is never logged.
+    /// Internal for direct unit testing (the full PublishAsync path uses ExecuteUpdateAsync,
+    /// which the EF InMemory test provider does not support).
+    /// </summary>
+    internal string? GuardText(Post post)
+    {
+        var textError = Validation.PostContentRules.GetTextTooLongError(post.Platform, post.Content);
+        if (textError != null)
+        {
+            _logger.LogWarning(
+                "IG_PUBLISH_BLOCKED_TEXT postId={PostId} — stored caption exceeds the Instagram limit; refusing to publish.",
+                post.Id);
+        }
+        return textError;
     }
 
     /// <summary>

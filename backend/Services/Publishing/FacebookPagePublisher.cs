@@ -263,6 +263,20 @@ public class FacebookPagePublisher : IPostPublisher
                 ErrorMessage: "The Facebook page must be reauthorized before publishing.");
         }
 
+        // DEFENSE-IN-DEPTH TEXT GUARD. PostsController already enforces the Facebook feed
+        // text limit on create/update, but a stored row written before the limit existed (or
+        // through any future bypass) must still be refused BEFORE any Graph call. Same central
+        // rule as the controller; the content itself is never logged.
+        var textGuardError = Validation.PostContentRules.GetTextTooLongError(post.Platform, post.Content);
+        if (textGuardError != null)
+        {
+            _logger.LogWarning(
+                "FB_PUBLISH_BLOCKED_TEXT postId={PostId} — stored post text exceeds the Facebook limit; refusing to publish.",
+                post.Id);
+            return new PublishResult(false, ErrorType: PublishErrorType.Permanent,
+                ErrorMessage: $"Post text failed validation before publishing: {textGuardError}");
+        }
+
         // DEFENSE-IN-DEPTH MEDIA GUARD. PostsController already gates media at create time,
         // but this catches posts scheduled before the gate existed, the manual publish-now
         // path, and any future caller that bypasses the controller. Cheap re-check against

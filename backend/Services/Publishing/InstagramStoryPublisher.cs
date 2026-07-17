@@ -264,14 +264,14 @@ public class InstagramStoryPublisher : IStoryPublisher
     {
         var igUserId = post.TargetInstagramAccount!.IgBusinessId;
 
-        // DEFENSE-IN-DEPTH MEDIA GUARD (image stories). Validates the story image against
-        // Instagram/Story rules before any Meta call. Warnings ignored; on a blocking error
-        // we do not call Meta. Never logs raw keys/URLs.
-        var guardError = await GuardStoryMediaAsync(post, cancellationToken);
+        // DEFENSE-IN-DEPTH PREFLIGHT (image stories). Blocks stored hidden text (IG Stories
+        // have no caption field) and validates the story image against Instagram/Story rules
+        // before any Meta call. Warnings ignored; on a blocking error we do not call Meta.
+        var guardError = await GuardStoryPreflightAsync(post, cancellationToken);
         if (guardError != null)
         {
             return new PublishResult(false, ErrorType: PublishErrorType.Permanent,
-                ErrorMessage: $"Media failed validation before publishing: {guardError}");
+                ErrorMessage: guardError);
         }
 
         var mediaUrl = await ResolveMediaUrlAsync(post, cancellationToken);
@@ -307,14 +307,15 @@ public class InstagramStoryPublisher : IStoryPublisher
     {
         var igUserId = post.TargetInstagramAccount!.IgBusinessId;
 
-        // DEFENSE-IN-DEPTH MEDIA GUARD (video stories). Validates the story video against
-        // Instagram/Story rules (duration/aspect/codec/size) before any Meta call. Warnings
-        // ignored; on a blocking error we do not publish. Never logs raw keys/URLs.
-        var guardError = await GuardStoryMediaAsync(post, cancellationToken);
+        // DEFENSE-IN-DEPTH PREFLIGHT (video stories). Blocks stored hidden text (IG Stories
+        // have no caption field) and validates the story video against Instagram/Story rules
+        // (duration/aspect/codec/size) before any Meta call. Warnings ignored; on a blocking
+        // error we do not publish.
+        var guardError = await GuardStoryPreflightAsync(post, cancellationToken);
         if (guardError != null)
         {
             return new PublishResult(false, ErrorType: PublishErrorType.Permanent,
-                ErrorMessage: $"Media failed validation before publishing: {guardError}");
+                ErrorMessage: guardError);
         }
 
         // Step A: Create container if we don't have one yet
@@ -586,11 +587,44 @@ public class InstagramStoryPublisher : IStoryPublisher
     }
 
     /// <summary>
-    /// Final pre-publish guard for the single story media item (image OR video). Validates
-    /// against Instagram/Story rules via the shared <see cref="Validation.IMediaValidationGate"/>;
-    /// returns the first blocking error or null. Uses the post's real media type so videos are
-    /// validated (duration/aspect/codec) instead of being treated as images, and Instagram PNG
-    /// images validate against their JPEG derivative. Never logs raw storage keys or signed URLs.
+    /// Final pre-publish preflight, run before ANY Meta request. Two checks, first blocking
+    /// error wins (returned as the post's failure message; null means publishable):
+    /// <list type="number">
+    /// <item>TEXT — Instagram Stories have no caption field, so a stored row carrying
+    /// non-empty Content (a legacy row, or one written through an older/crafted client) is
+    /// refused via the central <see cref="Validation.PostContentRules"/> rule. The content
+    /// itself is never logged.</item>
+    /// <item>MEDIA — the existing defense-in-depth media guard (see
+    /// <see cref="GuardStoryMediaAsync"/>).</item>
+    /// </list>
+    /// Internal so tests can prove the block happens before any Graph call (same pattern as
+    /// the feed publishers' <c>GuardMediaAsync</c>).
+    /// </summary>
+    internal async Task<string?> GuardStoryPreflightAsync(Post post, CancellationToken cancellationToken)
+    {
+        var textError = Validation.PostContentRules.GetStoryTextError(
+            Platform.Instagram, post.PostType, post.Content);
+        if (textError != null)
+        {
+            _logger.LogWarning(
+                "IG_STORY_PUBLISH_BLOCKED_TEXT postId={PostId} — stored story row contains caption text; refusing to publish.",
+                post.Id);
+            return textError;
+        }
+
+        var mediaError = await GuardStoryMediaAsync(post, cancellationToken);
+        return mediaError != null
+            ? $"Media failed validation before publishing: {mediaError}"
+            : null;
+    }
+
+    /// <summary>
+    /// Media half of <see cref="GuardStoryPreflightAsync"/>: validates the single story media
+    /// item (image OR video) against Instagram/Story rules via the shared
+    /// <see cref="Validation.IMediaValidationGate"/>; returns the first blocking error or null.
+    /// Uses the post's real media type so videos are validated (duration/aspect/codec) instead
+    /// of being treated as images, and Instagram PNG images validate against their JPEG
+    /// derivative. Never logs raw storage keys or signed URLs.
     /// </summary>
     private async Task<string?> GuardStoryMediaAsync(Post post, CancellationToken cancellationToken)
     {

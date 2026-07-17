@@ -237,14 +237,14 @@ public class FacebookStoryPublisher : IStoryPublisher
         var pageId = post.TargetPage!.PageId;
         var accessToken = post.TargetPage.AccessToken;
 
-        // DEFENSE-IN-DEPTH MEDIA GUARD (photo stories). Validates the story image against
-        // Facebook/Story rules before any Meta call. Warnings ignored; on a blocking error
-        // we do not call Meta. Never logs raw keys/URLs.
-        var guardError = await GuardStoryMediaAsync(post, cancellationToken);
+        // DEFENSE-IN-DEPTH PREFLIGHT (photo stories). Blocks stored hidden text (Stories have
+        // no caption field) and validates the story image against Facebook/Story rules before
+        // any Meta call. Warnings ignored; on a blocking error we do not call Meta.
+        var guardError = await GuardStoryPreflightAsync(post, cancellationToken);
         if (guardError != null)
         {
             return new PublishResult(false, ErrorType: PublishErrorType.Permanent,
-                ErrorMessage: $"Media failed validation before publishing: {guardError}");
+                ErrorMessage: guardError);
         }
 
         // Step 1: Upload photo as unpublished (idempotent via FacebookStoryMediaId)
@@ -291,14 +291,15 @@ public class FacebookStoryPublisher : IStoryPublisher
         var pageId = post.TargetPage!.PageId;
         var accessToken = post.TargetPage.AccessToken;
 
-        // DEFENSE-IN-DEPTH MEDIA GUARD (video stories). Validates the story video against
-        // Facebook/Story rules (duration/aspect/codec/size) before downloading bytes or calling
-        // Meta. Warnings ignored; on a blocking error we do not publish. Never logs raw keys.
-        var guardError = await GuardStoryMediaAsync(post, cancellationToken);
+        // DEFENSE-IN-DEPTH PREFLIGHT (video stories). Blocks stored hidden text (Stories have
+        // no caption field) and validates the story video against Facebook/Story rules
+        // (duration/aspect/codec/size) before downloading bytes or calling Meta. Warnings
+        // ignored; on a blocking error we do not publish.
+        var guardError = await GuardStoryPreflightAsync(post, cancellationToken);
         if (guardError != null)
         {
             return new PublishResult(false, ErrorType: PublishErrorType.Permanent,
-                ErrorMessage: $"Media failed validation before publishing: {guardError}");
+                ErrorMessage: guardError);
         }
 
         // ── Download video bytes from storage provider or external URL ──
@@ -722,11 +723,43 @@ public class FacebookStoryPublisher : IStoryPublisher
     }
 
     /// <summary>
-    /// Final pre-publish guard for the single story media item (image OR video). Validates
-    /// against Facebook/Story rules via the shared <see cref="Validation.IMediaValidationGate"/>;
-    /// returns the first blocking error or null. Uses the post's real media type so videos are
-    /// validated (duration/aspect/codec) instead of being treated as images. Never logs raw
-    /// storage keys or signed URLs.
+    /// Final pre-publish preflight, run before ANY Meta request. Two checks, first blocking
+    /// error wins (returned as the post's failure message; null means publishable):
+    /// <list type="number">
+    /// <item>TEXT — Facebook Stories have no text field, so a stored row carrying non-empty
+    /// Content (a legacy row, or one written through an older/crafted client) is refused via
+    /// the central <see cref="Validation.PostContentRules"/> rule. The content itself is never
+    /// logged.</item>
+    /// <item>MEDIA — the existing defense-in-depth media guard (see
+    /// <see cref="GuardStoryMediaAsync"/>).</item>
+    /// </list>
+    /// Internal so tests can prove the block happens before any Graph call (same pattern as
+    /// the feed publishers' <c>GuardMediaAsync</c>).
+    /// </summary>
+    internal async Task<string?> GuardStoryPreflightAsync(Post post, CancellationToken cancellationToken)
+    {
+        var textError = Validation.PostContentRules.GetStoryTextError(
+            Platform.Facebook, post.PostType, post.Content);
+        if (textError != null)
+        {
+            _logger.LogWarning(
+                "FB_STORY_PUBLISH_BLOCKED_TEXT postId={PostId} — stored story row contains post text; refusing to publish.",
+                post.Id);
+            return textError;
+        }
+
+        var mediaError = await GuardStoryMediaAsync(post, cancellationToken);
+        return mediaError != null
+            ? $"Media failed validation before publishing: {mediaError}"
+            : null;
+    }
+
+    /// <summary>
+    /// Media half of <see cref="GuardStoryPreflightAsync"/>: validates the single story media
+    /// item (image OR video) against Facebook/Story rules via the shared
+    /// <see cref="Validation.IMediaValidationGate"/>; returns the first blocking error or null.
+    /// Uses the post's real media type so videos are validated (duration/aspect/codec) instead
+    /// of being treated as images. Never logs raw storage keys or signed URLs.
     /// </summary>
     private async Task<string?> GuardStoryMediaAsync(Post post, CancellationToken cancellationToken)
     {
