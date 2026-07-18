@@ -30,6 +30,15 @@ public static class ValidationLimits
     public const int PostTextMaxLengthLinkedIn = 3000;
     public const int PostTextMaxLengthX = 280;
 
+    // Instagram Feed caption entity limits (hashtags/@mentions written IN the caption text).
+    // These are separate from Instagram MEDIA tags (usernames attached to the image/video),
+    // which have their own validation and are never counted against these caps. Both limits
+    // are inclusive: exactly the value is accepted, one over is rejected. Enforced through
+    // PostContentRules (create/update + IG feed publisher preflight); mirrored on the frontend
+    // in constants/validationLimits.ts.
+    public const int InstagramFeedMaxHashtags = 30;
+    public const int InstagramFeedMaxMentions = 20;
+
     /// <summary>
     /// Platform-specific post text limits (for Post entities).
     /// </summary>

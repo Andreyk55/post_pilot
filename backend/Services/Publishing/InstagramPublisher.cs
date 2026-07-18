@@ -1247,14 +1247,19 @@ public class InstagramPublisher : IPostPublisher
     /// </summary>
     internal string? GuardText(Post post)
     {
-        var textError = Validation.PostContentRules.GetTextTooLongError(post.Platform, post.Content);
-        if (textError != null)
-        {
-            _logger.LogWarning(
-                "IG_PUBLISH_BLOCKED_TEXT postId={PostId} — stored caption exceeds the Instagram limit; refusing to publish.",
-                post.Id);
-        }
-        return textError;
+        // Authoritative caption rules for a stored Instagram Feed row: text length AND the
+        // hashtag/@mention caps (the same rules the controller enforces on create/update). A
+        // legacy row, or one written through a bypass, that violates any of these is refused
+        // BEFORE any Graph call. Only the first violation is surfaced; the caption is not logged.
+        var contentErrors = Validation.PostContentRules.GetFeedContentErrors(
+            post.Platform, post.PostType, post.Content);
+        if (contentErrors.Count == 0)
+            return null;
+
+        _logger.LogWarning(
+            "IG_PUBLISH_BLOCKED_TEXT postId={PostId} — stored caption violates the Instagram caption rules; refusing to publish.",
+            post.Id);
+        return contentErrors[0];
     }
 
     /// <summary>

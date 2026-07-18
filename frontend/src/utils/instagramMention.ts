@@ -4,6 +4,8 @@
  * and inserts them into caption text.
  */
 
+import { MENTION_PATTERN } from './instagramCaption'
+
 /** Reserved Instagram path segments that are NOT profile handles */
 const RESERVED_SEGMENTS = new Set([
   'p', 'reel', 'tv', 'stories', 'explore', 'accounts', 'direct',
@@ -128,9 +130,11 @@ export function captionContainsMention(caption: string, username: string): boole
  *
  * Matches @username where username is 1-30 chars of [A-Za-z0-9._],
  * but NOT preceded by a word character or dot (to avoid matching emails).
+ * Uses the shared MENTION_PATTERN so mention parsing has a single definition
+ * (this de-duplicates by username; the composer counter counts occurrences).
  */
 export function extractMentionsFromCaption(caption: string): string[] {
-  const regex = /(?<![A-Za-z0-9_.])@([A-Za-z0-9._]{1,30})/g
+  const regex = new RegExp(MENTION_PATTERN, 'g')
   const seen = new Set<string>()
   const result: string[] = []
   let match: RegExpExecArray | null

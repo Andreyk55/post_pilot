@@ -198,6 +198,41 @@ public class FeedPublisherTextGuardTests : IDisposable
         Assert.Equal("Text is too long for Instagram. Max 2200 characters.", error);
     }
 
+    // ── Instagram feed: stored caption entity caps enforced before Meta ─────────
+
+    private static string RepeatToken(string token, int count) =>
+        string.Join(" ", System.Linq.Enumerable.Repeat(token, count));
+
+    [Fact]
+    public void InstagramFeed_StoredCaptionWithinTagCaps_PassesGuard()
+    {
+        // 30 hashtags + 20 mentions is exactly at both caps → publishable.
+        var publisher = BuildIgPublisher();
+        var content = RepeatToken("#tag", 30) + " " + RepeatToken("@user", 20);
+
+        Assert.Null(publisher.GuardText(InstagramFeedPost(content)));
+    }
+
+    [Fact]
+    public void InstagramFeed_StoredCaptionWithThirtyOneHashtags_IsBlocked()
+    {
+        var publisher = BuildIgPublisher();
+
+        var error = publisher.GuardText(InstagramFeedPost(RepeatToken("#tag", 31)));
+
+        Assert.Equal("Instagram Feed captions can contain at most 30 hashtags.", error);
+    }
+
+    [Fact]
+    public void InstagramFeed_StoredCaptionWithTwentyOneMentions_IsBlocked()
+    {
+        var publisher = BuildIgPublisher();
+
+        var error = publisher.GuardText(InstagramFeedPost(RepeatToken("@user", 21)));
+
+        Assert.Equal("Instagram Feed captions can contain at most 20 @mentions.", error);
+    }
+
     // ── Log hygiene: the oversized caption itself is never logged ───────────────
 
     [Fact]

@@ -1506,11 +1506,12 @@ public class PostsController : ControllerBase
             return errors;
         }
 
-        // Content length validation (stories allow empty content)
-        var lengthError = PostContentRules.GetTextTooLongError(request.Platform, request.Content);
-        if (lengthError != null)
+        // Feed content validation (stories allow empty content): text length plus the
+        // Instagram Feed hashtag/@mention caps. All violations are reported together.
+        var contentErrors = PostContentRules.GetFeedContentErrors(request.Platform, request.PostType, request.Content);
+        if (contentErrors.Count > 0)
         {
-            errors["content"] = [lengthError];
+            errors["content"] = [.. contentErrors];
         }
 
         return errors;
@@ -1531,10 +1532,10 @@ public class PostsController : ControllerBase
             return errors;
         }
 
-        var lengthError = PostContentRules.GetTextTooLongError(request.Platform, request.Content);
-        if (lengthError != null)
+        var contentErrors = PostContentRules.GetFeedContentErrors(request.Platform, postType, request.Content);
+        if (contentErrors.Count > 0)
         {
-            errors["content"] = [lengthError];
+            errors["content"] = [.. contentErrors];
         }
 
         return errors;

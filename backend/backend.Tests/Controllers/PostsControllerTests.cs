@@ -808,6 +808,104 @@ public class PostsControllerTests : IDisposable
         Assert.Equal(2200, stored!.Content.Length);
     }
 
+    // ── Instagram Feed caption hashtag/@mention caps (create + update flow) ──────
+
+    private static string RepeatToken(string token, int count) =>
+        string.Join(" ", System.Linq.Enumerable.Repeat(token, count));
+
+    private async Task<ActionResult<PostDto>> CreateInstagramFeedPost(string content)
+    {
+        var igAccount = await CreateTestInstagramAccount();
+        var media = await CreateUploadedMedia(MediaType.Image);
+        return await _controller.CreatePost(new CreatePostRequest(
+            Content: content,
+            MediaUrl: null,
+            MediaType: MediaType.Image,
+            Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1),
+            TargetInstagramAccountId: igAccount.Id,
+            MediaId: media.Id));
+    }
+
+    [Fact]
+    public async Task CreatePost_Instagram_CaptionWith30Hashtags_Succeeds_31IsRejected()
+    {
+        Assert.IsType<CreatedAtActionResult>((await CreateInstagramFeedPost(RepeatToken("#tag", 30))).Result);
+
+        var overCap = await CreateInstagramFeedPost(RepeatToken("#tag", 31));
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(overCap.Result);
+        Assert.Equal(400, objectResult.StatusCode);
+        var problemDetails = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
+        Assert.Contains("at most 30 hashtags", problemDetails.Errors["content"][0]);
+    }
+
+    [Fact]
+    public async Task CreatePost_Instagram_CaptionWith20Mentions_Succeeds_21IsRejected()
+    {
+        Assert.IsType<CreatedAtActionResult>((await CreateInstagramFeedPost(RepeatToken("@user", 20))).Result);
+
+        var overCap = await CreateInstagramFeedPost(RepeatToken("@user", 21));
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(overCap.Result);
+        Assert.Equal(400, objectResult.StatusCode);
+        var problemDetails = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
+        Assert.Contains("at most 20 @mentions", problemDetails.Errors["content"][0]);
+    }
+
+    [Fact]
+    public async Task CreatePost_Instagram_CaptionExceedingBothCaps_ReportsEachError()
+    {
+        var content = RepeatToken("#tag", 31) + " " + RepeatToken("@user", 21);
+
+        var result = await CreateInstagramFeedPost(content);
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(result.Result);
+        Assert.Equal(400, objectResult.StatusCode);
+        var problemDetails = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
+
+        var contentErrors = problemDetails.Errors["content"];
+        Assert.Contains(contentErrors, e => e.Contains("at most 30 hashtags"));
+        Assert.Contains(contentErrors, e => e.Contains("at most 20 @mentions"));
+    }
+
+    [Fact]
+    public async Task UpdatePost_Instagram_CaptionOver30Hashtags_IsRejected_AndStoredCaptionUnchanged()
+    {
+        var igAccount = await CreateTestInstagramAccount();
+        var post = new PostPilot.Api.Entities.Post
+        {
+            Id = Guid.NewGuid(),
+            WorkspaceId = TestWorkspaceId,
+            Content = "Original caption #one",
+            Platform = Platform.Instagram,
+            TargetInstagramAccountId = igAccount.Id,
+            MediaType = MediaType.Image,
+            MediaUrl = "media/original.jpg",
+            ScheduledAt = DateTime.UtcNow.AddHours(2),
+            Status = PostStatus.Scheduled,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        _context.Posts.Add(post);
+        await _context.SaveChangesAsync();
+
+        var media = await CreateUploadedMedia(MediaType.Image);
+        var result = await _controller.UpdatePost(post.Id, new UpdatePostRequest(
+            Content: RepeatToken("#tag", 31),
+            MediaUrl: null,
+            MediaType: MediaType.Image,
+            Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1),
+            TargetInstagramAccountId: igAccount.Id,
+            MediaId: media.Id));
+
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(result);
+        Assert.Equal(400, objectResult.StatusCode);
+        var problemDetails = Assert.IsType<ValidationProblemDetails>(objectResult.Value);
+        Assert.Contains("at most 30 hashtags", problemDetails.Errors["content"][0]);
+
+        var stored = await _context.Posts.FindAsync(post.Id);
+        Assert.Equal("Original caption #one", stored!.Content);
+    }
+
     #endregion
 
     #region DeletePost Status-Based Rules Tests

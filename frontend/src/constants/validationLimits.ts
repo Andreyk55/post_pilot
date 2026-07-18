@@ -8,6 +8,23 @@ export const PostTextMaxLengthInstagram = 2200
 export const PostTextMaxLengthLinkedIn = 3000
 export const PostTextMaxLengthX = 280
 
+/**
+ * Instagram Feed caption entity limits (hashtags/@mentions written IN the caption text).
+ * Mirrors the backend ValidationLimits.cs. Both are inclusive: exactly the value is accepted,
+ * one over is rejected. These count entities inside the caption and are SEPARATE from Instagram
+ * media tags (usernames attached to the image/video), which have their own validation.
+ */
+export const InstagramFeedMaxHashtags = 30
+export const InstagramFeedMaxMentions = 20
+
+/** Blocking message when an Instagram Feed caption carries too many hashtags. */
+export const InstagramFeedTooManyHashtagsMessage =
+  `Instagram Feed captions can contain at most ${InstagramFeedMaxHashtags} hashtags.`
+
+/** Blocking message when an Instagram Feed caption carries too many @mentions. */
+export const InstagramFeedTooManyMentionsMessage =
+  `Instagram Feed captions can contain at most ${InstagramFeedMaxMentions} @mentions.`
+
 /** Platform identifiers as used in the UI */
 export type PlatformId = 'facebook' | 'instagram' | 'linkedin' | 'twitter'
 

@@ -114,6 +114,11 @@
   white-space: nowrap;
 }
 
+.caption-summary .error {
+  color: #ff6b6b;
+  font-weight: 500;
+}
+
 .caption-microcopy {
   font-size: 0.7rem;
   color: rgba(255, 255, 255, 0.3);

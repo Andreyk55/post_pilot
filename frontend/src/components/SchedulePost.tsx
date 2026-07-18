@@ -26,8 +26,13 @@ import { ConfirmDialog } from './ConfirmDialog'
 import {
   getPostTextMaxChars,
   getPlatformDisplayName,
+  InstagramFeedMaxHashtags,
+  InstagramFeedMaxMentions,
+  InstagramFeedTooManyHashtagsMessage,
+  InstagramFeedTooManyMentionsMessage,
   type PlatformId,
 } from '../constants/validationLimits'
+import { countHashtags, countMentions } from '../utils/instagramCaption'
 import { MAX_PLATFORMS_PER_POST } from '../constants/features'
 import { useComposerEnabled } from '../hooks/useComposerEnabled'
 import { useAuth } from '../hooks/useAuth'
@@ -596,14 +601,10 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
   const showCarouselTags = canShowCarouselTags(isInstagramSelected, isStory, isMultiMedia)
 
   // --- Caption summary parsing (Instagram only) ---
+  // Counts are derived from the caption via the shared instagramCaption parser (the same
+  // occurrence-counting the backend uses), so the composer never accepts a caption the backend
+  // rejects. Media tags are counted separately from caption @mentions and never combined.
   const captionSummary = useMemo(() => {
-    const mentionRegex = /(?<![\w.])@([A-Za-z0-9._]{1,30})/g
-    const hashtagRegex = /(?<![\w])#([A-Za-z0-9_]{1,50})/g
-    const mentionSet = new Set<string>()
-    const hashtagSet = new Set<string>()
-    let m: RegExpExecArray | null
-    while ((m = mentionRegex.exec(content)) !== null) mentionSet.add(m[1].toLowerCase())
-    while ((m = hashtagRegex.exec(content)) !== null) hashtagSet.add(m[1].toLowerCase())
     const mediaTagCount = mediaTags.length
     const notPlacedCount = mediaTags.filter(t => t.x === undefined || t.y === undefined).length
     let mediaTagSuffix = ''
@@ -611,12 +612,19 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
       mediaTagSuffix = notPlacedCount === 0 ? ' (placed)' : ` (${notPlacedCount} not placed)`
     }
     return {
-      mentionCount: mentionSet.size,
-      hashtagCount: hashtagSet.size,
+      mentionCount: countMentions(content),
+      hashtagCount: countHashtags(content),
       mediaTagCount,
       mediaTagSuffix,
     }
   }, [content, mediaTags])
+
+  // Instagram Feed caption entity caps are blocking (hashtags ≤ 30, @mentions ≤ 20). Only
+  // apply to Instagram feed captions — Facebook and Stories have no such caps. Derived purely
+  // from the current counts, so they clear the instant the caption drops back under the limit.
+  const isTooManyHashtags = isInstagramSelected && !isStory && captionSummary.hashtagCount > InstagramFeedMaxHashtags
+  const isTooManyMentions = isInstagramSelected && !isStory && captionSummary.mentionCount > InstagramFeedMaxMentions
+  const hasCaptionTagError = isTooManyHashtags || isTooManyMentions
   // Build placed tags payload for submission
   // For video: auto-place all tags at center (0.5, 0.5) since there's no image to click on
   const placedUserTags: InstagramUserTag[] | undefined = showMediaTags && mediaTags.length > 0
@@ -648,7 +656,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
        (!isFacebookSelected || selectedPageId) &&
        (!isInstagramSelected || selectedInstagramAccountId) &&
        isInstagramMediaValid &&
-       !isUploading && !isTextTooLong && !hasBlockingMediaValidation && !hasInvalidCarouselItems && !hasUnplacedTags)
+       !isUploading && !isTextTooLong && !hasBlockingMediaValidation && !hasInvalidCarouselItems && !hasUnplacedTags && !hasCaptionTagError)
 
   // Publish Now valid: same as isFormValid but without requiring date/time
   const isPublishNowValid = isStory
@@ -662,7 +670,7 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
        (!isFacebookSelected || selectedPageId) &&
        (!isInstagramSelected || selectedInstagramAccountId) &&
        isInstagramMediaValid &&
-       !isUploading && !isPublishingNow && !isTextTooLong && !hasBlockingMediaValidation && !hasInvalidCarouselItems && !hasUnplacedTags)
+       !isUploading && !isPublishingNow && !isTextTooLong && !hasBlockingMediaValidation && !hasInvalidCarouselItems && !hasUnplacedTags && !hasCaptionTagError)
 
   const handlePublishNow = async () => {
     if (!onPublishNow || !isPublishNowValid) return
@@ -936,8 +944,18 @@ export function SchedulePost({ onSchedule, onPublishNow, voiceProfiles, onVoiceP
             {isInstagramSelected && (
               <div className="caption-summary-row">
                 <span className="caption-summary">
-                  Mentions: {captionSummary.mentionCount} &bull; Hashtags: {captionSummary.hashtagCount} &bull; Media tags: {captionSummary.mediaTagCount}{captionSummary.mediaTagSuffix}
+                  Mentions: <span className={isTooManyMentions ? 'error' : ''}>{captionSummary.mentionCount}/{InstagramFeedMaxMentions}</span> &bull; Hashtags: <span className={isTooManyHashtags ? 'error' : ''}>{captionSummary.hashtagCount}/{InstagramFeedMaxHashtags}</span> &bull; Media tags: {captionSummary.mediaTagCount}{captionSummary.mediaTagSuffix}
                 </span>
+                {isTooManyHashtags && (
+                  <span className="char-error">
+                    {InstagramFeedTooManyHashtagsMessage}
+                  </span>
+                )}
+                {isTooManyMentions && (
+                  <span className="char-error">
+                    {InstagramFeedTooManyMentionsMessage}
+                  </span>
+                )}
                 <span className="caption-microcopy">
                   Mentions and hashtags usually become clickable if they're valid.
                 </span>

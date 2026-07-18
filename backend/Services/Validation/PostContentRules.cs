@@ -67,4 +67,65 @@ public static class PostContentRules
             ? $"Text is too long for {platform}. Max {maxChars} characters."
             : null;
     }
+
+    /// <summary>Blocking message when an Instagram Feed caption carries too many hashtags.</summary>
+    public static readonly string InstagramFeedTooManyHashtagsMessage =
+        $"Instagram Feed captions can contain at most {ValidationLimits.InstagramFeedMaxHashtags} hashtags.";
+
+    /// <summary>Blocking message when an Instagram Feed caption carries too many @mentions.</summary>
+    public static readonly string InstagramFeedTooManyMentionsMessage =
+        $"Instagram Feed captions can contain at most {ValidationLimits.InstagramFeedMaxMentions} @mentions.";
+
+    /// <summary>
+    /// Returns the Instagram Feed caption ENTITY-cap violations — too many hashtags and/or too
+    /// many @mentions — in a stable order (hashtags before mentions), or an empty list when the
+    /// caption is acceptable. Both limits are inclusive (exactly the cap is accepted).
+    ///
+    /// <para>Scope is strictly Instagram Feed: every other platform/placement returns empty
+    /// (Facebook has no such caps; Stories carry no caption at all — see
+    /// <see cref="GetStoryTextError"/>). Null/empty content is always accepted. Counting uses
+    /// the shared <see cref="InstagramCaptionParser"/> so occurrences (duplicates included) are
+    /// counted exactly as the frontend counts them. These are the caption @mentions written in
+    /// the text — image/video MEDIA tags are a separate feature and are never counted here.</para>
+    /// </summary>
+    public static IReadOnlyList<string> GetInstagramFeedTagErrors(Platform platform, PostType postType, string? content)
+    {
+        if (platform != Platform.Instagram || postType != PostType.Feed || string.IsNullOrEmpty(content))
+            return [];
+
+        var errors = new List<string>();
+
+        if (InstagramCaptionParser.CountHashtags(content) > ValidationLimits.InstagramFeedMaxHashtags)
+            errors.Add(InstagramFeedTooManyHashtagsMessage);
+
+        if (InstagramCaptionParser.CountMentions(content) > ValidationLimits.InstagramFeedMaxMentions)
+            errors.Add(InstagramFeedTooManyMentionsMessage);
+
+        return errors;
+    }
+
+    /// <summary>
+    /// Composes every FEED post-text rule that applies to <paramref name="content"/> for the
+    /// given platform/placement into a single ordered list — text length first (via
+    /// <see cref="GetTextTooLongError"/>), then the Instagram Feed hashtag/mention caps (via
+    /// <see cref="GetInstagramFeedTagErrors"/>). Returns an empty list when the content is
+    /// acceptable. This is the one entry point create/update/preflight route through so no
+    /// caller re-implements or drops a rule; multiple simultaneous violations are all reported
+    /// (length stays at index 0 for callers that surface only the first message).
+    ///
+    /// <para>Story placement is out of scope here — <see cref="GetStoryTextError"/> handles the
+    /// "no text at all" rule and must be checked first by callers.</para>
+    /// </summary>
+    public static IReadOnlyList<string> GetFeedContentErrors(Platform platform, PostType postType, string? content)
+    {
+        var errors = new List<string>();
+
+        var lengthError = GetTextTooLongError(platform, content);
+        if (lengthError != null)
+            errors.Add(lengthError);
+
+        errors.AddRange(GetInstagramFeedTagErrors(platform, postType, content));
+
+        return errors;
+    }
 }

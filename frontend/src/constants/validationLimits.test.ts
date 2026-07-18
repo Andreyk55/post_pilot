@@ -3,6 +3,10 @@ import {
   PostTextMaxCharsByPlatform,
   PostTextMaxLengthFacebook,
   PostTextMaxLengthInstagram,
+  InstagramFeedMaxHashtags,
+  InstagramFeedMaxMentions,
+  InstagramFeedTooManyHashtagsMessage,
+  InstagramFeedTooManyMentionsMessage,
   getPostTextMaxChars,
 } from './validationLimits'
 // Source pin (no DOM harness in this project — same pattern as SchedulePost.textLimit.test.ts).
@@ -43,6 +47,23 @@ describe('placement-specific post text limits', () => {
       expect(isTextTooLong('', platform)).toBe(false)
       expect(isTextTooLong('an ordinary post #tag', platform)).toBe(false)
     }
+  })
+})
+
+describe('Instagram Feed caption entity caps (mirrored from the backend)', () => {
+  it('matches the backend caps (30 hashtags, 20 @mentions)', () => {
+    expect(InstagramFeedMaxHashtags).toBe(30)
+    expect(InstagramFeedMaxMentions).toBe(20)
+  })
+
+  it('uses the exact preferred, distinguishable error wording with the caps embedded', () => {
+    expect(InstagramFeedTooManyHashtagsMessage).toBe(
+      'Instagram Feed captions can contain at most 30 hashtags.',
+    )
+    expect(InstagramFeedTooManyMentionsMessage).toBe(
+      'Instagram Feed captions can contain at most 20 @mentions.',
+    )
+    expect(InstagramFeedTooManyHashtagsMessage).not.toBe(InstagramFeedTooManyMentionsMessage)
   })
 })
 
