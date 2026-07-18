@@ -44,12 +44,12 @@ describe('resolveMediaValidationView', () => {
   })
 
   it('maps Invalid to a blocking view and lets errors take precedence over warnings', () => {
-    const view = resolveMediaValidationView('Invalid', [error('Story must be 9:16.')], [warning('Ignored while invalid.')])
+    const view = resolveMediaValidationView('Invalid', [error('This image is too large.')], [warning('Ignored while invalid.')])
     expect(view).toEqual({
       status: 'invalid',
       blocking: true,
       title: 'Media cannot be published',
-      messages: ['Story must be 9:16.'],
+      messages: ['This image is too large.'],
       recommendations: [],
     })
   })

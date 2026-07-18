@@ -122,17 +122,19 @@ describe('resolveClientMediaError — friendly, specific copy', () => {
   })
 })
 
-describe('resolveClientDimensionError — Story 9:16 and friends', () => {
-  it('gives the recognizable vertical 9:16 message for a non-vertical Instagram Story image', () => {
-    // Square image (aspect 1.0) is outside the Story 9:16 (0.5625) requirement.
-    expect(resolveClientDimensionError(1080, 1080, 'instagram', 'Story')).toBe(
-      'Story media should be vertical 9:16.',
-    )
+describe('resolveClientDimensionError — placement-specific shape checks', () => {
+  it('does NOT flag any Instagram Story image shape (no dimension or aspect validation)', () => {
+    expect(resolveClientDimensionError(1080, 1080, 'instagram', 'Story')).toBeNull() // square
+    expect(resolveClientDimensionError(1920, 1080, 'instagram', 'Story')).toBeNull() // landscape
+    expect(resolveClientDimensionError(3000, 300, 'instagram', 'Story')).toBeNull()  // extremely wide
+    expect(resolveClientDimensionError(300, 3000, 'instagram', 'Story')).toBeNull()  // extremely tall
+    expect(resolveClientDimensionError(100, 100, 'instagram', 'Story')).toBeNull()   // below old floors
+    expect(resolveClientDimensionError(4000, 6000, 'instagram', 'Story')).toBeNull() // above old ceilings
   })
 
   it('does NOT flag any Facebook Story image shape (no dimension or aspect validation)', () => {
     // FB Story has no dimension/aspect rules: square, landscape, wide, tall, tiny, and huge
-    // images all pass client-side (contrast with Instagram Story, which requires ~9:16 above).
+    // images all pass client-side.
     expect(resolveClientDimensionError(1080, 1080, 'facebook', 'Story')).toBeNull() // square
     expect(resolveClientDimensionError(1920, 1080, 'facebook', 'Story')).toBeNull() // landscape
     expect(resolveClientDimensionError(3000, 300, 'facebook', 'Story')).toBeNull()  // extremely wide
@@ -175,10 +177,9 @@ describe('resolveClientDimensionError — Story 9:16 and friends', () => {
     expect(resolveClientDimensionError(500, 500, 'instagram', 'Feed')).toBeNull()
   })
 
-  it('lets slightly off-ratio Instagram Story images upload so the server can warn', () => {
-    // Instagram Story still validates aspect (server warns near-9:16); Facebook Story has no
-    // aspect check at all — its any-shape acceptance is covered by the dedicated test above.
+  it('lets unusual Instagram Story image shapes upload without client shape errors', () => {
     expect(resolveClientDimensionError(1080, 1800, 'instagram', 'Story')).toBeNull()
+    expect(resolveClientDimensionError(3000, 300, 'instagram', 'Story')).toBeNull()
   })
 
   it('passes a correctly-sized vertical Story image (null)', () => {

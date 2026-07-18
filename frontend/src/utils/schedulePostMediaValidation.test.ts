@@ -119,8 +119,8 @@ describe('schedulePostMediaValidation', () => {
         newKey: 'fb-story:2',
       },
       {
-        label: 'Instagram Story (image, aspect ratio)',
-        error: { code: 'aspect_ratio_invalid', field: 'aspectRatio', message: 'Story must be 9:16.', expected: '9:16', actual: '1:1' },
+        label: 'Instagram Story (image, file size)',
+        error: { code: 'file_too_large', field: 'sizeBytes', message: 'This image is too large. Instagram images can be up to 8MB.', expected: '8MB', actual: '9.0MB' },
         oldKey: 'ig-story:1',
         newKey: 'ig-story:2',
       },

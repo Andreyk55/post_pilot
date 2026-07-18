@@ -62,15 +62,12 @@ public class MediaValidationTests
             Assert.DoesNotContain(unsupported, rules.AllowedMimeTypes);
     }
 
-    // Codec allow-lists remain for Facebook Feed and Instagram Story only. Facebook Story and
-    // (as of the finalized IG Feed policy) Instagram Feed have NO codec validation — Meta decides
-    // playability at publish time. See the *_HasNoCodecRules... tests below.
-    [Theory]
-    [InlineData(Platform.Facebook, Placement.Feed)]
-    [InlineData(Platform.Instagram, Placement.Story)]
-    public void Video_AllowsH264AndHevcWithAacOnly(Platform platform, Placement placement)
+    // Codec allow-lists remain for Facebook Feed only. Instagram Feed/Story and Facebook Story
+    // let Meta decide encoding playability once the file is readable.
+    [Fact]
+    public void FacebookFeedVideo_AllowsH264AndHevcWithAacOnly()
     {
-        var rules = MediaValidationRules.GetRules(platform, placement, MediaType.Video)!;
+        var rules = MediaValidationRules.GetRules(Platform.Facebook, Placement.Feed, MediaType.Video)!;
 
         Assert.Equal(new[] { "h264", "hevc" }, rules.AllowedVideoCodecs);
         Assert.Equal(new[] { "aac" }, rules.AllowedAudioCodecs);
@@ -153,6 +150,33 @@ public class MediaValidationTests
     {
         var rules = MediaValidationRules.GetRules(Platform.Instagram, Placement.Story, MediaType.Video)!;
 
+        Assert.Equal(3, rules.DurationMinSeconds);
+        Assert.Equal(60, rules.DurationMaxSeconds);
+    }
+
+    [Fact]
+    public void InstagramStoryVideo_HasNoCodecFpsDimensionOrAspectRules()
+    {
+        var rules = MediaValidationRules.GetRules(Platform.Instagram, Placement.Story, MediaType.Video)!;
+
+        Assert.Null(rules.AllowedVideoCodecs);
+        Assert.Null(rules.AllowedAudioCodecs);
+        Assert.Null(rules.MinFps);
+        Assert.Null(rules.MaxFps);
+        Assert.Null(rules.MinWidth);
+        Assert.Null(rules.MinHeight);
+        Assert.Null(rules.MaxWidth);
+        Assert.Null(rules.MaxHeight);
+        Assert.Null(rules.AspectRatioMin);
+        Assert.Null(rules.AspectRatioMax);
+        Assert.Null(rules.PreferredAspectRatio);
+        Assert.Null(rules.AspectRatioWarningTolerance);
+        Assert.Null(rules.RecommendedWidth);
+        Assert.Null(rules.RecommendedHeight);
+
+        Assert.Equal(new[] { "video/mp4", "video/quicktime" }, rules.AllowedMimeTypes);
+        Assert.Equal(new[] { "mp4", "mov" }, rules.AllowedContainers);
+        Assert.Equal(50L * 1024 * 1024, rules.MaxBytes);
         Assert.Equal(3, rules.DurationMinSeconds);
         Assert.Equal(60, rules.DurationMaxSeconds);
     }
@@ -300,6 +324,7 @@ public class MediaValidationErrorCodesTests
         Assert.Equal("ASPECT_RATIO_INVALID", MediaValidationErrorCodes.AspectRatioInvalid);
         Assert.Equal("DURATION_TOO_SHORT", MediaValidationErrorCodes.DurationTooShort);
         Assert.Equal("DURATION_TOO_LONG", MediaValidationErrorCodes.DurationTooLong);
+        Assert.Equal("VIDEO_STREAM_MISSING", MediaValidationErrorCodes.VideoStreamMissing);
     }
 }
 
@@ -418,6 +443,28 @@ public class InstagramValidationRulesTests
         Assert.Equal(new[] { "image/jpeg" }, rules.AllowedMimeTypes);
         Assert.DoesNotContain("image/png", rules.AllowedMimeTypes);
         Assert.DoesNotContain("image/webp", rules.AllowedMimeTypes);
+    }
+
+    [Fact]
+    public void InstagramStoryImage_HasNoDimensionAspectOrQualityRules()
+    {
+        var rules = MediaValidationRules.GetRules(Platform.Instagram, Placement.Story, MediaType.Image)!;
+
+        Assert.Null(rules.MinWidth);
+        Assert.Null(rules.MinHeight);
+        Assert.Null(rules.MaxWidth);
+        Assert.Null(rules.MaxHeight);
+        Assert.Null(rules.AspectRatioMin);
+        Assert.Null(rules.AspectRatioMax);
+        Assert.Null(rules.PreferredAspectRatio);
+        Assert.Null(rules.AspectRatioWarningTolerance);
+        Assert.Null(rules.QualityWarningMinWidth);
+        Assert.Null(rules.QualityWarningMinHeight);
+        Assert.Null(rules.RecommendedWidth);
+        Assert.Null(rules.RecommendedHeight);
+
+        Assert.Equal(new[] { "image/jpeg" }, rules.AllowedMimeTypes);
+        Assert.Equal(8L * 1024 * 1024, rules.MaxBytes);
     }
 
     // Instagram carousels reuse the IG Feed Image rule (the validate call always passes
@@ -741,40 +788,37 @@ public class MediaValidationServiceImageBehaviorTests
     }
 
     [Fact]
-    public async Task InstagramStory_SlightlyOffRatioJpeg_WarnsButIsPublishable()
+    public async Task InstagramStory_UnusualAspectJpeg_IsValidWithoutWarnings()
     {
         var svc = CreateService();
-        var path = WriteTempImage("jpeg", 1080, 1800);
+        var path = WriteTempImage("jpeg", 1080, 300);
         try
         {
             var size = new FileInfo(path).Length;
             var result = await svc.ValidateFileAsync(
                 path, "image/jpeg", size, MediaType.Image, Platform.Instagram, Placement.Story);
 
-            Assert.Equal(ValidationStatus.Warning, result.Status);
+            Assert.Equal(ValidationStatus.Valid, result.Status);
             Assert.Empty(result.Errors);
-            Assert.Contains(result.Warnings, w =>
-                w.Code == MediaValidationWarningCodes.AspectRatioSuboptimal
-                && w.Message == "Story media should be vertical 9:16.");
+            Assert.Empty(result.Warnings);
         }
         finally { File.Delete(path); }
     }
 
     [Fact]
-    public async Task InstagramStory_SquareJpeg_IsBlocked()
+    public async Task InstagramStory_TinySquareJpeg_IsValidWithoutWarnings()
     {
         var svc = CreateService();
-        var path = WriteTempImage("jpeg", 1080, 1080);
+        var path = WriteTempImage("jpeg", 100, 100);
         try
         {
             var size = new FileInfo(path).Length;
             var result = await svc.ValidateFileAsync(
                 path, "image/jpeg", size, MediaType.Image, Platform.Instagram, Placement.Story);
 
-            Assert.Equal(ValidationStatus.Invalid, result.Status);
-            Assert.Contains(result.Errors, e =>
-                e.Code == MediaValidationErrorCodes.AspectRatioInvalid
-                && e.Message == "Story media should be vertical 9:16.");
+            Assert.Equal(ValidationStatus.Valid, result.Status);
+            Assert.Empty(result.Errors);
+            Assert.Empty(result.Warnings);
         }
         finally { File.Delete(path); }
     }

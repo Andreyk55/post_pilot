@@ -612,6 +612,14 @@ public class InstagramStoryPublisher : IStoryPublisher
             return textError;
         }
 
+        if (string.IsNullOrEmpty(post.MediaUrl))
+        {
+            _logger.LogWarning(
+                "IG_STORY_PUBLISH_BLOCKED_MEDIA postId={PostId} — stored story row has no media; refusing to publish.",
+                post.Id);
+            return "Instagram Story posts require exactly one media item.";
+        }
+
         var mediaError = await GuardStoryMediaAsync(post, cancellationToken);
         return mediaError != null
             ? $"Media failed validation before publishing: {mediaError}"
@@ -628,12 +636,9 @@ public class InstagramStoryPublisher : IStoryPublisher
     /// </summary>
     private async Task<string?> GuardStoryMediaAsync(Post post, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(post.MediaUrl))
-            return null;
-
         var result = await _mediaGate.ValidateAsync(
             post.WorkspaceId,
-            new[] { new Validation.MediaGateItem(post.MediaUrl, post.MediaType, 0) },
+            new[] { new Validation.MediaGateItem(post.MediaUrl!, post.MediaType, 0) },
             new[] { new Validation.MediaGateTarget(Platform.Instagram, Placement.Story) },
             cancellationToken);
 

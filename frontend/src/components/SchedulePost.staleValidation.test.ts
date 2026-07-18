@@ -12,7 +12,7 @@ describe('SchedulePost — a new upload start clears the previous media error', 
   it('clears the transient upload-error banner when a new upload session begins (Pending)', () => {
     // The Pending branch of the validation handler must reset the upload-error
     // banner (which holds client-side pre-validation messages with no owner key of
-    // their own, e.g. an invalid Story aspect ratio).
+    // their own, e.g. unsupported type, too-large file, or Feed aspect ratio).
     expect(schedulePostSource).toMatch(
       /const handleMediaValidationChange = \([\s\S]*?if \(status === 'Pending'\) \{\s*setUploadError\(null\)\s*\}/,
     )

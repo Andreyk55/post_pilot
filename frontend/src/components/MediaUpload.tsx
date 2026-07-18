@@ -134,7 +134,7 @@ export function MediaUpload({
 
   const validateFile = async (file: File): Promise<string | null> => {
     // Platform-specific pre-validation if platform is selected. Friendly, specific
-    // copy ("Story media should be vertical 9:16.", "Images must be JPG or PNG.")
+    // copy ("Images must be JPG or PNG.", "This video is too large...")
     // so a client rejection never bottoms out at a generic message.
     if (selectedPlatform) {
       const typeOrSizeError = resolveClientMediaError(file, selectedPlatform, placement)
@@ -142,7 +142,7 @@ export function MediaUpload({
         return typeOrSizeError
       }
 
-      // For images, also check dimensions/aspect ratio.
+      // For images, also check dimensions/aspect ratio when that surface defines those rules.
       if (file.type.startsWith('image/')) {
         const dims = await getImageDimensions(file)
         if (dims) {

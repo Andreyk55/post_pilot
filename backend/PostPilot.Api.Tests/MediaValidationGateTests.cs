@@ -114,12 +114,13 @@ public class MediaValidationGateTests : IDisposable
     private static IVideoMetadataExtractor FakeVideo(
         int width, int height, double durationSeconds,
         string container = "mp4", string? videoCodec = "h264", string? audioCodec = "aac",
-        double? fps = 30)
+        double? fps = 30, bool hasVideoStream = true)
     {
         var meta = new VideoMetadata(
             Width: width, Height: height, DurationSeconds: durationSeconds,
             Container: container, VideoCodec: videoCodec, AudioCodec: audioCodec,
-            Fps: fps, Bitrate: null, MimeType: container == "mov" ? "video/quicktime" : "video/mp4");
+            Fps: fps, Bitrate: null, MimeType: container == "mov" ? "video/quicktime" : "video/mp4",
+            HasVideoStream: hasVideoStream);
         var mock = new Mock<IVideoMetadataExtractor>();
         mock.Setup(e => e.ExtractAsync(It.IsAny<string>())).ReturnsAsync(meta);
         return mock.Object;
@@ -481,16 +482,43 @@ public class MediaValidationGateTests : IDisposable
     }
 
     [Fact]
-    public async Task Video_InstagramStory_BadAspect_IsBlocked()
+    public async Task Video_InstagramStory_UnusualCodecFpsDimensionsAndAspect_IsAccepted()
     {
         var path = SeedRawMedia("v-ig-story", "video/mp4", 10L * 1024 * 1024);
-        var gate = CreateGate(new() { ["v-ig-story"] = path }, FakeVideo(1080, 1080, 10)); // 1:1 outside 0.5–0.75
+        var gate = CreateGate(new() { ["v-ig-story"] = path },
+            FakeVideo(3840, 2160, 10, videoCodec: "prores", audioCodec: "opus", fps: 120));
 
         var result = await gate.ValidateAsync(Ws,
             new[] { new MediaGateItem("v-ig-story", MediaType.Video, 0) }, new[] { IgStory });
 
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task Video_InstagramStory_WithoutAudio_IsAccepted()
+    {
+        var path = SeedRawMedia("v-ig-story-no-audio", "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-ig-story-no-audio"] = path },
+            FakeVideo(1080, 1920, 10, audioCodec: null));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-ig-story-no-audio", MediaType.Video, 0) }, new[] { IgStory });
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task Video_InstagramStory_AudioOnlyMp4_IsBlocked()
+    {
+        var path = SeedRawMedia("v-ig-story-audio-only", "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-ig-story-audio-only"] = path },
+            FakeVideo(0, 0, 10, videoCodec: null, audioCodec: "aac", fps: null, hasVideoStream: false));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-ig-story-audio-only", MediaType.Video, 0) }, new[] { IgStory });
+
         Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.AspectRatioInvalid);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.VideoStreamMissing);
     }
 
     [Fact]

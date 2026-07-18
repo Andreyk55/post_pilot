@@ -32,5 +32,6 @@ public record VideoMetadata(
     string? AudioCodec, // aac, mp3, etc.
     double? Fps,
     long? Bitrate,
-    string MimeType
+    string MimeType,
+    bool HasVideoStream = true
 );

@@ -44,6 +44,7 @@ export interface ExtractedMediaMetadata {
   videoCodec: string | null
   audioCodec: string | null
   fps: number | null
+  hasVideoStream?: boolean | null
 }
 
 /** Validation result from backend */
@@ -159,28 +160,13 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
   'instagram:story:image': {
     allowedMimeTypes: ['image/jpeg', 'image/png'],
     maxBytes: 8 * 1024 * 1024, // 8MB — Instagram platform limit
-    minWidth: 320,
-    minHeight: 320,
-    maxWidth: 1080,
-    maxHeight: 1920,
-    aspectRatioMin: 0.5,
-    aspectRatioMax: 0.75,
-    preferredAspectRatio: 0.5625,
-    aspectRatioWarningTolerance: 0.02,
   },
 
-  // Instagram Story Video
+  // Instagram Story Video — same simplified philosophy as Instagram Feed video, with
+  // the Story-specific 60s maximum. No codec/FPS/dimension/aspect validation.
   'instagram:story:video': {
     allowedMimeTypes: ['video/mp4', 'video/quicktime'],
     maxBytes: 50 * 1024 * 1024, // 50MB — product cap for Instagram Story video
-    minWidth: 320,
-    minHeight: 320,
-    maxWidth: 1080,
-    maxHeight: 1920,
-    aspectRatioMin: 0.5,
-    aspectRatioMax: 0.75,
-    preferredAspectRatio: 0.5625,
-    aspectRatioWarningTolerance: 0.02,
     durationMinSeconds: 3, // Meta/platform limit: story videos are 3-60 seconds
     durationMaxSeconds: 60,
   },
@@ -398,6 +384,7 @@ export const MediaValidationErrorCodes = {
   UnsupportedContainer: 'UNSUPPORTED_CONTAINER',
   UnsupportedVideoCodec: 'UNSUPPORTED_VIDEO_CODEC',
   UnsupportedAudioCodec: 'UNSUPPORTED_AUDIO_CODEC',
+  VideoStreamMissing: 'VIDEO_STREAM_MISSING',
   MetadataExtractionFailed: 'METADATA_EXTRACTION_FAILED',
   NoRulesForCombination: 'NO_RULES_FOR_COMBINATION',
 } as const

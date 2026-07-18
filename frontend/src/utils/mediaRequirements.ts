@@ -13,13 +13,9 @@ import type { PlatformId } from '../constants/validationLimits'
  *
  * The friendly resolvers below mirror the decisions made by `preValidateFile` /
  * `preValidateImageDimensions` (same rule table via `getClientValidationRule`) but
- * return human copy instead of the technical strings — e.g. "Story media should be
- * vertical 9:16." rather than "Aspect ratio (1.33) is outside allowed range
- * (0.56 to 0.56)". The technical functions are left intact as the lower-level check.
+ * return human copy instead of the technical strings. The technical functions are left
+ * intact as the lower-level check.
  */
-
-const isStory = (placement: Placement | string): boolean =>
-  String(placement).toLowerCase() === 'story'
 
 /** 'facebook' → 'Facebook' — display name for requirement/error copy. */
 function platformLabel(platform: PlatformId | string | null | undefined): string | null {
@@ -161,8 +157,7 @@ function formatRatio(ratio: number): string {
 
 /**
  * Friendly client-side image dimension/aspect pre-validation message, or null when it
- * passes. Mirrors `preValidateImageDimensions` (min, max, aspect) but with human copy
- * — the Story 9:16 rule gets a dedicated, recognizable message.
+ * passes. Mirrors `preValidateImageDimensions` (min, max, aspect) but with human copy.
  */
 export function resolveClientDimensionError(
   width: number,
@@ -174,7 +169,7 @@ export function resolveClientDimensionError(
   if (!rule) return null
 
   // Each check is skipped when the rule omits that bound, so a placement with no dimension/aspect
-  // requirement (e.g. Facebook Story) returns null for any size or shape.
+  // requirement (e.g. Facebook or Instagram Story) returns null for any size or shape.
 
   if (rule.minWidth != null && rule.minHeight != null && (width < rule.minWidth || height < rule.minHeight)) {
     return `Image is too small. Use at least ${rule.minWidth}×${rule.minHeight}px.`
@@ -187,11 +182,9 @@ export function resolveClientDimensionError(
   if (rule.aspectRatioMin != null && rule.aspectRatioMax != null) {
     const aspectRatio = width / height
     if (aspectRatio < rule.aspectRatioMin || aspectRatio > rule.aspectRatioMax) {
-      if (isStory(placement)) {
-        return 'Story media should be vertical 9:16.'
-      }
       const label = platformLabel(platform)
-      return `${label ? `${label} Feed` : 'Feed'} images must use an aspect ratio between ${formatRatio(rule.aspectRatioMin)} and ${formatRatio(rule.aspectRatioMax)}.`
+      const placementLabel = String(placement || 'Feed')
+      return `${label ? `${label} ${placementLabel}` : placementLabel} images must use an aspect ratio between ${formatRatio(rule.aspectRatioMin)} and ${formatRatio(rule.aspectRatioMax)}.`
     }
   }
 

@@ -112,6 +112,7 @@ export interface ExtractedMediaMetadata {
   videoCodec: string | null
   audioCodec: string | null
   fps: number | null
+  hasVideoStream?: boolean | null
 }
 
 export interface MediaValidationResult {

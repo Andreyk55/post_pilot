@@ -121,17 +121,22 @@ public class InstagramDerivativeGateAndPublisherTests : IDisposable
     // ── Gate: PNG + valid derivative passes for Instagram ───────────────────────
 
     [Fact]
-    public async Task Gate_InstagramPng_WithValidDerivative_Passes()
+    public async Task Gate_InstagramPng_WithValidDerivative_Passes_ForFeedAndStory()
     {
         SeedPngMedia("png-orig", 2000, 2000, derivativeKey: "png-orig.ig.jpg", derivWidth: 1440, derivHeight: 1440);
 
         var gate = BuildGate(BuildMediaService());
-        var result = await gate.ValidateAsync(
+        var feed = await gate.ValidateAsync(
             Ws,
             new[] { new MediaGateItem("png-orig", MediaType.Image, 0) },
             new[] { new MediaGateTarget(Platform.Instagram, Placement.Feed) });
+        var story = await gate.ValidateAsync(
+            Ws,
+            new[] { new MediaGateItem("png-orig", MediaType.Image, 0) },
+            new[] { new MediaGateTarget(Platform.Instagram, Placement.Story) });
 
-        Assert.True(result.IsValid);
+        Assert.True(feed.IsValid);
+        Assert.True(story.IsValid);
     }
 
     // ── Gate: PNG without derivative blocked clearly for Instagram ──────────────
@@ -170,10 +175,27 @@ public class InstagramDerivativeGateAndPublisherTests : IDisposable
         Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.AspectRatioInvalid);
     }
 
+    [Fact]
+    public async Task Gate_InstagramStoryPng_DerivativeBadAspect_Passes()
+    {
+        // Story validates the effective JPEG derivative for type, size, and readability only.
+        // Feed still rejects this shape in the test above.
+        SeedPngMedia("png-story-wide", 1600, 400, derivativeKey: "png-story-wide.ig.jpg", derivWidth: 1440, derivHeight: 360);
+
+        var gate = BuildGate(BuildMediaService());
+        var result = await gate.ValidateAsync(
+            Ws,
+            new[] { new MediaGateItem("png-story-wide", MediaType.Image, 0) },
+            new[] { new MediaGateTarget(Platform.Instagram, Placement.Story) });
+
+        Assert.True(result.IsValid);
+        Assert.Empty(result.Errors);
+    }
+
     // ── Gate: too-large derivative blocks ───────────────────────────────────────
 
     [Fact]
-    public async Task Gate_InstagramPng_OversizeDerivative_IsBlocked()
+    public async Task Gate_InstagramPng_OversizeDerivative_IsBlocked_ForFeedAndStory()
     {
         // Seed a derivative file that is genuinely > 8MB by making a real large JPEG.
         var originalPath = WriteImage("png", 1080, 1080);
@@ -213,13 +235,19 @@ public class InstagramDerivativeGateAndPublisherTests : IDisposable
         _db.SaveChanges();
 
         var gate = BuildGate(BuildMediaService());
-        var result = await gate.ValidateAsync(
+        var feed = await gate.ValidateAsync(
             Ws,
             new[] { new MediaGateItem("png-big", MediaType.Image, 0) },
             new[] { new MediaGateTarget(Platform.Instagram, Placement.Feed) });
+        var story = await gate.ValidateAsync(
+            Ws,
+            new[] { new MediaGateItem("png-big", MediaType.Image, 0) },
+            new[] { new MediaGateTarget(Platform.Instagram, Placement.Story) });
 
-        Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.FileTooLarge);
+        Assert.False(feed.IsValid);
+        Assert.Contains(feed.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.FileTooLarge);
+        Assert.False(story.IsValid);
+        Assert.Contains(story.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.FileTooLarge);
     }
 
     // ── Gate: Facebook still validates the ORIGINAL PNG (accepted) ──────────────

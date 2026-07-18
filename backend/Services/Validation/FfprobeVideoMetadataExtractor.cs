@@ -117,6 +117,7 @@ public class FfprobeVideoMetadataExtractor : IVideoMetadataExtractor
             string? videoCodec = null;
             string? audioCodec = null;
             long? bitrate = null;
+            var hasVideoStream = false;
 
             if (root.TryGetProperty("streams", out var streams))
             {
@@ -124,8 +125,12 @@ public class FfprobeVideoMetadataExtractor : IVideoMetadataExtractor
                 {
                     var codecType = stream.TryGetProperty("codec_type", out var ct) ? ct.GetString() : null;
 
-                    if (codecType == "video" && videoCodec == null)
+                    if (codecType == "video")
                     {
+                        hasVideoStream = true;
+                        if (videoCodec != null)
+                            continue;
+
                         videoCodec = stream.TryGetProperty("codec_name", out var cn) ? cn.GetString() : null;
 
                         if (stream.TryGetProperty("width", out var w))
@@ -168,7 +173,8 @@ public class FfprobeVideoMetadataExtractor : IVideoMetadataExtractor
                 AudioCodec: audioCodec,
                 Fps: fps,
                 Bitrate: bitrate,
-                MimeType: mimeType
+                MimeType: mimeType,
+                HasVideoStream: hasVideoStream
             );
         }
         catch (Exception ex)

@@ -141,12 +141,12 @@ describe('MediaValidationCard', () => {
   it('renders the red invalid card as an alert listing the blocking messages', () => {
     const markup = renderToStaticMarkup(
       <MediaValidationCard
-        view={view({ status: 'invalid', title: 'Media cannot be published', blocking: true, messages: ['Story media should be vertical 9:16.'] })}
+        view={view({ status: 'invalid', title: 'Media cannot be published', blocking: true, messages: ['This video is too large. Instagram videos can be up to 50MB.'] })}
       />,
     )
     expect(markup).toContain('class="media-validation-card invalid"')
     expect(markup).toContain('Media cannot be published')
-    expect(markup).toContain('Story media should be vertical 9:16.')
+    expect(markup).toContain('This video is too large. Instagram videos can be up to 50MB.')
     expect(markup).toContain('role="alert"')
   })
 })

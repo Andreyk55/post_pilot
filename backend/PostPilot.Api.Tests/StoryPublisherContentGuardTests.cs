@@ -165,6 +165,18 @@ public class StoryPublisherContentGuardTests : IDisposable
         Assert.Null(error);
     }
 
+    [Fact]
+    public async Task InstagramStory_MissingMedia_BlockedBeforeMeta()
+    {
+        var publisher = BuildIgStoryPublisher();
+        var post = StoryPost(Platform.Instagram, string.Empty);
+        post.MediaUrl = null;
+
+        var error = await publisher.GuardStoryPreflightAsync(post, CancellationToken.None);
+
+        Assert.Equal("Instagram Story posts require exactly one media item.", error);
+    }
+
     // ── Log hygiene: the hidden text itself is never logged ─────────────────────
 
     [Fact]

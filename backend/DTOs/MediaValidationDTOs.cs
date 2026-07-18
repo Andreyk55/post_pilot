@@ -46,7 +46,8 @@ public record ExtractedMediaMetadata(
     string? Container,
     string? VideoCodec,
     string? AudioCodec,
-    double? Fps
+    double? Fps,
+    bool? HasVideoStream = null
 );
 
 /// <summary>
@@ -67,6 +68,7 @@ public static class MediaValidationErrorCodes
     public const string UnsupportedVideoCodec = "UNSUPPORTED_VIDEO_CODEC";
     public const string UnsupportedAudioCodec = "UNSUPPORTED_AUDIO_CODEC";
     public const string MetadataExtractionFailed = "METADATA_EXTRACTION_FAILED";
+    public const string VideoStreamMissing = "VIDEO_STREAM_MISSING";
     public const string NoRulesForCombination = "NO_RULES_FOR_COMBINATION";
 
     /// <summary>

@@ -6,8 +6,8 @@ describe('getUploadErrorMessage', () => {
     expect(getUploadErrorMessage(new Error('Upload failed (HTTP 413): file too large'))).toBe(
       'Upload failed (HTTP 413): file too large',
     )
-    expect(getUploadErrorMessage(new Error('Instagram Story requires a vertical video.'))).toBe(
-      'Instagram Story requires a vertical video.',
+    expect(getUploadErrorMessage(new Error('Instagram Story posts require exactly one media item.'))).toBe(
+      'Instagram Story posts require exactly one media item.',
     )
   })
 

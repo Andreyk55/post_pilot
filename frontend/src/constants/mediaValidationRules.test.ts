@@ -119,6 +119,31 @@ describe('client rule table mirrors the backend MVP limits', () => {
     expect(video?.durationMinSeconds).toBe(3)
     expect(video?.durationMaxSeconds).toBe(90)
   })
+
+  it('Instagram Story media has NO dimension, aspect, FPS, codec, or advisory rules', () => {
+    const image = getClientValidationRule('instagram', 'Story', 'Image')
+    expect(image?.minWidth).toBeUndefined()
+    expect(image?.minHeight).toBeUndefined()
+    expect(image?.maxWidth).toBeUndefined()
+    expect(image?.maxHeight).toBeUndefined()
+    expect(image?.aspectRatioMin).toBeUndefined()
+    expect(image?.aspectRatioMax).toBeUndefined()
+    expect(image?.preferredAspectRatio).toBeUndefined()
+    expect(image?.aspectRatioWarningTolerance).toBeUndefined()
+    expect(image?.maxWidthIsAdvisory).toBeUndefined()
+    expect(image?.allowedMimeTypes).toEqual(['image/jpeg', 'image/png'])
+    expect(image?.maxBytes).toBe(8 * 1024 * 1024)
+
+    const video = getClientValidationRule('instagram', 'Story', 'Video')
+    expect(video?.minWidth).toBeUndefined()
+    expect(video?.minHeight).toBeUndefined()
+    expect(video?.maxWidth).toBeUndefined()
+    expect(video?.maxHeight).toBeUndefined()
+    expect(video?.aspectRatioMin).toBeUndefined()
+    expect(video?.aspectRatioMax).toBeUndefined()
+    expect(video?.durationMinSeconds).toBe(3)
+    expect(video?.durationMaxSeconds).toBe(60)
+  })
 })
 
 describe('pre-validation behavior at the new limits', () => {
@@ -208,6 +233,20 @@ describe('pre-validation behavior at the new limits', () => {
     ]
     for (const [w, h] of shapes) {
       expect(preValidateImageDimensions(w, h, 'facebook', 'Story')).toEqual([])
+    }
+  })
+
+  it('accepts any Instagram Story image shape (no dimension or aspect pre-check)', () => {
+    const shapes: [number, number][] = [
+      [1080, 1080],
+      [1920, 1080],
+      [3000, 300],
+      [300, 3000],
+      [100, 100],
+      [4000, 6000],
+    ]
+    for (const [w, h] of shapes) {
+      expect(preValidateImageDimensions(w, h, 'instagram', 'Story')).toEqual([])
     }
   })
 })

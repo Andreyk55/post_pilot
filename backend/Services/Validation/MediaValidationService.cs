@@ -122,7 +122,18 @@ public class MediaValidationService : IMediaValidationService
                     Container: videoMetadata.Container,
                     VideoCodec: videoMetadata.VideoCodec,
                     AudioCodec: videoMetadata.AudioCodec,
-                    Fps: videoMetadata.Fps);
+                    Fps: videoMetadata.Fps,
+                    HasVideoStream: videoMetadata.HasVideoStream);
+
+                if (!videoMetadata.HasVideoStream)
+                {
+                    errors.Add(new MediaValidationError(
+                        MediaValidationErrorCodes.VideoStreamMissing,
+                        "videoStream",
+                        "The file does not contain a video stream. Upload a readable MP4 or MOV video.",
+                        "At least one video stream",
+                        "No video stream"));
+                }
             }
             else
             {
@@ -228,7 +239,8 @@ public class MediaValidationService : IMediaValidationService
                     Container: videoMetadata.Container,
                     VideoCodec: videoMetadata.VideoCodec,
                     AudioCodec: videoMetadata.AudioCodec,
-                    Fps: videoMetadata.Fps);
+                    Fps: videoMetadata.Fps,
+                    HasVideoStream: videoMetadata.HasVideoStream);
             }
         }
 
@@ -338,7 +350,7 @@ public class MediaValidationService : IMediaValidationService
 
         // 4. Validate aspect ratio. Only when the rule defines a range: a null Min/Max skips both
         // the hard range check AND the preferred-ratio warning, so a rule with no aspect-ratio
-        // requirement (e.g. Facebook Story) produces no aspect error or warning.
+        // requirement (e.g. Facebook or Instagram Story) produces no aspect error or warning.
         if (metadata.AspectRatio.HasValue && rules.AspectRatioMin.HasValue && rules.AspectRatioMax.HasValue)
         {
             var aspectRatio = metadata.AspectRatio.Value;
@@ -348,19 +360,12 @@ public class MediaValidationService : IMediaValidationService
 
             if (aspectRatio < rules.AspectRatioMin.Value || aspectRatio > rules.AspectRatioMax.Value)
             {
-                // Story rules carry a preferred ratio and keep the recognizable 9:16 copy;
-                // feed rules name the platform and the friendly ratio bounds (e.g.
-                // "Instagram Feed images must use an aspect ratio between 4:5 and 1.91:1.").
                 var mediaNoun = mediaType == MediaType.Video ? "videos" : "images";
                 errors.Add(new MediaValidationError(
                     MediaValidationErrorCodes.AspectRatioInvalid,
                     "aspectRatio",
-                    hasPreferredAspectRatio
-                        ? "Story media should be vertical 9:16."
-                        : $"{platform} {placement} {mediaNoun} must use an aspect ratio between {FormatRatio(rules.AspectRatioMin.Value)} and {FormatRatio(rules.AspectRatioMax.Value)}.",
-                    hasPreferredAspectRatio
-                        ? "9:16"
-                        : $"{FormatRatio(rules.AspectRatioMin.Value)} to {FormatRatio(rules.AspectRatioMax.Value)}",
+                    $"{platform} {placement} {mediaNoun} must use an aspect ratio between {FormatRatio(rules.AspectRatioMin.Value)} and {FormatRatio(rules.AspectRatioMax.Value)}.",
+                    $"{FormatRatio(rules.AspectRatioMin.Value)} to {FormatRatio(rules.AspectRatioMax.Value)}",
                     $"{aspectRatio:F2}"));
             }
             else if (hasPreferredAspectRatio
@@ -369,7 +374,7 @@ public class MediaValidationService : IMediaValidationService
                 warnings.Add(new MediaValidationWarning(
                     MediaValidationWarningCodes.AspectRatioSuboptimal,
                     "aspectRatio",
-                    "Story media should be vertical 9:16.",
+                    $"{platform} {placement} media is outside the preferred aspect ratio.",
                     "Media is publishable."));
             }
         }

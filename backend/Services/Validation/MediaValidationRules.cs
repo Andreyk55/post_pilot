@@ -196,43 +196,19 @@ public static class MediaValidationRules
             // EffectiveMediaResolver), so PNG users are not rejected for being non-JPEG.
             AllowedMimeTypes = ["image/jpeg"],
             MaxBytes = 8L * 1024 * 1024, // 8MB — Instagram platform limit
-            MinWidth = 320,
-            MinHeight = 320,
-            MaxWidth = 1080,
-            MaxHeight = 1920,
-            AspectRatioMin = 0.50,
-            AspectRatioMax = 0.75,
-            PreferredAspectRatio = 0.5625, // 9:16
-            AspectRatioWarningTolerance = 0.02,
-            QualityWarningMinWidth = 600,
-            QualityWarningMinHeight = 600,
-            RecommendedWidth = 1080,
-            RecommendedHeight = 1920,
         },
 
         // Instagram Story Video Rules
         [(Platform.Instagram, Placement.Story, MediaType.Video)] = new MediaValidationRule
         {
-            // MP4 + MOV (MOV for iPhone compatibility). H.264 or HEVC/H.265, AAC audio.
+            // MP4 + MOV (MOV for iPhone compatibility). No codec, audio, FPS, dimension,
+            // orientation, aspect-ratio, or recommendation rules: Meta decides encoding
+            // playability for any readable MP4/MOV with a real video stream.
             AllowedMimeTypes = ["video/mp4", "video/quicktime"],
             AllowedContainers = ["mp4", "mov"],
-            AllowedVideoCodecs = ["h264", "hevc"],
-            AllowedAudioCodecs = ["aac"],
             MaxBytes = 50L * 1024 * 1024, // 50MB — product cap for Instagram Story video
-            MinWidth = 320,
-            MinHeight = 320,
-            MaxWidth = 1080,
-            MaxHeight = 1920,
-            AspectRatioMin = 0.50,
-            AspectRatioMax = 0.75,
-            PreferredAspectRatio = 0.5625, // 9:16
-            AspectRatioWarningTolerance = 0.02,
             DurationMinSeconds = 3, // Meta/platform limit: story videos are 3-60 seconds
             DurationMaxSeconds = 60,
-            MinFps = 23,
-            MaxFps = 60,
-            RecommendedWidth = 1080,
-            RecommendedHeight = 1920,
         },
 
         // ============================================
