@@ -333,6 +333,127 @@ public class PostCreateMediaGateTests : IDisposable
         Assert.All(errors!, e => Assert.Equal(1, Convert.ToInt32(e["order"])));
     }
 
+    [Fact]
+    public async Task CreatePost_InstagramCarousel_ElevenItems_IsRejected()
+    {
+        // The 2–10 carousel item-count limit is enforced in the controller before the media gate.
+        var igId = SeedInstagramAccount();
+        var items = new List<CreatePostMediaItem>();
+        for (var i = 0; i < 11; i++)
+        {
+            var m = SeedMedia($"eleven-{i}", "image/jpeg", "jpeg", 1080, 1080);
+            items.Add(new(null, MediaType.Image, i, m.Id));
+        }
+
+        var req = new CreatePostRequest(
+            Content: "hi", MediaUrl: null, MediaType: null, Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId,
+            MediaItems: items);
+
+        var result = await _controller.CreatePost(req);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var pd = Assert.IsType<ProblemDetails>(bad.Value);
+        Assert.Equal("TOO_MANY_CAROUSEL_ITEMS", pd.Extensions["code"]);
+        Assert.Empty(await _db.Posts.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CreatePost_InstagramCarousel_TenItems_IsAccepted()
+    {
+        var igId = SeedInstagramAccount();
+        var items = new List<CreatePostMediaItem>();
+        for (var i = 0; i < 10; i++)
+        {
+            var m = SeedMedia($"ten-{i}", "image/jpeg", "jpeg", 1080, 1080);
+            items.Add(new(null, MediaType.Image, i, m.Id));
+        }
+
+        var req = new CreatePostRequest(
+            Content: "hi", MediaUrl: null, MediaType: null, Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId,
+            MediaItems: items);
+
+        var result = await _controller.CreatePost(req);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task CreatePost_InstagramCarouselVideo_Over60s_IsRejected()
+    {
+        // A 90s video is fine as a SINGLE Feed video (≤180s) but too long inside a carousel (≤60s).
+        var igId = SeedInstagramAccount();
+        var v0 = SeedVideoMedia("cv0", "video/mp4", 10L * 1024 * 1024);
+        var v1 = SeedVideoMedia("cv1", "video/mp4", 10L * 1024 * 1024);
+        UseVideoMetadata(1080, 1080, durationSeconds: 90);
+
+        var req = new CreatePostRequest(
+            Content: "hi", MediaUrl: null, MediaType: null, Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId,
+            MediaItems: new List<CreatePostMediaItem>
+            {
+                new(null, MediaType.Video, 0, v0.Id),
+                new(null, MediaType.Video, 1, v1.Id),
+            });
+
+        var result = await _controller.CreatePost(req);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var pd = Assert.IsType<ProblemDetails>(bad.Value);
+        var errors = ExtractMediaErrors(pd);
+        Assert.Contains(errors!, e => (string?)e["code"] == DTOs.MediaValidationErrorCodes.DurationTooLong);
+        Assert.Empty(await _db.Posts.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CreatePost_InstagramSingleVideo_90s_IsAccepted()
+    {
+        // Contrast with the carousel above: the same 90s duration is accepted for a single video.
+        var igId = SeedInstagramAccount();
+        var media = SeedVideoMedia("single-90", "video/mp4", 10L * 1024 * 1024);
+        UseVideoMetadata(1080, 1080, durationSeconds: 90);
+
+        var req = new CreatePostRequest(
+            Content: "hi", MediaUrl: null, MediaType: MediaType.Video, Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId, MediaId: media.Id);
+
+        var result = await _controller.CreatePost(req);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task CreatePost_InstagramMixedCarousel_IsAccepted_AndPreservesItemOrder()
+    {
+        // Mixed image+video carousel is accepted; the stored items keep the selected order.
+        var igId = SeedInstagramAccount();
+        var img = SeedMedia("mix-0", "image/jpeg", "jpeg", 1080, 1080);
+        var vid = SeedVideoMedia("mix-1", "video/mp4", 10L * 1024 * 1024);
+        var img2 = SeedMedia("mix-2", "image/jpeg", "jpeg", 1080, 1350);
+        UseVideoMetadata(1080, 1080, durationSeconds: 40); // within the 60s carousel cap
+
+        var req = new CreatePostRequest(
+            Content: "hi", MediaUrl: null, MediaType: null, Platform: Platform.Instagram,
+            ScheduledAt: DateTime.UtcNow.AddHours(1), PostType: PostType.Feed, TargetInstagramAccountId: igId,
+            MediaItems: new List<CreatePostMediaItem>
+            {
+                new(null, MediaType.Image, 0, img.Id),
+                new(null, MediaType.Video, 1, vid.Id),
+                new(null, MediaType.Image, 2, img2.Id),
+            });
+
+        var result = await _controller.CreatePost(req);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+        var post = await _db.Posts.Include(p => p.MediaItems).SingleAsync();
+        var ordered = post.MediaItems.OrderBy(m => m.Order).ToList();
+        Assert.Equal(new[] { 0, 1, 2 }, ordered.Select(m => m.Order).ToArray());
+        Assert.Equal(
+            new[] { MediaType.Image, MediaType.Video, MediaType.Image },
+            ordered.Select(m => m.MediaType).ToArray());
+    }
+
     // ── Warnings don't block ────────────────────────────────────────────────────
 
     [Fact]

@@ -28,15 +28,16 @@ public class InstagramVideoValidationTests
         Assert.True(MediaValidationRules.HasRules(Platform.Instagram, Placement.Feed, MediaType.Video));
     }
 
+    // Finalized policy: IG Feed video has NO dimension rules (Meta handles framing/scaling).
     [Fact]
-    public void GetRules_InstagramFeedVideo_CorrectDimensionLimits()
+    public void GetRules_InstagramFeedVideo_HasNoDimensionLimits()
     {
         var rules = MediaValidationRules.GetRules(Platform.Instagram, Placement.Feed, MediaType.Video)!;
 
-        Assert.Equal(500, rules.MinWidth);
-        Assert.Equal(500, rules.MinHeight);
-        Assert.Equal(1920, rules.MaxWidth);
-        Assert.Equal(1920, rules.MaxHeight);
+        Assert.Null(rules.MinWidth);
+        Assert.Null(rules.MinHeight);
+        Assert.Null(rules.MaxWidth);
+        Assert.Null(rules.MaxHeight);
     }
 
     [Fact]
@@ -45,27 +46,29 @@ public class InstagramVideoValidationTests
         var rules = MediaValidationRules.GetRules(Platform.Instagram, Placement.Feed, MediaType.Video)!;
 
         Assert.Equal(3, rules.DurationMinSeconds);
-        Assert.Equal(180, rules.DurationMaxSeconds); // product/MVP cap (Reels allow far longer)
+        Assert.Equal(180, rules.DurationMaxSeconds); // single Feed video (carousel items: 60s)
     }
 
+    // Finalized policy: NO aspect-ratio prevalidation for IG Feed video (any orientation passes).
     [Fact]
-    public void GetRules_InstagramFeedVideo_CorrectAspectRatioLimits()
+    public void GetRules_InstagramFeedVideo_HasNoAspectRatioLimits()
     {
         var rules = MediaValidationRules.GetRules(Platform.Instagram, Placement.Feed, MediaType.Video)!;
 
-        Assert.Equal(0.5625, rules.AspectRatioMin); // 9:16 — the standard vertical Reel must pass
-        Assert.Equal(1.91, rules.AspectRatioMax);
+        Assert.Null(rules.AspectRatioMin);
+        Assert.Null(rules.AspectRatioMax);
     }
 
+    // Finalized policy: NO codec/audio-codec allow-list for IG Feed video (Meta decides playability).
     [Fact]
-    public void GetRules_InstagramFeedVideo_CorrectCodecConstraints()
+    public void GetRules_InstagramFeedVideo_HasNoCodecConstraints()
     {
         var rules = MediaValidationRules.GetRules(Platform.Instagram, Placement.Feed, MediaType.Video)!;
 
-        Assert.NotNull(rules.AllowedVideoCodecs);
-        Assert.Contains("h264", rules.AllowedVideoCodecs);
-        Assert.NotNull(rules.AllowedAudioCodecs);
-        Assert.Contains("aac", rules.AllowedAudioCodecs);
+        Assert.Null(rules.AllowedVideoCodecs);
+        Assert.Null(rules.AllowedAudioCodecs);
+        Assert.Null(rules.MinFps);
+        Assert.Null(rules.MaxFps);
     }
 
     [Fact]
@@ -78,22 +81,30 @@ public class InstagramVideoValidationTests
         Assert.Contains("mov", rules.AllowedContainers);
     }
 
+    // Regression: with no dimension rule, EVERY size is accepted — including 4K (was too large)
+    // and 400x400 (was too small). The rule exposes no Min/Max width/height to compare against.
     [Theory]
-    [InlineData(1920, 1080, false)] // 16:9 landscape - valid
-    [InlineData(1080, 1080, false)] // 1:1 square - valid
-    [InlineData(1080, 1350, false)] // 4:5 portrait - valid
-    [InlineData(1920, 1920, false)] // Max dimensions exactly - valid
-    [InlineData(3840, 2160, true)]  // 4K - too large (exceeds 1920 max)
-    [InlineData(400, 400, true)]    // Too small (below 500 min)
-    public void Dimensions_InstagramFeedVideo_ValidatesCorrectly(int width, int height, bool shouldFail)
+    [InlineData(1920, 1080)] // 16:9 landscape
+    [InlineData(1080, 1080)] // 1:1 square
+    [InlineData(1080, 1350)] // 4:5 portrait
+    [InlineData(3840, 2160)] // 4K — previously rejected (exceeded the old 1920 max)
+    [InlineData(400, 400)]   // previously rejected (below the old 500 min)
+    public void Dimensions_InstagramFeedVideo_AreNotValidated(int width, int height)
     {
         var rules = MediaValidationRules.GetRules(Platform.Instagram, Placement.Feed, MediaType.Video)!;
 
-        var tooSmall = width < rules.MinWidth || height < rules.MinHeight;
-        var tooLarge = width > rules.MaxWidth || height > rules.MaxHeight;
-        var isInvalid = tooSmall || tooLarge;
+        Assert.Null(rules.MinWidth);
+        Assert.Null(rules.MinHeight);
+        Assert.Null(rules.MaxWidth);
+        Assert.Null(rules.MaxHeight);
 
-        Assert.Equal(shouldFail, isInvalid);
+        // No bound to compare against → the engine skips the dimension check entirely.
+        var dimensionRejects =
+            (rules.MinWidth.HasValue && width < rules.MinWidth) ||
+            (rules.MinHeight.HasValue && height < rules.MinHeight) ||
+            (rules.MaxWidth.HasValue && width > rules.MaxWidth) ||
+            (rules.MaxHeight.HasValue && height > rules.MaxHeight);
+        Assert.False(dimensionRejects);
     }
 
     [Theory]

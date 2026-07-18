@@ -88,9 +88,10 @@ describe('MultiMediaUpload — shared validation UI', () => {
 
   it('merges completed uploads against the latest items so a removal is not clobbered', () => {
     expect(multiMediaUploadSource).toMatch(/itemsRef\.current = items/)
-    expect(multiMediaUploadSource).toMatch(/onItemsChange\(\[\.\.\.itemsRef\.current, \.\.\.newItems\]\)/)
-    // The completion merge must not read the stale closure snapshot.
-    expect(multiMediaUploadSource).not.toMatch(/onItemsChange\(\[\.\.\.items, \.\.\.newItems\]\)/)
+    // The completion commits through commitItems (which revalidates the final collection before
+    // calling onItemsChange) and merges against the latest items, not the stale closure snapshot.
+    expect(multiMediaUploadSource).toMatch(/commitItems\(\[\.\.\.itemsRef\.current, \.\.\.newItems\]\)/)
+    expect(multiMediaUploadSource).not.toMatch(/(?:onItemsChange|commitItems)\(\[\.\.\.items, \.\.\.newItems\]\)/)
   })
 
   it('never starts the upload for a file rejected by the client type/size pre-check', () => {

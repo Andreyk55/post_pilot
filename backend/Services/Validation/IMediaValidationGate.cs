@@ -62,11 +62,19 @@ public interface IMediaValidationGate
     /// composer can never show "publishable" for media that create/update or publishing rejects.
     /// Images and videos are both validated. Non-owned/legacy keys resolve to a Valid result.
     /// </summary>
+    /// <param name="isCarousel">
+    /// True when the composer is validating this item as part of a multi-item carousel, so any
+    /// carousel-specific rule applies (currently the Instagram Feed video 60s cap vs the 180s
+    /// single-video cap). Defaults to false. The authoritative <see cref="ValidateAsync"/> derives
+    /// carousel state from the item count instead; this flag only exists for the advisory,
+    /// single-item display path where the full item set is not supplied.
+    /// </param>
     Task<MediaValidationResult> ValidateForDisplayAsync(
         Guid workspaceId,
         MediaGateItem item,
         MediaGateTarget target,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        bool isCarousel = false);
 }
 
 /// <summary>One attached media item to validate. <see cref="StorageKeyOrUrl"/> is the value stored in Post.MediaUrl / PostMediaItem.MediaUrl.</summary>

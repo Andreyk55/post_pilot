@@ -27,9 +27,9 @@ describe('MultiMediaUpload — stale per-item validation never survives a new up
     // view maps over the items so a removed item's state leaves with it.
     expect(multiMediaUploadSource).toMatch(/aggregateMediaValidationViews\(\s*items\.map\(\(item, index\) =>/)
     expect(multiMediaUploadSource).toMatch(/status: item\.validationStatus/)
-    // Removing an item filters it (and therefore its state) out of the list and
-    // clears the transient upload-error banner.
-    expect(multiMediaUploadSource).toMatch(/const handleRemove = \(id: string\) => \{\s*onItemsChange\(items\.filter\(item => item\.id !== id\)\)\s*setUploadError\(null\)/)
+    // Removing an item filters it (and therefore its state) out of the list — via commitItems,
+    // which revalidates the remaining collection — and clears the transient upload-error banner.
+    expect(multiMediaUploadSource).toMatch(/const handleRemove = \(id: string\) => \{[\s\S]*?commitItems\(items\.filter\(item => item\.id !== id\)\)[\s\S]*?setUploadError\(null\)/)
   })
 
   it('drops a superseded upload result so a late invalid never reappears (stale-async guard intact)', () => {

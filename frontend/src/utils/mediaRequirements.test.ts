@@ -141,10 +141,12 @@ describe('resolveClientDimensionError — Story 9:16 and friends', () => {
     expect(resolveClientDimensionError(4000, 6000, 'facebook', 'Story')).toBeNull() // above old 1080x1920
   })
 
-  it('reports too-small images with the minimum size', () => {
-    expect(resolveClientDimensionError(100, 100, 'instagram', 'Feed')).toBe(
-      'Image is too small. Use at least 320×320px.',
-    )
+  it('no longer rejects Instagram Feed images by dimension (only aspect + size remain)', () => {
+    // Finalized policy: IG Feed images have NO min/max dimension rule. A tiny 100×100 square
+    // (below the old 320×320 floor) and a huge 4000×4000 (above the old limits) both pass
+    // client-side because their aspect (1.0) is inside the 4:5–1.91:1 window.
+    expect(resolveClientDimensionError(100, 100, 'instagram', 'Feed')).toBeNull()
+    expect(resolveClientDimensionError(4000, 4000, 'instagram', 'Feed')).toBeNull()
   })
 
   it('rejects Instagram Feed images taller than 4:5 with the ratio-range message', () => {

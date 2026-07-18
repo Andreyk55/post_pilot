@@ -18,6 +18,11 @@ public interface IMediaValidationService
     /// <param name="mediaType">Type of media (Image or Video).</param>
     /// <param name="platform">Target platform for validation.</param>
     /// <param name="placement">Target placement for validation.</param>
+    /// <param name="isCarouselItem">
+    /// True when this file is one item of a multi-item carousel, so any carousel-specific rule
+    /// applies (currently only the Instagram Feed video 60s duration cap vs the 180s single-video
+    /// cap). Defaults to false (single item).
+    /// </param>
     /// <returns>Validation result with status, errors, and warnings.</returns>
     Task<MediaValidationResult> ValidateFileAsync(
         string filePath,
@@ -25,7 +30,8 @@ public interface IMediaValidationService
         long sizeBytes,
         MediaType mediaType,
         Platform platform,
-        Placement placement);
+        Placement placement,
+        bool isCarouselItem = false);
 
     /// <summary>
     /// Extracts metadata from a media file without validation.

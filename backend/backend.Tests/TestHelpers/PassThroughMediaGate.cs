@@ -30,7 +30,8 @@ public sealed class PassThroughMediaGate : IMediaValidationGate
         Guid workspaceId,
         MediaGateItem item,
         MediaGateTarget target,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool isCarousel = false)
         => Task.FromResult(new MediaValidationResult(
             ValidationStatus.Valid,
             Array.Empty<MediaValidationError>(),

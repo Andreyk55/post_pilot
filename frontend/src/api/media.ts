@@ -126,6 +126,12 @@ export interface ValidateMediaRequest {
   mimeType: string
   platform: Platform
   placement: Placement
+  /**
+   * True when validating this item as part of a multi-item carousel, so the advisory status
+   * reflects the carousel per-item rules (currently the Instagram Feed video 60s cap vs the 180s
+   * single-video cap). Optional; the backend defaults it to false.
+   */
+  carousel?: boolean
 }
 
 export interface ExtractMetadataRequest {

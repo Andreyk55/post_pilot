@@ -39,6 +39,10 @@ public class MediaValidationGate : IMediaValidationGate
     {
         var errors = new List<MediaGateError>();
 
+        // A post with 2+ media items is a carousel; its video items use the stricter carousel
+        // per-item rules (e.g. Instagram Feed carousel video is capped at 60s vs 180s single).
+        var isCarousel = items.Count >= 2;
+
         foreach (var item in items)
         {
             // We can only validate media we actually own as a storage key. Legacy external
@@ -85,7 +89,7 @@ public class MediaValidationGate : IMediaValidationGate
 
             foreach (var target in targets)
             {
-                var result = await ValidateResolvedAsync(media, item.MediaType, target, cancellationToken);
+                var result = await ValidateResolvedAsync(media, item.MediaType, target, cancellationToken, isCarousel);
 
                 // Warnings never block.
                 if (result.Status != ValidationStatus.Invalid)
@@ -122,7 +126,8 @@ public class MediaValidationGate : IMediaValidationGate
         Guid workspaceId,
         MediaGateItem item,
         MediaGateTarget target,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool isCarousel = false)
     {
         // Legacy external URLs / non-storage values: nothing to decode, treat as publishable
         // (mirrors ValidateAsync's pass-through so the advisory UI matches the gate exactly).
@@ -133,7 +138,7 @@ public class MediaValidationGate : IMediaValidationGate
         if (media == null)
             return Publishable();
 
-        return await ValidateResolvedAsync(media, item.MediaType, target, cancellationToken);
+        return await ValidateResolvedAsync(media, item.MediaType, target, cancellationToken, isCarousel);
     }
 
     /// <summary>
@@ -172,7 +177,8 @@ public class MediaValidationGate : IMediaValidationGate
     /// Returns the full <see cref="MediaValidationResult"/> so callers can surface warnings too.
     /// </summary>
     private async Task<MediaValidationResult> ValidateResolvedAsync(
-        Entities.Media media, MediaType mediaType, MediaGateTarget target, CancellationToken cancellationToken)
+        Entities.Media media, MediaType mediaType, MediaGateTarget target, CancellationToken cancellationToken,
+        bool isCarouselItem = false)
     {
         var effective = EffectiveMediaResolver.Resolve(media, mediaType, target.Platform);
 
@@ -209,7 +215,8 @@ public class MediaValidationGate : IMediaValidationGate
                 sizeBytes,
                 mediaType,
                 target.Platform,
-                target.Placement);
+                target.Placement,
+                isCarouselItem);
         }
         finally
         {

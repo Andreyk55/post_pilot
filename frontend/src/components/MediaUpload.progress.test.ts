@@ -43,7 +43,9 @@ describe('Schedule Post media upload progress', () => {
     expect(multiMediaUploadSource).toMatch(/activeUploadOwnerKeyRef\.current = uploadOwnerKey/)
     expect(multiMediaUploadSource).toMatch(/mediaApi\.uploadFile\(uploadUrl, file, \(progressPercent\) =>/)
     expect(multiMediaUploadSource).toMatch(/if \(!isStaleUploadOwner\(uploadOwnerKey\)\) \{[\s\S]*setProgress/)
-    expect(multiMediaUploadSource).toMatch(/if \(isStaleUploadOwner\(uploadOwnerKey\)\) return[\s\S]*onItemsChange/)
+    // After the final stale guard, the completed items are committed (via commitItems, which
+    // revalidates the collection before calling onItemsChange) — a superseded completion is dropped.
+    expect(multiMediaUploadSource).toMatch(/if \(isStaleUploadOwner\(uploadOwnerKey\)\) return[\s\S]*commitItems/)
   })
 
   it('renders upload progress bars from the left edge', () => {

@@ -62,11 +62,11 @@ public class MediaValidationTests
             Assert.DoesNotContain(unsupported, rules.AllowedMimeTypes);
     }
 
-    // Codec allow-lists remain for every placement EXCEPT Facebook Story (which has no codec
-    // validation at all — see FacebookStoryVideo_HasNoCodecRules... below).
+    // Codec allow-lists remain for Facebook Feed and Instagram Story only. Facebook Story and
+    // (as of the finalized IG Feed policy) Instagram Feed have NO codec validation — Meta decides
+    // playability at publish time. See the *_HasNoCodecRules... tests below.
     [Theory]
     [InlineData(Platform.Facebook, Placement.Feed)]
-    [InlineData(Platform.Instagram, Placement.Feed)]
     [InlineData(Platform.Instagram, Placement.Story)]
     public void Video_AllowsH264AndHevcWithAacOnly(Platform platform, Placement placement)
     {
@@ -312,10 +312,90 @@ public class InstagramValidationRulesTests
 
         Assert.NotNull(rules);
         Assert.Equal(8L * 1024 * 1024, rules.MaxBytes); // 8MB — Instagram platform limit
-        Assert.Equal(320, rules.MinWidth);
-        Assert.Equal(1440, rules.MaxWidth);
         Assert.Equal(0.8, rules.AspectRatioMin); // 4:5 — Meta rejects feed images below 4:5
         Assert.Equal(1.91, rules.AspectRatioMax);
+    }
+
+    // Finalized IG Feed image policy: ONLY format + 8MB + aspect are hard rules. Every dimension,
+    // recommended-resolution, advisory-width, and low-resolution/quality-warning field is gone.
+    // Pinned so a removed field can never silently return as an Instagram platform rule.
+    [Fact]
+    public void InstagramFeedImage_HasNoDimensionAdvisoryOrQualityRules()
+    {
+        var rules = MediaValidationRules.GetRules(Platform.Instagram, Placement.Feed, MediaType.Image)!;
+
+        Assert.Null(rules.MinWidth);
+        Assert.Null(rules.MinHeight);
+        Assert.Null(rules.MaxWidth);
+        Assert.Null(rules.MaxHeight);
+        Assert.False(rules.MaxWidthIsAdvisory);
+        Assert.Null(rules.QualityWarningMinWidth);
+        Assert.Null(rules.QualityWarningMinHeight);
+        Assert.Null(rules.RecommendedWidth);
+        Assert.Null(rules.RecommendedHeight);
+
+        // Kept: JPEG (effective/derivative), 8MB, and the 4:5–1.91:1 aspect window.
+        Assert.Equal(new[] { "image/jpeg" }, rules.AllowedMimeTypes);
+        Assert.Equal(8L * 1024 * 1024, rules.MaxBytes);
+        Assert.Equal(0.8, rules.AspectRatioMin);
+        Assert.Equal(1.91, rules.AspectRatioMax);
+    }
+
+    // Finalized IG Feed video policy: ONLY container/type + 50MB + 3–180s duration are hard rules.
+    // Codec, audio-codec, frame-rate, dimension, and aspect-ratio fields are all gone (Meta decides
+    // encoding playability at publish time). Pinned as a regression guard.
+    [Fact]
+    public void InstagramFeedVideo_HasNoCodecFpsDimensionOrAspectRules()
+    {
+        var rules = MediaValidationRules.GetRules(Platform.Instagram, Placement.Feed, MediaType.Video)!;
+
+        Assert.Null(rules.AllowedVideoCodecs);
+        Assert.Null(rules.AllowedAudioCodecs);
+        Assert.Null(rules.MinFps);
+        Assert.Null(rules.MaxFps);
+        Assert.Null(rules.MinWidth);
+        Assert.Null(rules.MinHeight);
+        Assert.Null(rules.MaxWidth);
+        Assert.Null(rules.MaxHeight);
+        Assert.Null(rules.AspectRatioMin);
+        Assert.Null(rules.AspectRatioMax);
+        Assert.Null(rules.RecommendedWidth);
+        Assert.Null(rules.RecommendedHeight);
+
+        // Kept: MP4/MOV container + type, the 50MB cap, and the 3–180s single-video duration.
+        Assert.Equal(new[] { "video/mp4", "video/quicktime" }, rules.AllowedMimeTypes);
+        Assert.Equal(new[] { "mp4", "mov" }, rules.AllowedContainers);
+        Assert.Equal(50L * 1024 * 1024, rules.MaxBytes);
+        Assert.Equal(3, rules.DurationMinSeconds);
+        Assert.Equal(180, rules.DurationMaxSeconds);
+    }
+
+    // Carousel video items use a stricter 60s duration cap; everything else matches the single
+    // Feed video rule. Image carousel items reuse the single image rule (no override).
+    [Fact]
+    public void InstagramFeedCarouselVideo_Is3To60Seconds_ElseIdenticalToSingle()
+    {
+        var carousel = MediaValidationRules.GetRules(Platform.Instagram, Placement.Feed, MediaType.Video, carousel: true)!;
+
+        Assert.Equal(3, carousel.DurationMinSeconds);
+        Assert.Equal(60, carousel.DurationMaxSeconds); // single Feed video allows 180s
+        Assert.Equal(50L * 1024 * 1024, carousel.MaxBytes);
+        Assert.Equal(new[] { "video/mp4", "video/quicktime" }, carousel.AllowedMimeTypes);
+        Assert.Equal(new[] { "mp4", "mov" }, carousel.AllowedContainers);
+        // No codec/fps/dimension/aspect for carousel video either.
+        Assert.Null(carousel.AllowedVideoCodecs);
+        Assert.Null(carousel.MinFps);
+        Assert.Null(carousel.AspectRatioMin);
+    }
+
+    [Fact]
+    public void InstagramFeedCarouselImage_ReusesSingleImageRule()
+    {
+        // Images have no carousel-specific override: the single-item rule is returned.
+        var single = MediaValidationRules.GetRules(Platform.Instagram, Placement.Feed, MediaType.Image)!;
+        var carousel = MediaValidationRules.GetRules(Platform.Instagram, Placement.Feed, MediaType.Image, carousel: true)!;
+
+        Assert.Same(single, carousel);
     }
 
     // Meta accepts JPEG ONLY for Instagram. PNG/WebP that "pass" locally would be
@@ -367,13 +447,14 @@ public class InstagramValidationRulesTests
         Assert.DoesNotContain("image/png", igRules.AllowedMimeTypes);
     }
 
-    // Instagram max width (1440) is advisory: Meta downscales rather than rejecting,
-    // so the rule must be flagged so the service warns instead of erroring.
+    // Finalized policy: IG Feed images have NO max width at all (Meta downscales oversized images
+    // itself), so there is nothing to flag as advisory. The former 1440 advisory width is gone.
     [Fact]
-    public void InstagramFeedImage_MaxWidthIsAdvisory()
+    public void InstagramFeedImage_HasNoMaxWidth_AndIsNotAdvisory()
     {
         var rules = MediaValidationRules.GetRules(Platform.Instagram, Placement.Feed, MediaType.Image)!;
-        Assert.True(rules.MaxWidthIsAdvisory);
+        Assert.Null(rules.MaxWidth);
+        Assert.False(rules.MaxWidthIsAdvisory);
     }
 
     // Facebook max dimensions stay a hard limit (not advisory).
@@ -394,15 +475,15 @@ public class InstagramValidationRulesTests
         Assert.Equal(180, rules.DurationMaxSeconds); // product/MVP cap (Reels allow far longer)
     }
 
-    // A single IG feed video is published as a Reel; vertical 9:16 is the standard Reel
-    // format and must be inside the allowed aspect range.
+    // A single IG feed video is published as a Reel. There is NO aspect-ratio prevalidation now,
+    // so any orientation (vertical 9:16, square, landscape) passes — Meta handles framing.
     [Fact]
-    public void GetRules_InstagramFeedVideo_AllowsVertical9x16()
+    public void GetRules_InstagramFeedVideo_HasNoAspectRatioRule()
     {
         var rules = MediaValidationRules.GetRules(Platform.Instagram, Placement.Feed, MediaType.Video)!;
 
-        Assert.True(rules.AspectRatioMin <= 0.5625);
-        Assert.True(rules.AspectRatioMax >= 1.0);
+        Assert.Null(rules.AspectRatioMin);
+        Assert.Null(rules.AspectRatioMax);
     }
 }
 
@@ -541,6 +622,26 @@ public class MediaValidationServiceImageBehaviorTests
     }
 
     [Fact]
+    public async Task InstagramFeed_CorruptImage_IsRejected()
+    {
+        // Random bytes with a .jpg name are not a decodable image: ImageSharp cannot identify the
+        // format, so metadata extraction fails and the file is rejected as corrupt/unreadable.
+        var svc = CreateService();
+        var path = Path.Combine(Path.GetTempPath(), $"ppvalidation_{Guid.NewGuid():N}.jpg");
+        File.WriteAllBytes(path, new byte[] { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07 });
+        try
+        {
+            var size = new FileInfo(path).Length;
+            var result = await svc.ValidateFileAsync(
+                path, "image/jpeg", size, MediaType.Image, Platform.Instagram, Placement.Feed);
+
+            Assert.Equal(ValidationStatus.Invalid, result.Status);
+            Assert.Contains(result.Errors, e => e.Code == MediaValidationErrorCodes.MetadataExtractionFailed);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
     public async Task FacebookFeed_Png_IsValid()
     {
         // The exact same PNG that Instagram rejects must remain valid for Facebook.
@@ -596,10 +697,10 @@ public class MediaValidationServiceImageBehaviorTests
         finally { File.Delete(path); }
     }
 
-    [Theory]
-    [InlineData(Platform.Facebook)]
-    [InlineData(Platform.Instagram)]
-    public async Task FeedImage_500x500_WarnsForLowResolution(Platform platform)
+    // Facebook keeps the low-resolution quality warning. Instagram Feed does NOT (that rule was
+    // removed) — see InstagramFeed_500x500_IsValid_NoLowResolutionWarning below.
+    [Fact]
+    public async Task FacebookFeedImage_500x500_WarnsForLowResolution()
     {
         var svc = CreateService();
         var path = WriteTempImage("jpeg", 500, 500);
@@ -607,13 +708,34 @@ public class MediaValidationServiceImageBehaviorTests
         {
             var size = new FileInfo(path).Length;
             var result = await svc.ValidateFileAsync(
-                path, "image/jpeg", size, MediaType.Image, platform, Placement.Feed);
+                path, "image/jpeg", size, MediaType.Image, Platform.Facebook, Placement.Feed);
 
             Assert.Equal(ValidationStatus.Warning, result.Status);
             Assert.Empty(result.Errors);
             Assert.Contains(result.Warnings, w =>
                 w.Code == MediaValidationWarningCodes.DimensionsBelowRecommended
                 && w.Message == "For best quality, use a higher-resolution image.");
+        }
+        finally { File.Delete(path); }
+    }
+
+    // Regression: the removed IG low-resolution warning must NOT fire. A 500x500 square (aspect
+    // 1.0, in the 4:5–1.91 window) is fully Valid with no warnings, even though it is below the
+    // old 600px quality-warning floor and the old 320px feed minimum.
+    [Fact]
+    public async Task InstagramFeed_500x500_IsValid_NoLowResolutionWarning()
+    {
+        var svc = CreateService();
+        var path = WriteTempImage("jpeg", 500, 500);
+        try
+        {
+            var size = new FileInfo(path).Length;
+            var result = await svc.ValidateFileAsync(
+                path, "image/jpeg", size, MediaType.Image, Platform.Instagram, Placement.Feed);
+
+            Assert.Equal(ValidationStatus.Valid, result.Status);
+            Assert.Empty(result.Errors);
+            Assert.Empty(result.Warnings);
         }
         finally { File.Delete(path); }
     }
@@ -702,11 +824,12 @@ public class MediaValidationServiceImageBehaviorTests
         finally { File.Delete(path); }
     }
 
+    // Regression: a large square (1500x1500, aspect 1.0 in range) is fully Valid. IG Feed no
+    // longer has a max-width rule at all, so there is neither a DimensionsTooLarge error nor the
+    // old "will downscale" advisory warning — Meta downscales silently.
     [Fact]
-    public async Task InstagramFeed_OverWideJpeg_WarnsButIsNotError()
+    public async Task InstagramFeed_LargeSquareJpeg_IsValid_NoDimensionErrorOrWarning()
     {
-        // 1500px wide exceeds IG max (1440) but the aspect ratio (1:1 → use square 1500x1500)
-        // stays in range. Meta downscales, so this must WARN, not error.
         var svc = CreateService();
         var path = WriteTempImage("jpeg", 1500, 1500);
         try
@@ -715,11 +838,35 @@ public class MediaValidationServiceImageBehaviorTests
             var result = await svc.ValidateFileAsync(
                 path, "image/jpeg", size, MediaType.Image, Platform.Instagram, Placement.Feed);
 
+            Assert.Equal(ValidationStatus.Valid, result.Status);
             Assert.DoesNotContain(result.Errors, e => e.Code == MediaValidationErrorCodes.DimensionsTooLarge);
-            Assert.Contains(result.Warnings,
-                w => w.Code == MediaValidationWarningCodes.DimensionsAboveMaxWillDownscale
-                     && w.Message == "Instagram may resize this image before publishing.");
-            Assert.Equal(ValidationStatus.Warning, result.Status);
+            Assert.DoesNotContain(result.Warnings, w => w.Code == MediaValidationWarningCodes.DimensionsAboveMaxWillDownscale);
+            Assert.Empty(result.Warnings);
+        }
+        finally { File.Delete(path); }
+    }
+
+    // Regression: dimensions well BELOW and ABOVE the old IG Feed limits (min 320x320, max
+    // 1080x1350 / 1440-wide) are no longer rejected. Only the aspect window and 8MB cap remain,
+    // so these square/near-square images all pass.
+    [Theory]
+    [InlineData(100, 100)]   // below the old 320x320 minimum
+    [InlineData(200, 240)]   // tiny 0.83 portrait, below old minimum
+    [InlineData(2000, 2000)] // above the old 1080x1350 maximum and 1440 advisory width
+    [InlineData(4000, 4000)] // far above every old dimension limit
+    public async Task InstagramFeed_ImageBelowOrAboveOldDimensionLimits_IsAccepted(int width, int height)
+    {
+        var svc = CreateService();
+        var path = WriteTempImage("jpeg", width, height);
+        try
+        {
+            var size = new FileInfo(path).Length;
+            var result = await svc.ValidateFileAsync(
+                path, "image/jpeg", size, MediaType.Image, Platform.Instagram, Placement.Feed);
+
+            Assert.Equal(ValidationStatus.Valid, result.Status);
+            Assert.Empty(result.Errors);
+            Assert.Empty(result.Warnings);
         }
         finally { File.Delete(path); }
     }

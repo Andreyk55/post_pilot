@@ -30,14 +30,16 @@ public class MediaValidationService : IMediaValidationService
         long sizeBytes,
         MediaType mediaType,
         Platform platform,
-        Placement placement)
+        Placement placement,
+        bool isCarouselItem = false)
     {
         var errors = new List<MediaValidationError>();
         var warnings = new List<MediaValidationWarning>();
         ExtractedMediaMetadata? metadata = null;
 
-        // Get validation rules
-        var rules = MediaValidationRules.GetRules(platform, placement, mediaType);
+        // Get validation rules (carousel items may use a stricter per-item rule, e.g. IG Feed
+        // carousel video is capped at 60s vs 180s for a single Feed video).
+        var rules = MediaValidationRules.GetRules(platform, placement, mediaType, isCarouselItem);
         if (rules == null)
         {
             errors.Add(new MediaValidationError(
@@ -144,7 +146,7 @@ public class MediaValidationService : IMediaValidationService
         }
 
         // Validate against rules
-        ValidateRules(rules, mimeType, sizeBytes, metadata, errors, warnings, platform, placement, mediaType);
+        ValidateRules(rules, mimeType, sizeBytes, metadata, errors, warnings, platform, placement, mediaType, isCarouselItem);
 
         // Determine final status
         var status = errors.Count > 0
@@ -242,7 +244,8 @@ public class MediaValidationService : IMediaValidationService
         List<MediaValidationWarning> warnings,
         Platform platform,
         Placement placement,
-        MediaType mediaType)
+        MediaType mediaType,
+        bool isCarouselItem)
     {
         // 1. Validate MIME type
         if (!rules.AllowedMimeTypes.Contains(mimeType, StringComparer.OrdinalIgnoreCase))
@@ -376,12 +379,18 @@ public class MediaValidationService : IMediaValidationService
         {
             var duration = metadata.DurationSeconds.Value;
 
-            // "Story videos must be between 3 and 60 seconds." / "Feed videos must be
-            // between 3 and 180 seconds." — the same actionable range copy for too-short
-            // and too-long, since the fix is the same (pick a video inside the range).
-            var durationRangeMessage = rules.DurationMinSeconds.HasValue && rules.DurationMaxSeconds.HasValue
-                ? $"{placement} videos must be between {rules.DurationMinSeconds.Value:0.##} and {rules.DurationMaxSeconds.Value:0.##} seconds."
-                : null;
+            // Same actionable range copy for too-short and too-long (the fix is identical: pick a
+            // video inside the range). A carousel VIDEO item gets a distinct, carousel-specific
+            // message so the 60s carousel cap reads differently from the 180s single-video cap
+            // ("Videos in an Instagram Feed carousel must be between 3 and 60 seconds." vs
+            // "Feed videos must be between 3 and 180 seconds.").
+            string? durationRangeMessage = null;
+            if (rules.DurationMinSeconds.HasValue && rules.DurationMaxSeconds.HasValue)
+            {
+                durationRangeMessage = isCarouselItem
+                    ? $"Videos in an {platform} {placement} carousel must be between {rules.DurationMinSeconds.Value:0.##} and {rules.DurationMaxSeconds.Value:0.##} seconds."
+                    : $"{placement} videos must be between {rules.DurationMinSeconds.Value:0.##} and {rules.DurationMaxSeconds.Value:0.##} seconds.";
+            }
 
             if (rules.DurationMinSeconds.HasValue && duration < rules.DurationMinSeconds.Value)
             {

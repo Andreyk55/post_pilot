@@ -54,10 +54,48 @@ describe('client rule table mirrors the backend MVP limits', () => {
     expect(rule?.aspectRatioMax).toBe(1.91)
   })
 
-  it('Instagram Feed videos (Reels) allow vertical 9:16', () => {
+  it('Instagram Feed videos have NO aspect-ratio rule (any orientation, incl. 9:16, passes)', () => {
     const rule = getClientValidationRule('instagram', 'Feed', 'Video')
-    expect(rule?.aspectRatioMin).toBeLessThanOrEqual(0.5625)
+    expect(rule?.aspectRatioMin).toBeUndefined()
+    expect(rule?.aspectRatioMax).toBeUndefined()
+  })
+
+  it('Instagram Feed IMAGE keeps only 8MB + aspect (no dimension/advisory/quality fields)', () => {
+    // Finalized policy: mirror the backend removal of every dimension/advisory/quality field.
+    const rule = getClientValidationRule('instagram', 'Feed', 'Image')
+    expect(rule?.minWidth).toBeUndefined()
+    expect(rule?.minHeight).toBeUndefined()
+    expect(rule?.maxWidth).toBeUndefined()
+    expect(rule?.maxHeight).toBeUndefined()
+    expect(rule?.maxWidthIsAdvisory).toBeUndefined()
+    // Kept:
+    expect(rule?.maxBytes).toBe(8 * 1024 * 1024)
+    expect(rule?.aspectRatioMin).toBe(0.8)
     expect(rule?.aspectRatioMax).toBe(1.91)
+  })
+
+  it('Instagram Feed VIDEO keeps only 50MB + 3–180s (no dimension/aspect fields)', () => {
+    const rule = getClientValidationRule('instagram', 'Feed', 'Video')
+    expect(rule?.minWidth).toBeUndefined()
+    expect(rule?.minHeight).toBeUndefined()
+    expect(rule?.maxWidth).toBeUndefined()
+    expect(rule?.maxHeight).toBeUndefined()
+    // Kept:
+    expect(rule?.maxBytes).toBe(50 * 1024 * 1024)
+    expect(rule?.durationMinSeconds).toBe(3)
+    expect(rule?.durationMaxSeconds).toBe(180)
+  })
+
+  it('Instagram Feed CAROUSEL video is capped at 60s, single video at 180s (distinct)', () => {
+    const single = getClientValidationRule('instagram', 'Feed', 'Video')
+    const carousel = getClientValidationRule('instagram', 'Feed', 'Video', { carousel: true })
+
+    expect(single?.durationMaxSeconds).toBe(180)
+    expect(carousel?.durationMaxSeconds).toBe(60)
+    expect(carousel?.durationMinSeconds).toBe(3)
+    // Carousel images have no override — same rule object as a single image.
+    expect(getClientValidationRule('instagram', 'Feed', 'Image', { carousel: true }))
+      .toEqual(getClientValidationRule('instagram', 'Feed', 'Image'))
   })
 
   it('Facebook Story media has NO dimension or aspect-ratio rules (type + size + duration only)', () => {
@@ -143,6 +181,16 @@ describe('pre-validation behavior at the new limits', () => {
     expect(preValidateImageDimensions(1080, 1920, 'instagram', 'Feed')).toHaveLength(1)
     expect(preValidateImageDimensions(1080, 1350, 'instagram', 'Feed')).toEqual([])
     expect(preValidateImageDimensions(1337, 700, 'instagram', 'Feed')).toEqual([])
+  })
+
+  it('no longer enforces Instagram Feed image dimensions (only aspect remains)', () => {
+    // Below the old 320×320 floor and above the old 1080×1350 / 1440-wide limits, but square
+    // (aspect 1.0, in range) → accepted. Proves the removed min/max dimension rules are gone.
+    expect(preValidateImageDimensions(100, 100, 'instagram', 'Feed')).toEqual([])
+    expect(preValidateImageDimensions(2000, 2000, 'instagram', 'Feed')).toEqual([])
+    expect(preValidateImageDimensions(5000, 5000, 'instagram', 'Feed')).toEqual([])
+    // The only remaining rejection reason is aspect, e.g. an extreme 4:1 banner.
+    expect(preValidateImageDimensions(4000, 1000, 'instagram', 'Feed')).toHaveLength(1)
   })
 
   it('keeps 9:16 valid for Facebook Feed images', () => {

@@ -356,7 +356,8 @@ public class MediaController : ControllerBase
             workspaceId,
             new MediaGateItem(media.StorageKey, mediaType, 0),
             new MediaGateTarget(request.Platform, request.Placement),
-            ct);
+            ct,
+            request.Carousel);
 
         _logger.LogInformation(
             "Validation completed for mediaId {MediaId}: Status={Status}, Errors={ErrorCount}, Warnings={WarningCount}",
@@ -426,9 +427,13 @@ public class MediaController : ControllerBase
     public ActionResult<MediaValidationRuleDto> GetValidationRules(
         [FromQuery] Platform platform,
         [FromQuery] Placement placement,
-        [FromQuery] MediaType mediaType)
+        [FromQuery] MediaType mediaType,
+        [FromQuery] bool carousel = false)
     {
-        var rules = MediaValidationRules.GetRules(platform, placement, mediaType);
+        // carousel=true returns the carousel per-item rule where one differs (Instagram Feed
+        // video: 60s cap instead of 180s). Combinations with no carousel override return the
+        // normal single-item rule.
+        var rules = MediaValidationRules.GetRules(platform, placement, mediaType, carousel);
         if (rules == null)
         {
             return NotFound(new { error = $"No rules defined for {platform}/{placement}/{mediaType}" });
@@ -461,11 +466,17 @@ public record MediaConstraintsResponse(
 /// Request to validate media by mediaId (stateless — no DB write). The frontend never
 /// supplies a StorageKey; the server resolves it internally from the Media row.
 /// </summary>
+/// <param name="Carousel">
+/// True when the composer is validating this item as part of a multi-item carousel, so the
+/// advisory status reflects the carousel per-item rules (currently the Instagram Feed video 60s
+/// cap vs the 180s single-video cap). Optional; defaults to false (single item).
+/// </param>
 public record ValidateMediaByKeyRequest(
     Guid MediaId,
     string MimeType,
     Platform Platform,
-    Placement Placement
+    Placement Placement,
+    bool Carousel = false
 );
 
 /// <summary>

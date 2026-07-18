@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { mediaApi, type MediaType, type ValidationStatus, type MediaValidationError, type MediaValidationWarning, type Platform } from '../api/media'
 import { getImageDimensions } from '../constants/mediaValidationRules'
-import { validateInstagramSelection } from '../utils/instagramMediaValidation'
+import { validateInstagramSelection, revalidateInstagramFeedCollection } from '../utils/instagramMediaValidation'
 import { validateFacebookSelection } from '../utils/facebookMediaValidation'
 import type { PlatformId } from '../constants/validationLimits'
 import { MediaValidationBadge, MediaValidationCard, MediaValidationOverlay } from './MediaValidationStatus'
@@ -21,6 +21,13 @@ export interface UploadedMediaItem {
   validationStatus: ValidationStatus
   validationErrors: MediaValidationError[]
   validationWarnings: MediaValidationWarning[]
+  /**
+   * Video duration in seconds, captured from the upload-time validation metadata. Used to
+   * revalidate the item against the count-dependent Instagram Feed duration rule (single 3–180s
+   * vs carousel 3–60s) when the collection changes — without re-extracting metadata. Null/absent
+   * for images, or when the server returned no duration (e.g. unreadable/legacy media).
+   */
+  durationSeconds?: number | null
 }
 
 interface MultiMediaUploadProps {
@@ -121,6 +128,28 @@ export function MultiMediaUpload({
   const fbHasVideo = isFacebook && items.length === 1 && items[0].mediaType === 'Video'
   const canAddMore = fbHasVideo ? false : items.length < maxItems
 
+  // Every media mutation (add / remove / reorder) is committed through here so the count-dependent
+  // Instagram Feed video duration rule is re-applied to the FINAL collection before it goes up to
+  // the parent. This is what makes an existing 90 s video flip to invalid the instant a second item
+  // turns the post into a carousel (3–60 s), and back to valid when it returns to a single item
+  // (3–180 s) — without re-uploading or re-extracting metadata. Non-Instagram-Feed collections pass
+  // through untouched. The revalidation lives in the shared utility, not here (no duplicated rules).
+  const commitItems = (nextItems: UploadedMediaItem[]) => {
+    onItemsChange(revalidateInstagramFeedCollection(nextItems, selectedPlatform ?? null, 'Feed'))
+  }
+
+  // Safety net for collection/platform changes that arrive from OUTSIDE the mutation handlers —
+  // e.g. the parent restoring saved media or switching the destination into Instagram Feed. The
+  // handlers already commit revalidated arrays; because revalidateInstagramFeedCollection returns
+  // the SAME reference when nothing changed, this effect is idempotent and cannot loop.
+  useEffect(() => {
+    const revalidated = revalidateInstagramFeedCollection(items, selectedPlatform ?? null, 'Feed')
+    if (revalidated !== items) onItemsChange(revalidated)
+    // onItemsChange is intentionally omitted: its identity may change each render, and the update
+    // is reference-guarded so a re-run cannot loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, selectedPlatform])
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
     // Reset file input so re-selecting the same file(s) re-triggers change.
@@ -217,6 +246,12 @@ export function MultiMediaUpload({
     setUploading(true)
     onUploadingChange?.(true)
 
+    // The post is a carousel once it holds 2+ items. Video items in a carousel use the stricter
+    // carousel per-item rules (Instagram Feed carousel video is capped at 60s vs 180s single), so
+    // the advisory validation must be told when the resulting selection is a carousel. Mirrors the
+    // backend, which derives carousel state from the item count.
+    const willBeCarousel = itemsRef.current.length + filesToUpload.length >= 2
+
     // Show the incoming files as pending cards right away and hide any prior
     // validation error while the new media is uploading/validating.
     replacePendingUploads(
@@ -281,6 +316,9 @@ export function MultiMediaUpload({
         let validationStatus: ValidationStatus = 'Pending'
         let validationErrors: MediaValidationError[] = []
         let validationWarnings: MediaValidationWarning[] = []
+        // Captured so the item can be revalidated locally against the count-dependent Instagram
+        // Feed duration rule when the collection later changes — no re-extraction needed.
+        let durationSeconds: number | null = null
 
         if (selectedPlatform) {
           const platformMap: Record<string, Platform> = {
@@ -295,11 +333,13 @@ export function MultiMediaUpload({
               mimeType: file.type,
               platform: platformMap[selectedPlatform] as Platform,
               placement: 'Feed',
+              carousel: willBeCarousel,
             })
             if (isStaleUploadOwner(uploadOwnerKey)) return
             validationStatus = result.status
             validationErrors = result.errors
             validationWarnings = result.warnings
+            durationSeconds = result.metadata?.durationSeconds ?? null
           } catch {
             // Keep as pending
           }
@@ -314,6 +354,7 @@ export function MultiMediaUpload({
           validationStatus,
           validationErrors,
           validationWarnings,
+          durationSeconds,
         })
       } catch (err) {
         if (isStaleUploadOwner(uploadOwnerKey)) return
@@ -329,8 +370,9 @@ export function MultiMediaUpload({
 
     if (newItems.length > 0) {
       // Merge against the latest items (not the closure snapshot) so a removal that
-      // happened during this upload is respected instead of being clobbered.
-      onItemsChange([...itemsRef.current, ...newItems])
+      // happened during this upload is respected instead of being clobbered. commitItems
+      // revalidates the FINAL collection so existing videos immediately reflect single-vs-carousel.
+      commitItems([...itemsRef.current, ...newItems])
       setProgress(100)
     } else {
       setProgress(0)
@@ -342,7 +384,9 @@ export function MultiMediaUpload({
   }
 
   const handleRemove = (id: string) => {
-    onItemsChange(items.filter(item => item.id !== id))
+    // Revalidate the remaining items: removing the item that made this a carousel restores the
+    // single-video 3–180 s rule for a leftover video (and vice versa).
+    commitItems(items.filter(item => item.id !== id))
     setUploadError(null)
   }
 
@@ -350,14 +394,14 @@ export function MultiMediaUpload({
     if (index === 0) return
     const newItems = [...items]
     ;[newItems[index - 1], newItems[index]] = [newItems[index], newItems[index - 1]]
-    onItemsChange(newItems)
+    commitItems(newItems)
   }
 
   const handleMoveDown = (index: number) => {
     if (index === items.length - 1) return
     const newItems = [...items]
     ;[newItems[index], newItems[index + 1]] = [newItems[index + 1], newItems[index]]
-    onItemsChange(newItems)
+    commitItems(newItems)
   }
 
   const handleClick = () => {

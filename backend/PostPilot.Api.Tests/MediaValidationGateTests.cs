@@ -126,6 +126,21 @@ public class MediaValidationGateTests : IDisposable
     }
 
     /// <summary>
+    /// A video extractor that returns metadata per local file path, so a single carousel test can
+    /// mix a valid and an invalid video item. A path absent from the map returns null (unreadable).
+    /// </summary>
+    private static IVideoMetadataExtractor FakeVideoByPath(Dictionary<string, VideoMetadata?> pathToMeta)
+    {
+        var mock = new Mock<IVideoMetadataExtractor>();
+        mock.Setup(e => e.ExtractAsync(It.IsAny<string>()))
+            .Returns((string path) => Task.FromResult(pathToMeta.TryGetValue(path, out var m) ? m : null));
+        return mock.Object;
+    }
+
+    private static VideoMetadata Vid(double durationSeconds, int width = 1080, int height = 1080) =>
+        new(width, height, durationSeconds, "mp4", "h264", "aac", 30, null, "video/mp4");
+
+    /// <summary>
     /// Seeds a Media row whose bytes are an arbitrary placeholder file (the real metadata comes
     /// from the fake extractor). The row's ContentType + SizeBytes are authoritative, so this is
     /// how a test controls a video's declared MIME and size.
@@ -252,10 +267,10 @@ public class MediaValidationGateTests : IDisposable
     }
 
     [Fact]
-    public async Task Jpeg_Instagram_OverMaxWidth_ValidAspect_IsAcceptedWarningIgnored()
+    public async Task Jpeg_Instagram_LargeSquare_ValidAspect_IsAccepted()
     {
-        // 1500x1500 exceeds IG max width (1440) but aspect is 1:1 (valid). Meta downscales →
-        // this is a WARNING, which must not block.
+        // 1500x1500 has no dimension rule to trip (IG Feed has no max width now) and a valid 1:1
+        // aspect, so it is simply accepted. Meta downscales oversized images itself.
         var path = SeedMedia("k-ig-wide", "image/jpeg", "jpeg", 1500, 1500);
         var gate = CreateGate(new() { ["k-ig-wide"] = path });
 
@@ -418,6 +433,51 @@ public class MediaValidationGateTests : IDisposable
             new[] { new MediaGateItem("v-ig-reel", MediaType.Video, 0) }, new[] { Ig });
 
         Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task Video_InstagramFeed_3Seconds_Passes()
+    {
+        // Inclusive lower boundary for a single Feed video.
+        var path = SeedRawMedia("v-ig-3s", "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-ig-3s"] = path }, FakeVideo(1080, 1080, 3));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-ig-3s", MediaType.Video, 0) }, new[] { Ig });
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task Video_InstagramFeed_JustBelow3Seconds_IsBlocked()
+    {
+        var path = SeedRawMedia("v-ig-2_99", "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-ig-2_99"] = path }, FakeVideo(1080, 1080, 2.99));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-ig-2_99", MediaType.Video, 0) }, new[] { Ig });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e =>
+            e.Code == DTOs.MediaValidationErrorCodes.DurationTooShort
+            && e.Message == "Feed videos must be between 3 and 180 seconds.");
+    }
+
+    [Fact]
+    public async Task Video_InstagramFeed_CorruptOrNonVideoRenamedMp4_IsBlocked()
+    {
+        // A non-video file renamed to .mp4: the row says video/mp4, but ffprobe extracts no
+        // readable stream (null metadata) → blocked. The declared MIME/extension is never trusted.
+        var path = SeedRawMedia("v-ig-corrupt", "video/mp4", 5L * 1024 * 1024);
+        var nullExtractor = new Mock<IVideoMetadataExtractor>();
+        nullExtractor.Setup(e => e.ExtractAsync(It.IsAny<string>())).ReturnsAsync((VideoMetadata?)null);
+        var gate = CreateGate(new() { ["v-ig-corrupt"] = path }, nullExtractor.Object);
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("v-ig-corrupt", MediaType.Video, 0) }, new[] { Ig });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.MetadataExtractionFailed);
     }
 
     [Fact]
@@ -664,11 +724,12 @@ public class MediaValidationGateTests : IDisposable
     [Theory]
     [InlineData("prores", "aac")]
     [InlineData("vp9", "opus")]
-    public async Task Video_Codec_RejectedForFeedAndInstagram_ButAcceptedForFacebookStory(string videoCodec, string audioCodec)
+    public async Task Video_Codec_RejectedForFacebookFeed_ButAcceptedForInstagramFeedAndFacebookStory(string videoCodec, string audioCodec)
     {
-        // Scope check: the SAME uncommon codec that Facebook Story now accepts must still be
-        // rejected where codec rules remain (Facebook Feed and Instagram Feed). 1080x1920 @ 10s
-        // is within every other rule for these targets, so the ONLY failure is the codec.
+        // Scope check: codec rules remain ONLY for Facebook Feed. The finalized IG Feed policy and
+        // Facebook Story both delegate codec playability to Meta, so the SAME uncommon codec that
+        // Facebook Feed rejects is accepted for Instagram Feed and Facebook Story. 1080x1920 @ 10s
+        // is within every other rule, so codec is the only variable.
         var key = $"v-xplace-{videoCodec}-{audioCodec}";
         var path = SeedRawMedia(key, "video/mp4", 10L * 1024 * 1024);
         var gate = CreateGate(new() { [key] = path }, FakeVideo(1080, 1920, 10, videoCodec: videoCodec, audioCodec: audioCodec));
@@ -679,11 +740,37 @@ public class MediaValidationGateTests : IDisposable
         Assert.Contains(fb.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.UnsupportedVideoCodec);
 
         var ig = await gate.ValidateAsync(Ws, item, new[] { Ig });
-        Assert.False(ig.IsValid);
-        Assert.Contains(ig.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.UnsupportedVideoCodec);
+        Assert.True(ig.IsValid); // IG Feed no longer validates codec
 
         var fbStory = await gate.ValidateAsync(Ws, item, new[] { FbStory });
         Assert.True(fbStory.IsValid);
+    }
+
+    // Regression: an Instagram Feed video is NOT rejected for codec, audio codec, frame rate,
+    // width, height, or aspect ratio — only container/type, size, duration, and readability.
+    // Each row below would have failed under the old IG Feed rules (ProRes/VP9 codec, non-AAC
+    // audio, out-of-range fps, sub-500 or huge dimensions, extreme aspect) but must now pass.
+    [Theory]
+    [InlineData("prores", "aac", 30, 1080, 1920)]   // ProRes was UNSUPPORTED_VIDEO_CODEC
+    [InlineData("vp9", "opus", 30, 1080, 1920)]      // VP9 + Opus were both unsupported
+    [InlineData("h264", "mp3", 30, 1080, 1920)]      // non-AAC audio was UNSUPPORTED_AUDIO_CODEC
+    [InlineData("h264", "aac", 12, 1080, 1920)]      // 12fps was below the old 23fps floor
+    [InlineData("h264", "aac", 120, 1080, 1920)]     // 120fps was above the old 60fps ceiling
+    [InlineData("h264", "aac", 30, 200, 200)]        // below the old 500x500 minimum
+    [InlineData("h264", "aac", 30, 3840, 2160)]      // above the old 1920 maximum, wide 16:9
+    [InlineData("h264", "aac", 30, 1080, 300)]       // 3.6 aspect, far outside the old 0.5625–1.91
+    public async Task Video_InstagramFeed_NotRejectedForCodecFpsDimensionsOrAspect(
+        string? videoCodec, string? audioCodec, double fps, int width, int height)
+    {
+        var key = $"v-ig-relaxed-{videoCodec}-{audioCodec}-{fps}-{width}x{height}";
+        var path = SeedRawMedia(key, "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { [key] = path },
+            FakeVideo(width, height, 30, videoCodec: videoCodec, audioCodec: audioCodec, fps: fps));
+
+        var result = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem(key, MediaType.Video, 0) }, new[] { Ig });
+
+        Assert.True(result.IsValid);
     }
 
     [Fact]
@@ -852,30 +939,31 @@ public class MediaValidationGateTests : IDisposable
     }
 
     [Fact]
-    public async Task Video_Mov_UnsupportedCodec_IsBlocked()
+    public async Task Video_Mov_UnsupportedCodec_IsBlocked_ForFacebookFeed()
     {
         // MOV is accepted for iPhone compatibility, but an unsupported internal codec (e.g.
-        // ProRes) still fails when metadata is available.
-        var path = SeedRawMedia("v-ig-prores", "video/quicktime", 20L * 1024 * 1024);
-        var gate = CreateGate(new() { ["v-ig-prores"] = path },
-            FakeVideo(1080, 1080, 10, container: "mov", videoCodec: "prores", audioCodec: "aac"));
+        // ProRes) still fails for Facebook Feed, which keeps its codec allow-list. (Instagram
+        // Feed no longer validates codec — see Video_InstagramFeed_NotRejectedForCodec... .)
+        var path = SeedRawMedia("v-fb-prores", "video/quicktime", 20L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-fb-prores"] = path },
+            FakeVideo(1280, 720, 10, container: "mov", videoCodec: "prores", audioCodec: "aac"));
 
         var result = await gate.ValidateAsync(Ws,
-            new[] { new MediaGateItem("v-ig-prores", MediaType.Video, 0) }, new[] { Ig });
+            new[] { new MediaGateItem("v-fb-prores", MediaType.Video, 0) }, new[] { Fb });
 
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.UnsupportedVideoCodec);
     }
 
     [Fact]
-    public async Task Video_Mov_UnsupportedAudio_IsBlocked()
+    public async Task Video_Mov_UnsupportedAudio_IsBlocked_ForFacebookFeed()
     {
-        var path = SeedRawMedia("v-ig-pcm", "video/quicktime", 20L * 1024 * 1024);
-        var gate = CreateGate(new() { ["v-ig-pcm"] = path },
-            FakeVideo(1080, 1080, 10, container: "mov", videoCodec: "h264", audioCodec: "pcm_s16le"));
+        var path = SeedRawMedia("v-fb-pcm", "video/quicktime", 20L * 1024 * 1024);
+        var gate = CreateGate(new() { ["v-fb-pcm"] = path },
+            FakeVideo(1280, 720, 10, container: "mov", videoCodec: "h264", audioCodec: "pcm_s16le"));
 
         var result = await gate.ValidateAsync(Ws,
-            new[] { new MediaGateItem("v-ig-pcm", MediaType.Video, 0) }, new[] { Ig });
+            new[] { new MediaGateItem("v-fb-pcm", MediaType.Video, 0) }, new[] { Fb });
 
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.UnsupportedAudioCodec);
@@ -964,6 +1052,183 @@ public class MediaValidationGateTests : IDisposable
             new MediaGateItem("d-vid-at-50", MediaType.Video, 0), Fb);
 
         Assert.NotEqual(ValidationStatus.Invalid, result.Status);
+    }
+
+    // ── Instagram Feed carousel VIDEO: 3–60s per item (vs 180s single) ──────────
+    // A post with 2+ items is a carousel; its video items use the 60s cap. These drive the gate
+    // exactly as create/publish do (all items in one ValidateAsync call).
+
+    [Theory]
+    [InlineData(3)]  // inclusive lower boundary
+    [InlineData(30)] // mid-range
+    [InlineData(60)] // inclusive upper boundary — allowed in a carousel
+    public async Task Video_InstagramFeedCarousel_WithinDurationRange_Passes(double durationSeconds)
+    {
+        // Two video items → carousel. Both share the same duration via the uniform fake.
+        var a = SeedRawMedia("vc-a", "video/mp4", 10L * 1024 * 1024);
+        var b = SeedRawMedia("vc-b", "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { ["vc-a"] = a, ["vc-b"] = b }, FakeVideo(1080, 1080, durationSeconds));
+
+        var result = await gate.ValidateAsync(Ws, new[]
+        {
+            new MediaGateItem("vc-a", MediaType.Video, 0),
+            new MediaGateItem("vc-b", MediaType.Video, 1),
+        }, new[] { Ig });
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task Video_InstagramFeedCarousel_90s_IsBlocked_EvenThoughValidAsSingle()
+    {
+        // 90s is valid for a SINGLE Feed video (≤180s) but too long for a carousel item (≤60s).
+        var a = SeedRawMedia("vc90-a", "video/mp4", 10L * 1024 * 1024);
+        var b = SeedRawMedia("vc90-b", "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { ["vc90-a"] = a, ["vc90-b"] = b }, FakeVideo(1080, 1080, 90));
+
+        // Single item (not a carousel) at 90s → accepted.
+        var single = await gate.ValidateAsync(Ws,
+            new[] { new MediaGateItem("vc90-a", MediaType.Video, 0) }, new[] { Ig });
+        Assert.True(single.IsValid);
+
+        // Same 90s video inside a 2-item carousel → rejected with the carousel-specific message.
+        var carousel = await gate.ValidateAsync(Ws, new[]
+        {
+            new MediaGateItem("vc90-a", MediaType.Video, 0),
+            new MediaGateItem("vc90-b", MediaType.Video, 1),
+        }, new[] { Ig });
+
+        Assert.False(carousel.IsValid);
+        Assert.Contains(carousel.Errors, e =>
+            e.Code == DTOs.MediaValidationErrorCodes.DurationTooLong
+            && e.Message == "Videos in an Instagram Feed carousel must be between 3 and 60 seconds.");
+    }
+
+    [Fact]
+    public async Task Video_InstagramFeedCarousel_61s_IsBlocked()
+    {
+        var a = SeedRawMedia("vc61-a", "video/mp4", 10L * 1024 * 1024);
+        var b = SeedRawMedia("vc61-b", "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { ["vc61-a"] = a, ["vc61-b"] = b }, FakeVideo(1080, 1080, 61));
+
+        var result = await gate.ValidateAsync(Ws, new[]
+        {
+            new MediaGateItem("vc61-a", MediaType.Video, 0),
+            new MediaGateItem("vc61-b", MediaType.Video, 1),
+        }, new[] { Ig });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.DurationTooLong);
+    }
+
+    [Fact]
+    public async Task Video_InstagramFeedCarousel_TooShort_IsBlocked()
+    {
+        var a = SeedRawMedia("vc2-a", "video/mp4", 10L * 1024 * 1024);
+        var b = SeedRawMedia("vc2-b", "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { ["vc2-a"] = a, ["vc2-b"] = b }, FakeVideo(1080, 1080, 2));
+
+        var result = await gate.ValidateAsync(Ws, new[]
+        {
+            new MediaGateItem("vc2-a", MediaType.Video, 0),
+            new MediaGateItem("vc2-b", MediaType.Video, 1),
+        }, new[] { Ig });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.DurationTooShort);
+    }
+
+    [Fact]
+    public async Task Carousel_VideoOnly_AllWithinCarouselLimits_IsAccepted()
+    {
+        var a = SeedRawMedia("vco-a", "video/mp4", 10L * 1024 * 1024);
+        var b = SeedRawMedia("vco-b", "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { ["vco-a"] = a, ["vco-b"] = b }, FakeVideo(1080, 1080, 45));
+
+        var result = await gate.ValidateAsync(Ws, new[]
+        {
+            new MediaGateItem("vco-a", MediaType.Video, 0),
+            new MediaGateItem("vco-b", MediaType.Video, 1),
+        }, new[] { Ig });
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task Carousel_Mixed_ImageAndVideo_IsAccepted()
+    {
+        // 1 JPEG image + 1 40s video → mixed carousel, both valid. Image uses the image extractor;
+        // the video uses the (60s) carousel video rule.
+        var img = SeedMedia("mx-img", "image/jpeg", "jpeg", 1080, 1080);
+        var vid = SeedRawMedia("mx-vid", "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(new() { ["mx-img"] = img, ["mx-vid"] = vid }, FakeVideo(1080, 1080, 40));
+
+        var result = await gate.ValidateAsync(Ws, new[]
+        {
+            new MediaGateItem("mx-img", MediaType.Image, 0),
+            new MediaGateItem("mx-vid", MediaType.Video, 1),
+        }, new[] { Ig });
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task Carousel_ImageOnly_IsAccepted()
+    {
+        var a = SeedMedia("ic-a", "image/jpeg", "jpeg", 1080, 1080);
+        var b = SeedMedia("ic-b", "image/jpeg", "jpeg", 1080, 1350); // 4:5
+        var gate = CreateGate(new() { ["ic-a"] = a, ["ic-b"] = b });
+
+        var result = await gate.ValidateAsync(Ws, new[]
+        {
+            new MediaGateItem("ic-a", MediaType.Image, 0),
+            new MediaGateItem("ic-b", MediaType.Image, 1),
+        }, new[] { Ig });
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task Carousel_InvalidChildVideo_RejectsWholeCarousel_AndIdentifiesItem()
+    {
+        // Item order 0 is a valid 30s video; order 1 is a 200s video (invalid even as a carousel
+        // item). The carousel is rejected and ONLY the offending item (order 1) is reported —
+        // proving invalid children fail the whole carousel and item order is preserved.
+        var good = SeedRawMedia("cc-good", "video/mp4", 10L * 1024 * 1024);
+        var bad = SeedRawMedia("cc-bad", "video/mp4", 10L * 1024 * 1024);
+        var gate = CreateGate(
+            new() { ["cc-good"] = good, ["cc-bad"] = bad },
+            FakeVideoByPath(new() { [good] = Vid(30), [bad] = Vid(200) }));
+
+        var result = await gate.ValidateAsync(Ws, new[]
+        {
+            new MediaGateItem("cc-good", MediaType.Video, 0),
+            new MediaGateItem("cc-bad", MediaType.Video, 1),
+        }, new[] { Ig });
+
+        Assert.False(result.IsValid);
+        Assert.All(result.Errors, e => Assert.Equal(1, e.Order));
+        Assert.Contains(result.Errors, e => e.Code == DTOs.MediaValidationErrorCodes.DurationTooLong);
+    }
+
+    [Fact]
+    public async Task Carousel_TenItems_IsAccepted()
+    {
+        // The gate itself imposes no item-count ceiling (the 2–10 count check lives in the
+        // create/update controller); 10 valid items validate cleanly here.
+        var keyToPath = new Dictionary<string, string>();
+        var items = new List<MediaGateItem>();
+        for (var i = 0; i < 10; i++)
+        {
+            var key = $"ten-{i}";
+            keyToPath[key] = SeedMedia(key, "image/jpeg", "jpeg", 1080, 1080);
+            items.Add(new MediaGateItem(key, MediaType.Image, i));
+        }
+        var gate = CreateGate(keyToPath);
+
+        var result = await gate.ValidateAsync(Ws, items, new[] { Ig });
+
+        Assert.True(result.IsValid);
     }
 
     // ── Pass-through cases ──────────────────────────────────────────────────────

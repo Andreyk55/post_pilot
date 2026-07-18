@@ -12,9 +12,19 @@ public static class MediaValidationRules
     /// Gets the validation rules for a specific platform, placement, and media type combination.
     /// Returns null if no rules are defined for the combination.
     /// </summary>
-    public static MediaValidationRule? GetRules(Platform platform, Placement placement, MediaType mediaType)
+    /// <param name="carousel">
+    /// When true, the media item is part of a multi-item carousel and any carousel-specific
+    /// override is used (currently only Instagram Feed video, whose per-item duration cap is 60s
+    /// instead of the 180s single-video cap). When no override exists for the combination, the
+    /// normal single-item rule is returned — image rules are identical whether single or carousel.
+    /// </param>
+    public static MediaValidationRule? GetRules(Platform platform, Placement placement, MediaType mediaType, bool carousel = false)
     {
         var key = (platform, placement, mediaType);
+
+        if (carousel && CarouselItemOverrides.TryGetValue(key, out var carouselRule))
+            return carouselRule;
+
         return Rules.TryGetValue(key, out var rule) ? rule : null;
     }
 
@@ -25,6 +35,29 @@ public static class MediaValidationRules
     {
         return Rules.ContainsKey((platform, placement, mediaType));
     }
+
+    /// <summary>
+    /// Carousel-item overrides keyed by (Platform, Placement, MediaType). Used ONLY when a media
+    /// item is part of a multi-item carousel and the carousel rule differs from the single-item
+    /// rule. Combinations absent here fall back to <see cref="Rules"/> (i.e. carousel images use
+    /// the same rule as single images).
+    ///
+    /// <para>Currently the only difference is Instagram Feed VIDEO duration: a single Feed video
+    /// may run up to 180s (published by Meta as a Reel), but a video INSIDE a Feed carousel is
+    /// capped at 60s. Everything else (MP4/MOV, 50MB, 3s minimum, readability, no codec/fps/
+    /// dimension/aspect checks) is identical to the single-video rule.</para>
+    /// </summary>
+    private static readonly Dictionary<(Platform, Placement, MediaType), MediaValidationRule> CarouselItemOverrides = new()
+    {
+        [(Platform.Instagram, Placement.Feed, MediaType.Video)] = new MediaValidationRule
+        {
+            AllowedMimeTypes = ["video/mp4", "video/quicktime"],
+            AllowedContainers = ["mp4", "mov"],
+            MaxBytes = 50L * 1024 * 1024, // 50MB — same product cap as a single Feed video
+            DurationMinSeconds = 3,
+            DurationMaxSeconds = 60, // carousel video items: 3–60s (single Feed video allows up to 180s)
+        },
+    };
 
     /// <summary>
     /// All validation rules keyed by (Platform, Placement, MediaType).
@@ -115,49 +148,40 @@ public static class MediaValidationRules
         // ============================================
         // INSTAGRAM - FEED
         // ============================================
-        // Instagram Feed Image Rules
-        // Source: https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media/
-        // Meta accepts JPEG ONLY for Instagram. This rule is the NATIVE publish format; a PNG
-        // upload is validated against its Instagram JPEG derivative instead (see
-        // EffectiveMediaResolver), so PNG is supported end-to-end without being marked invalid
-        // here. Width > 1440 is downscaled by Meta, not rejected → advisory, not a hard error.
+        // Instagram Feed Image Rules — FINALIZED product policy (see spec).
+        // Hard rules ONLY: accepted format, 8MB cap, and aspect ratio 4:5–1.91:1 (inclusive).
+        // Deliberately NO dimension rules (min/max width/height), NO recommended resolution, NO
+        // low-resolution/quality warnings, and NO cross-item aspect matching. Meta downscales
+        // large images itself, so there is no platform width/height limit to enforce here.
+        //
+        // Meta accepts JPEG ONLY for Instagram, so this native rule stays JPEG-only; a PNG upload
+        // is validated against its Instagram JPEG derivative instead (see EffectiveMediaResolver),
+        // so .jpg/.jpeg/.png uploads are all supported end-to-end. (Any general decode/
+        // decompression-bomb protection lives in the image decoder, not here, and is not an
+        // Instagram platform dimension rule.)
         [(Platform.Instagram, Placement.Feed, MediaType.Image)] = new MediaValidationRule
         {
             AllowedMimeTypes = ["image/jpeg"],
             MaxBytes = 8L * 1024 * 1024, // 8MB — Instagram platform limit
-            MinWidth = 320,
-            MinHeight = 320,
-            MaxWidth = 1440,
-            MaxHeight = 2560,
-            MaxWidthIsAdvisory = true, // Meta downscales > 1440px instead of rejecting
-            AspectRatioMin = 0.8, // 4:5 (portrait) — Meta rejects feed IMAGES below 4:5 (9:16 is video-only)
-            AspectRatioMax = 1.91, // 1.91:1 (landscape)
-            QualityWarningMinWidth = 600,
-            QualityWarningMinHeight = 600,
+            AspectRatioMin = 0.8, // 4:5 (portrait), inclusive
+            AspectRatioMax = 1.91, // 1.91:1 (landscape), inclusive
         },
 
-        // Instagram Feed Video Rules (a single IG feed video is published by Meta as a Reel;
-        // vertical 9:16 is the standard Reel format and MUST pass).
+        // Instagram Feed Video Rules (single video) — FINALIZED product policy (see spec).
+        // A single IG feed video is published by Meta as a Reel, but stays user-facing "Feed".
+        // Hard rules ONLY: MP4/MOV container, 50MB cap, 3–180s duration, readable video stream.
+        // Deliberately NO codec (H.264/HEVC), NO audio codec, NO frame-rate, NO dimensions, and
+        // NO aspect-ratio prevalidation — Meta decides at publish time whether an unusual encoding
+        // is playable. (The shared inspector may still READ codec/fps/dimensions for metadata; a
+        // missing AllowedVideoCodecs/AllowedAudioCodecs list means the engine skips those checks,
+        // and null dimensions/aspect skip the dimension and aspect checks.)
         [(Platform.Instagram, Placement.Feed, MediaType.Video)] = new MediaValidationRule
         {
-            // MP4 + MOV (MOV for iPhone compatibility). H.264 or HEVC/H.265, AAC audio.
-            AllowedMimeTypes = ["video/mp4", "video/quicktime"],
+            AllowedMimeTypes = ["video/mp4", "video/quicktime"], // MOV for iPhone compatibility
             AllowedContainers = ["mp4", "mov"],
-            AllowedVideoCodecs = ["h264", "hevc"],
-            AllowedAudioCodecs = ["aac"],
-            MaxBytes = 50L * 1024 * 1024, // 50MB — product cap for Instagram Feed video (published by Meta as a Reel)
-            MinWidth = 500,
-            MinHeight = 500,
-            MaxWidth = 1920,
-            MaxHeight = 1920,
-            AspectRatioMin = 0.5625, // 9:16 (vertical Reel) — Meta accepts far wider; this keeps sane bounds
-            AspectRatioMax = 1.91, // 1.91:1 (landscape)
+            MaxBytes = 50L * 1024 * 1024, // 50MB — product cap for Instagram Feed video
             DurationMinSeconds = 3,
-            DurationMaxSeconds = 180, // product/MVP duration cap, NOT Meta's maximum (Reels allow 15 min)
-            MinFps = 23,
-            MaxFps = 60,
-            RecommendedWidth = 1080,
-            RecommendedHeight = 1080,
+            DurationMaxSeconds = 180, // single Feed video; carousel video items are capped at 60s (see CarouselItemOverrides)
         },
 
         // ============================================

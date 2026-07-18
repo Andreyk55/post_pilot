@@ -129,34 +129,28 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
     durationMaxSeconds: 90,
   },
 
-  // Instagram Feed Image
-  // Meta accepts JPEG ONLY for Instagram. As of Phase 3 the backend auto-converts PNG
-  // uploads to an Instagram-safe JPEG derivative, so PNG is allowed client-side. WebP
-  // is still NOT supported. (Carousel items reuse this rule; placement is always 'Feed'.)
+  // Instagram Feed Image — FINALIZED policy (mirrors backend MediaValidationRules.cs).
+  // Hard rules ONLY: format + 8MB + aspect 4:5–1.91:1. Deliberately NO min/max width/height, NO
+  // advisory width, NO quality/low-resolution warning — Meta downscales large images itself.
+  // Meta accepts JPEG only; the backend auto-converts PNG uploads to an Instagram-safe JPEG
+  // derivative, so PNG is allowed client-side. WebP is still NOT supported.
+  // (Carousel items reuse this rule; placement is always 'Feed'.)
   'instagram:feed:image': {
     allowedMimeTypes: ['image/jpeg', 'image/png'],
     maxBytes: 8 * 1024 * 1024, // 8MB — Instagram platform limit
-    minWidth: 320,
-    minHeight: 320,
-    maxWidth: 1440,
-    maxHeight: 2560,
-    maxWidthIsAdvisory: true,
     aspectRatioMin: 0.8, // 4:5 — Meta rejects feed IMAGES below 4:5 (9:16 is video-only)
     aspectRatioMax: 1.91,
   },
 
-  // Instagram Feed Video (published by Meta as a Reel; vertical 9:16 must pass)
+  // Instagram Feed Video (single; published by Meta as a Reel) — FINALIZED policy.
+  // Hard rules ONLY: MP4/MOV + 50MB + 3–180s. Deliberately NO codec, NO fps, NO dimension, and
+  // NO aspect-ratio prevalidation — Meta decides encoding playability at publish time.
+  // Carousel video items are capped at 60s instead (see instagramFeedCarouselVideoRule).
   'instagram:feed:video': {
     allowedMimeTypes: ['video/mp4', 'video/quicktime'],
     maxBytes: 50 * 1024 * 1024, // 50MB — product cap
-    minWidth: 500,
-    minHeight: 500,
-    maxWidth: 1920,
-    maxHeight: 1920,
-    aspectRatioMin: 0.5625, // 9:16 vertical Reel
-    aspectRatioMax: 1.91,
     durationMinSeconds: 3,
-    durationMaxSeconds: 180, // product/MVP cap, NOT Meta's maximum (Reels allow 15 min)
+    durationMaxSeconds: 180, // single Feed video; carousel items use 60s
   },
 
   // Instagram Story Image
@@ -245,14 +239,37 @@ const clientValidationRules: Partial<Record<RuleKey, ClientMediaValidationRule>>
 }
 
 /**
+ * Carousel per-item overrides (mirrors backend CarouselItemOverrides). Only combinations whose
+ * carousel rule DIFFERS from the single-item rule appear here; everything else falls back to
+ * clientValidationRules. Currently only Instagram Feed video differs: a video inside a Feed
+ * carousel is capped at 60s, while a single Feed video may run up to 180s.
+ */
+const carouselOverrides: Partial<Record<RuleKey, ClientMediaValidationRule>> = {
+  'instagram:feed:video': {
+    allowedMimeTypes: ['video/mp4', 'video/quicktime'],
+    maxBytes: 50 * 1024 * 1024, // 50MB — same cap as a single Feed video
+    durationMinSeconds: 3,
+    durationMaxSeconds: 60, // carousel video items: 3–60s (single Feed video allows up to 180s)
+  },
+}
+
+/**
  * Gets the validation rule for a specific platform, placement, and media type.
+ *
+ * @param options.carousel When true, returns the carousel per-item rule where one differs
+ * (currently only Instagram Feed video: 60s cap instead of 180s). Combinations with no carousel
+ * override return the same rule as a single item (e.g. carousel images == single images).
  */
 export function getClientValidationRule(
   platform: PlatformId | string,
   placement: Placement | string = 'Feed',
-  mediaType: MediaType | string
+  mediaType: MediaType | string,
+  options?: { carousel?: boolean }
 ): ClientMediaValidationRule | null {
   const key = `${platform.toLowerCase()}:${placement.toLowerCase()}:${mediaType.toLowerCase()}` as RuleKey
+  if (options?.carousel && carouselOverrides[key]) {
+    return carouselOverrides[key] ?? null
+  }
   return clientValidationRules[key] ?? null
 }
 
